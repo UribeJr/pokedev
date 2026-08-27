@@ -42,6 +42,48 @@ const desktopConfig = {
 	},
 };
 
+// Trainer Card webview bundle. Kept as its own config rather than a second
+// entry on desktopConfig, because that config declares a single global library
+// name ('pokemonApp') and strips source-map URLs with a plugin keyed to
+// /main-bundle\.js$/ — neither of which applies to this bundle.
+const trainerCardConfig = {
+	mode: "development",
+	devtool: "inline-source-map",
+	entry: {
+		"trainer-card": "./src/panel/trainer-card/main.ts",
+	},
+	output: {
+		path: path.resolve(__dirname, './media'),
+		filename: "[name]-bundle.js",
+		library: {
+			name: 'trainerCardApp',
+			type: 'global'
+		}
+	},
+	plugins: [
+		new removeSourceMapUrlWebpackPlugin({
+			test: /trainer-card-bundle\.js$/
+		})
+	],
+	resolve: {
+		extensions: [".ts", ".tsx", ".js"],
+	},
+	module: {
+		rules: [{
+			test: /\.ts$/,
+			exclude: /node_modules/,
+			use: [
+				{
+					loader: 'ts-loader',
+					options: {
+						configFile: 'tsconfig.panel.json'
+					}
+				},
+			],
+		}]
+	},
+};
+
 const webExtensionConfig = {
 	mode: 'none', // this leaves the source code as close as possible to the original (when packaging we set this to 'production')
 	target: 'webworker', // extensions run in a webworker context
@@ -99,4 +141,4 @@ const webExtensionConfig = {
 	devtool: 'nosources-source-map', // create a source map that points to the original source file
 };
 
-module.exports = [desktopConfig, webExtensionConfig];
+module.exports = [desktopConfig, trainerCardConfig, webExtensionConfig];

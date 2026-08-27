@@ -2,6 +2,22 @@
 
 All notable changes to the "vscode-pokemon" extension will be documented in this file.
 
+## [Unreleased]
+
+- feat: GitHub Trainer Card (`Pokemon Coding: Open Trainer Card`) — a retro
+  trainer profile combining your public GitHub data with a persistent, local
+  trainer profile (level, XP, badges, Pokédex, coding time) and your partner
+  Pokémon
+- feat: `vscode-pokemon.githubUsername` setting, plus
+  `Pokemon Coding: Configure GitHub Trainer` and
+  `Pokemon Coding: Refresh GitHub Profile` commands
+- feat: Trainer Card presented as a Game Boy/DS-era game screen — bevelled card
+  frame, portrait with corner brackets, prominent Trainer Level plate, Trainer
+  Class title, `DEV RECORD` / `TRAINER RECORD` sections, relative language bars,
+  Poké Ball badge slots, a notched XP gauge, and demoted footer actions
+- chore: add the `ts-node` and `source-map-support` dev dependencies the test
+  runner already required, plus `typecheck` and `test:unit` scripts
+
 ## [5.0.1]
 
 - chore: update readme with new badges

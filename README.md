@@ -170,6 +170,87 @@ Available options:
 
 **Note:** The language setting applies to all Pokémon names throughout the extension, including in the spawn selection menu, roll-call, and export features. Translations are available for all Pokémon from Generations 1, 2, 3, and 4.
 
+## GitHub Trainer Card
+
+A retro Trainer Card for your editor. It pairs your public GitHub profile with a
+Pokémon-style trainer profile that persists across sessions — the foundation for
+trainer XP, badges, a Pokédex and coding streaks in later versions.
+
+### Opening it
+
+1. Open the command palette (`Ctrl+Shift+P` on Windows/Linux or `Cmd(⌘)+Shift+P` on macOS)
+2. Run **`Pokemon Coding: Open Trainer Card`**
+
+There is also a Trainer Card button in the title bar of the **VS Code Pokémon**
+view in the Explorer.
+
+### Connecting your GitHub username
+
+The first time you open the card it asks for a GitHub username. Type it in and
+press **Connect** — the extension checks the account exists and remembers it.
+
+You can also set it directly in `settings.json`:
+
+```json
+{
+  "vscode-pokemon.githubUsername": "octocat"
+}
+```
+
+or run **`Pokemon Coding: Configure GitHub Trainer`**. To point the card at a
+different account later, use **Change GitHub Username** on the card itself.
+
+### What it shows
+
+The card is laid out like an in-game Trainer Card: an identity header, then a
+`DEV RECORD` block for your GitHub stats and a `TRAINER RECORD` block for your
+game stats, with a `TRAINER XP` gauge along the bottom.
+
+**Identity** — your avatar in a portrait frame, display name, `@username`, a
+`TRAINER LV.` plate, and a **Trainer Class** derived from your most-used
+languages (Frontend, Research, Systems, Full-Stack, or plain Pokémon Trainer
+when there isn't enough to go on). Your bio and location appear underneath.
+
+**`DEV RECORD`** — public repositories, total stars, followers, and the year you
+joined, plus `SPECIALTIES`: your top three languages with a relative bar and the
+number of repositories behind each.
+
+**`TRAINER RECORD`** — `Pokédex` caught count, `Badges` (0 / 8, shown as eight
+Poké Ball slots), `Shinies`, `Coding Time`, and your **Partner Pokémon** — the
+first Pokémon in your current collection, with its animated sprite. If you have
+no Pokémon out, the slot reads `NO PARTNER SELECTED`.
+
+Trainer level and XP start at 1 and 0. They are deliberately **not** derived from
+GitHub: GitHub is your trainer's identity, and the trainer profile tracks what
+you do in the editor. Catching, XP and badges arrive in a later version, so
+those counters stay at zero for now.
+
+Stars and languages are worth one caveat: they are calculated from up to your
+100 most recently pushed non-fork repositories, and GitHub reports a single
+primary language per repository — so the language list is "repositories whose
+main language is X", not a byte-level breakdown. The `SPECIALTIES` bars are
+sized relative to your leading language rather than as percentages, precisely
+because repositories with no detected language are left out and a percentage
+would not add up.
+
+### Refreshing
+
+Results are cached for 45 minutes, so reopening the card doesn't re-query
+GitHub. Use **Refresh GitHub Profile** on the card, or the
+**`Pokemon Coding: Refresh GitHub Profile`** command, to fetch immediately.
+
+If GitHub can't be reached, the card keeps showing your saved data with a notice
+rather than going blank.
+
+### Privacy
+
+- No authentication, no OAuth, no tokens — only public GitHub data is read.
+- The only setting stored is your username; cached profile data lives in the
+  extension's local storage and is **not** included in Settings Sync.
+- All GitHub requests are made by the extension, never by the card itself — the
+  card's content security policy has no network access at all.
+- No telemetry, no third-party services.
+
 ## Features
 
 Extracting and creating .gif files involves quite a bit of tedious manual work, but I’ll aim to add Gen 5 when possible.
@@ -180,6 +261,13 @@ Extracting and creating .gif files involves quite a bit of tedious manual work, 
 - Pokemon Sprites: © The Pokémon Company / Nintendo / Game Freak
 - The sprites are used for non-commercial, fan project purposes only
 - Original sprite artwork belongs to the respective copyright holders
+- The Trainer Card's layout and Poké Ball motif are fan-made homages to the
+  in-game Trainer Card, drawn with CSS and the sprite assets already in this
+  repository; all underlying designs and trademarks belong to their owners
+
+### Fonts
+- Silkscreen by Jason Kottke, licensed under the SIL Open Font License 1.1
+  (see [media/Silkscreen-LICENSE.txt](media/Silkscreen-LICENSE.txt))
 
 ### Acknowledgments
 - All sprites are property of their original creators

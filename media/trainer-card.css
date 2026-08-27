@@ -1,0 +1,1286 @@
+/*
+ * Trainer Card styling.
+ *
+ * Deliberately does NOT reuse media/pokemon.css: that file sets
+ * `* { user-select: none }` (which would make the username uncopyable) and
+ * `body { overflow: hidden }` (which would clip a tall card).
+ *
+ * The card FACE uses a fixed retro palette so it reads the same in every
+ * theme; the surrounding chrome, buttons and inputs use --vscode-* variables
+ * so light, dark and high-contrast all stay legible.
+ *
+ * Every decorative flourish here is pure CSS — bevels, pixel texture, checker
+ * backdrop, corner brackets, XP notches. The card's CSP forbids `data:` images
+ * and outside hosts, so no new art files are needed.
+ */
+
+:root {
+	/* Geometry */
+	--tc-shell-max: 760px;
+	--tc-gap: 12px;
+	--tc-radius: 10px;
+	--tc-ball: url('pokeball_sprite_sheet.png');
+
+	/* Card face palette (base tier). */
+	--tc-face-top: #2f6bb5;
+	--tc-face-bottom: #16386a;
+	--tc-face-edge: #0c2447;
+	--tc-edge-light: rgba(255, 255, 255, 0.22);
+	--tc-ink: #f4f7ff;
+	--tc-ink-dim: #a9c2ea;
+	--tc-slot: rgba(6, 17, 36, 0.42);
+	--tc-surface: rgba(6, 17, 36, 0.3);
+	--tc-rule: rgba(255, 255, 255, 0.16);
+	--tc-accent: #ffd75f;
+	--tc-xp-from: #ffe89a;
+	--tc-xp-to: #f5b52a;
+	--tc-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+}
+
+body {
+	margin: 0;
+	padding: 16px;
+	color: var(--vscode-foreground);
+	font-size: var(--vscode-font-size);
+	font-family: var(--vscode-font-family);
+	background-color: var(--vscode-editor-background);
+}
+
+.tc-shell {
+	max-width: var(--tc-shell-max);
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.tc-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* ------------------------------- card frame ------------------------------ */
+
+.tc-card {
+	position: relative;
+	overflow: hidden;
+	border-radius: var(--tc-radius);
+	border: 2px solid var(--tc-face-edge);
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	/* Outer drop shadow, inner highlight, inner bottom shade = a real bevel. */
+	box-shadow:
+		var(--tc-shadow),
+		inset 0 0 0 1px var(--tc-edge-light),
+		inset 0 -3px 0 rgba(0, 0, 0, 0.28);
+	animation: tc-card-in 240ms ease-out both;
+}
+
+/* Fine horizontal scanlines over the whole face. */
+.tc-card::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background-image: repeating-linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.045) 0 1px,
+		transparent 1px 3px
+	);
+}
+
+/* Onboarding / error carry less content and should not stretch. */
+.tc-card-compact {
+	max-width: 460px;
+	margin: 0 auto;
+	width: 100%;
+}
+
+/* Card tiers, following the in-game colour progression. V1 is always base. */
+.tc-card.tc-tier-copper {
+	--tc-face-top: #b9743a;
+	--tc-face-bottom: #7a421b;
+	--tc-face-edge: #4c2811;
+	--tc-ink-dim: #f0d3b6;
+}
+
+.tc-card.tc-tier-silver {
+	--tc-face-top: #8d97a6;
+	--tc-face-bottom: #565f6d;
+	--tc-face-edge: #343a44;
+	--tc-ink-dim: #e2e7ef;
+}
+
+.tc-card.tc-tier-gold {
+	--tc-face-top: #cfa227;
+	--tc-face-bottom: #8a670d;
+	--tc-face-edge: #574006;
+	--tc-ink-dim: #f7e6ae;
+}
+
+/* -------------------------------- head bar ------------------------------- */
+
+.tc-card-head {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 9px 13px;
+	background: rgba(0, 0, 0, 0.26);
+	border-bottom: 2px solid var(--tc-face-edge);
+	box-shadow: inset 0 -1px 0 var(--tc-edge-light);
+}
+
+.tc-brand {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 1px;
+	color: var(--tc-accent);
+	text-transform: uppercase;
+	flex: none;
+}
+
+.tc-brand::after {
+	content: '·';
+	margin: 0 0 0 6px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-title {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tc-idno {
+	margin-left: auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.5px;
+	color: var(--tc-ink-dim);
+	flex: none;
+}
+
+.tc-card-body {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: var(--tc-gap);
+	padding: 14px;
+}
+
+/* ------------------------------ pokeball art ----------------------------- */
+
+/*
+ * All of these share media/pokeball_sprite_sheet.png — a 64x384 vertical strip
+ * of six 64x64 cells.
+ *
+ * The catch: frame 0's ball art is only 14x14 pixels sitting at offset (25,25)
+ * inside its cell (measured off the sheet's alpha channel). Scaling the whole
+ * cell down to an 18px element therefore renders a ~4px dot. So instead the
+ * background is scaled UP and offset so that a tight window onto the art fills
+ * the element:
+ *
+ *   scale     = size / crop
+ *   bg-size   = (64 x 384) * scale
+ *   bg-offset = -(inset * scale)
+ *
+ * --tc-ball-crop is the window in sheet pixels and --tc-ball-inset its
+ * top-left corner, so a larger crop leaves more breathing room around the art.
+ */
+.tc-ball,
+.tc-onboard-ball,
+.tc-partner-ball,
+.tc-badge {
+	--tc-ball-crop: 16;
+	--tc-ball-inset: 24;
+	display: inline-block;
+	flex: none;
+	width: var(--tc-ball-size);
+	height: var(--tc-ball-size);
+	background-image: var(--tc-ball);
+	background-repeat: no-repeat;
+	background-size:
+		calc(var(--tc-ball-size) * 64 / var(--tc-ball-crop))
+		calc(var(--tc-ball-size) * 384 / var(--tc-ball-crop));
+	background-position:
+		calc(-1 * var(--tc-ball-size) * var(--tc-ball-inset) / var(--tc-ball-crop))
+		calc(-1 * var(--tc-ball-size) * var(--tc-ball-inset) / var(--tc-ball-crop));
+	image-rendering: pixelated;
+}
+
+.tc-ball {
+	--tc-ball-size: 16px;
+}
+
+.tc-onboard-ball {
+	--tc-ball-size: 40px;
+}
+
+.tc-partner-ball {
+	--tc-ball-size: 30px;
+}
+
+.tc-ball-faded {
+	filter: grayscale(1) brightness(0.75);
+	opacity: 0.5;
+}
+
+/* --------------------------------- hero ---------------------------------- */
+
+.tc-hero {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 14px;
+	align-items: start;
+}
+
+.tc-portrait {
+	position: relative;
+	width: 96px;
+	height: 96px;
+	flex: none;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background-color: var(--tc-slot);
+	/* Checker backdrop so a transparent avatar still reads as framed. */
+	background-image: linear-gradient(
+			45deg,
+			rgba(0, 0, 0, 0.16) 25%,
+			transparent 25% 75%,
+			rgba(0, 0, 0, 0.16) 75%
+		),
+		linear-gradient(
+			45deg,
+			rgba(0, 0, 0, 0.16) 25%,
+			transparent 25% 75%,
+			rgba(0, 0, 0, 0.16) 75%
+		);
+	background-size: 12px 12px;
+	background-position:
+		0 0,
+		6px 6px;
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/*
+ * Decorative corner brackets on the two diagonal corners.
+ *
+ * drop-shadow, not box-shadow: these are border-only elements, so a box-shadow
+ * would trace their square box instead of the L shape. The shadow is what keeps
+ * them legible over a bright or busy avatar photo.
+ */
+.tc-portrait::before,
+.tc-portrait::after {
+	content: '';
+	position: absolute;
+	width: 10px;
+	height: 10px;
+	pointer-events: none;
+	z-index: 1;
+	filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.95));
+}
+
+.tc-portrait::before {
+	top: 3px;
+	left: 3px;
+	border-top: 2px solid var(--tc-accent);
+	border-left: 2px solid var(--tc-accent);
+}
+
+.tc-portrait::after {
+	bottom: 3px;
+	right: 3px;
+	border-bottom: 2px solid var(--tc-accent);
+	border-right: 2px solid var(--tc-accent);
+}
+
+.tc-portrait-empty::before {
+	/* Keep the bracket, add the placeholder glyph via the container. */
+	border-color: var(--tc-ink-dim);
+}
+
+.tc-portrait-empty::after {
+	border-color: var(--tc-ink-dim);
+}
+
+.tc-portrait-glyph {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 26px;
+	color: var(--tc-ink-dim);
+	line-height: 1;
+}
+
+/* reset.css sets img { max-width: 100%; height: auto } — override for the frame. */
+.tc-avatar {
+	width: 96px;
+	height: 96px;
+	max-width: none;
+	display: block;
+	object-fit: cover;
+	image-rendering: auto;
+}
+
+.tc-identity {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	padding-top: 2px;
+}
+
+.tc-trainer-name {
+	font-size: 21px;
+	font-weight: 700;
+	line-height: 1.1;
+	letter-spacing: 0.2px;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-handle {
+	font-size: 12px;
+	color: var(--tc-ink-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-class-chip {
+	align-self: flex-start;
+	margin-top: 3px;
+	max-width: 100%;
+	padding: 4px 9px;
+	border: 1px solid var(--tc-accent);
+	border-radius: 3px;
+	background: rgba(255, 215, 95, 0.12);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-bio {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.tc-location {
+	margin: 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-location::before {
+	content: '⌖ ';
+	color: var(--tc-accent);
+}
+
+/* Level plate — a gameplay stat, not a form row. */
+.tc-level-plate {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1px;
+	min-width: 84px;
+	padding: 8px 12px 9px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow:
+		inset 0 0 0 1px var(--tc-edge-light),
+		inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.tc-level-word {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1.4px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+.tc-level-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 20px;
+	line-height: 1.15;
+	color: var(--tc-accent);
+	white-space: nowrap;
+}
+
+/* -------------------------------- sections ------------------------------- */
+
+/* Pixel-dashed divider between major blocks. */
+.tc-rule {
+	height: 2px;
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--tc-rule) 0 4px,
+		transparent 4px 8px
+	);
+}
+
+.tc-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.tc-section-title {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	font-weight: normal;
+	letter-spacing: 1.3px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+}
+
+.tc-section-subtitle {
+	margin: 4px 0 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+/* ------------------------------ record grids ----------------------------- */
+
+/*
+ * minmax(0, 1fr) rather than 1fr: a long value in a plain 1fr track can force
+ * the grid wider than its container and produce horizontal scroll.
+ */
+.tc-record-grid {
+	display: grid;
+	gap: 1px;
+	background: var(--tc-rule);
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.tc-record-grid-4 {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tc-record-grid-3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tc-record-cell {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 9px 6px 8px;
+	background: var(--tc-surface);
+	min-width: 0;
+}
+
+.tc-record-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 18px;
+	line-height: 1.1;
+	color: var(--tc-ink);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-record-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: center;
+	max-width: 100%;
+	/* Wrap rather than truncate: an ellipsised label reads as "P…", not POKÉDEX. */
+	overflow-wrap: break-word;
+	line-height: 1.35;
+}
+
+/* ------------------------------- specialties ----------------------------- */
+
+.tc-specialties {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.tc-spec-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.tc-spec {
+	display: grid;
+	grid-template-columns: minmax(0, 108px) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 9px;
+}
+
+.tc-spec-name {
+	font-size: 11px;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-spec-track {
+	height: 8px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+.tc-spec-fill {
+	height: 100%;
+	background: linear-gradient(
+		to right,
+		var(--tc-xp-from),
+		var(--tc-xp-to)
+	);
+	transform-origin: left center;
+	animation: tc-bar-grow 620ms ease-out both;
+}
+
+.tc-spec-count {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--tc-ink-dim);
+	min-width: 22px;
+	text-align: right;
+}
+
+/* --------------------------- lower: record + partner --------------------- */
+
+.tc-lower {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 214px);
+	gap: var(--tc-gap);
+	align-items: start;
+}
+
+.tc-section-trainer {
+	gap: 9px;
+}
+
+.tc-badge-slots {
+	display: grid;
+	grid-template-columns: repeat(8, auto);
+	justify-content: start;
+	gap: 5px;
+}
+
+.tc-badge {
+	--tc-ball-size: 21px;
+	/* Wider window than the head/partner balls, so the art sits inside the ring. */
+	--tc-ball-crop: 26;
+	--tc-ball-inset: 19;
+	border-radius: 50%;
+	background-color: var(--tc-slot);
+	box-shadow:
+		inset 0 0 0 1px var(--tc-rule),
+		0 1px 0 rgba(0, 0, 0, 0.2);
+	filter: grayscale(1) brightness(0.8);
+	opacity: 0.7;
+}
+
+.tc-badge-earned {
+	background-color: rgba(255, 215, 95, 0.16);
+	box-shadow:
+		inset 0 0 0 1px var(--tc-accent),
+		0 0 6px rgba(255, 215, 95, 0.35);
+	filter: none;
+	opacity: 1;
+}
+
+.tc-timerow {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 7px 9px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 5px;
+	background: var(--tc-surface);
+}
+
+.tc-timerow .tc-record-label {
+	text-align: left;
+}
+
+.tc-timerow-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	color: var(--tc-ink);
+	white-space: nowrap;
+	flex: none;
+}
+
+/* --------------------------------- partner ------------------------------- */
+
+.tc-section-partner {
+	align-items: center;
+	padding: 10px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-partner-frame {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 84px;
+	height: 68px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 4px;
+	background-color: var(--tc-slot);
+	background-image: linear-gradient(
+		to bottom,
+		transparent 60%,
+		rgba(0, 0, 0, 0.22) 100%
+	);
+}
+
+.tc-partner-frame-empty {
+	border-style: dashed;
+	border-color: var(--tc-rule);
+	background-image: none;
+}
+
+.tc-partner-sprite {
+	width: 56px;
+	height: 56px;
+	max-width: none;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+.tc-partner-name {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 5px;
+	text-align: center;
+}
+
+.tc-partner-species {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 12px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-partner-nick {
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-partner-shiny {
+	font-size: 11px;
+	color: var(--tc-accent);
+}
+
+.tc-partner-empty {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	line-height: 1.5;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: center;
+}
+
+/* --------------------------------- XP bar -------------------------------- */
+
+.tc-xp-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 11px 11px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-xp-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.tc-xp-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	color: var(--tc-ink);
+	white-space: nowrap;
+}
+
+.tc-xp-track {
+	position: relative;
+	height: 14px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 3px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Pixel notches, so an empty bar still reads as a gauge rather than a void. */
+.tc-xp-track::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background-image: repeating-linear-gradient(
+		to right,
+		transparent 0 13px,
+		rgba(0, 0, 0, 0.3) 13px 14px
+	);
+}
+
+.tc-xp-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+	transform-origin: left center;
+	transition: width 600ms ease-out;
+	animation: tc-bar-grow 700ms ease-out both;
+}
+
+/* --------------------------------- notices ------------------------------- */
+
+.tc-notices {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 8px 14px 10px;
+	background: rgba(0, 0, 0, 0.24);
+	border-top: 1px solid var(--tc-face-edge);
+}
+
+.tc-notice {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+}
+
+.tc-notice-warn {
+	color: var(--tc-accent);
+}
+
+/* ------------------------- onboarding / status boxes --------------------- */
+
+.tc-onboard {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 9px;
+	padding: 12px 6px 6px;
+	text-align: center;
+}
+
+.tc-onboard-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 14px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-onboard-hint {
+	margin: 0;
+	max-width: 330px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+.tc-onboard-form {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	width: 100%;
+	max-width: 300px;
+	margin-top: 4px;
+}
+
+.tc-input-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: left;
+}
+
+.tc-input {
+	width: 100%;
+	padding: 7px 9px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.94);
+	color: #14213a;
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.tc-input::placeholder {
+	color: #7a879e;
+}
+
+.tc-input:focus {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.tc-inline-error {
+	margin: 0;
+	min-height: 16px;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-accent);
+	text-align: center;
+}
+
+/* Shared by loading and error. */
+.tc-status {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 12px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+	text-align: center;
+}
+
+.tc-status-error {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.08);
+}
+
+.tc-status-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-status-message {
+	margin: 0;
+	max-width: 330px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+/* "LOADING TRAINER DATA" with an animated ellipsis. */
+.tc-status-dots {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-status-dots::after {
+	content: '...';
+	display: inline-block;
+	width: 0;
+	overflow: hidden;
+	vertical-align: bottom;
+	animation: tc-dots 1.4s steps(4, end) infinite;
+}
+
+/* --------------------------------- footer -------------------------------- */
+
+/*
+ * Utility actions, visually demoted so they never compete with the card.
+ * Only .tc-button-primary (Create Trainer / Retry) reads as a real action.
+ */
+.tc-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px;
+}
+
+.tc-button {
+	position: relative;
+	padding: 5px 12px 5px 18px;
+	border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 11px;
+	cursor: pointer;
+}
+
+/* Menu-selection marker, the way a game cursor points at the active row. */
+.tc-button::before {
+	content: '▸';
+	position: absolute;
+	left: 7px;
+	opacity: 0;
+	color: var(--vscode-foreground);
+}
+
+.tc-button:hover:not(:disabled)::before,
+.tc-button:focus-visible::before {
+	opacity: 1;
+}
+
+.tc-button:hover:not(:disabled) {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+}
+
+.tc-button:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.tc-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tc-button-primary {
+	padding: 7px 14px;
+	border-color: transparent;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-size: 12px;
+}
+
+.tc-button-primary::before {
+	content: none;
+}
+
+.tc-button-primary:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+	color: var(--vscode-button-foreground);
+}
+
+/* -------------------------------- skeleton ------------------------------- */
+
+.tc-skeleton .tc-portrait::before,
+.tc-skeleton .tc-portrait::after {
+	border-color: var(--tc-rule);
+}
+
+.tc-shimmer {
+	background-color: var(--tc-slot);
+	background-image: linear-gradient(
+		100deg,
+		rgba(255, 255, 255, 0) 20%,
+		rgba(255, 255, 255, 0.16) 50%,
+		rgba(255, 255, 255, 0) 80%
+	);
+	background-size: 400% 100%;
+	border-radius: 4px;
+	animation: tc-shimmer 1.3s ease-in-out infinite;
+}
+
+.tc-shimmer-line {
+	height: 13px;
+}
+
+.tc-shimmer-line:nth-child(1) {
+	width: 62%;
+	height: 20px;
+}
+
+.tc-shimmer-line:nth-child(2) {
+	width: 38%;
+}
+
+.tc-shimmer-line:nth-child(3) {
+	width: 52%;
+}
+
+.tc-shimmer-line:nth-child(4) {
+	width: 80%;
+}
+
+.tc-shimmer-box {
+	height: 46px;
+	border-radius: 0;
+}
+
+/* ------------------------------- animations ------------------------------ */
+
+@keyframes tc-shimmer {
+	0% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0 50%;
+	}
+}
+
+@keyframes tc-card-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes tc-bar-grow {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes tc-dots {
+	to {
+		width: 1.7em;
+	}
+}
+
+/* ------------------------------- responsive ------------------------------ */
+
+/* Panel dragged narrow: stack the hero, drop Partner below Trainer Record. */
+@media (max-width: 640px) {
+	.tc-hero {
+		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-areas:
+			'portrait level'
+			'identity identity';
+	}
+
+	.tc-portrait {
+		grid-area: portrait;
+		width: 76px;
+		height: 76px;
+	}
+
+	.tc-avatar {
+		width: 76px;
+		height: 76px;
+	}
+
+	.tc-level-plate {
+		grid-area: level;
+		justify-self: end;
+	}
+
+	.tc-identity {
+		grid-area: identity;
+	}
+
+	.tc-lower {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.tc-section-partner {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: flex-start;
+		gap: 10px;
+	}
+
+	.tc-section-partner .tc-section-title {
+		flex-basis: 100%;
+	}
+}
+
+@media (max-width: 440px) {
+	body {
+		padding: 10px;
+	}
+
+	/*
+	 * Only the 4-column DEV RECORD needs collapsing. The 3-column TRAINER
+	 * RECORD holds single digits and "0 / 8", which still fit — and collapsing
+	 * it to two columns would leave a visibly empty fourth cell.
+	 */
+	.tc-record-grid-4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-trainer-name {
+		font-size: 18px;
+	}
+
+	.tc-spec {
+		grid-template-columns: minmax(0, 84px) minmax(0, 1fr) auto;
+		gap: 6px;
+	}
+
+	.tc-footer .tc-button {
+		flex: 1 1 auto;
+	}
+
+	.tc-badge-slots {
+		grid-template-columns: repeat(4, auto);
+	}
+}
+
+/* ------------------------------ motion / a11y ---------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.tc-card,
+	.tc-shimmer,
+	.tc-xp-fill,
+	.tc-spec-fill,
+	.tc-status-dots::after {
+		animation: none;
+	}
+
+	.tc-xp-fill {
+		transition: none;
+	}
+
+	.tc-status-dots::after {
+		width: 1.7em;
+	}
+}
+
+@media (forced-colors: active) {
+	.tc-card,
+	.tc-card-head,
+	.tc-notices {
+		background: Canvas;
+		color: CanvasText;
+		border-color: CanvasText;
+		box-shadow: none;
+	}
+
+	.tc-card::before,
+	.tc-xp-track::after {
+		content: none;
+	}
+
+	.tc-portrait,
+	.tc-record-grid,
+	.tc-record-cell,
+	.tc-xp-track,
+	.tc-xp-panel,
+	.tc-spec-track,
+	.tc-timerow,
+	.tc-status,
+	.tc-section-partner,
+	.tc-partner-frame {
+		border: 1px solid CanvasText;
+		background: Canvas;
+		box-shadow: none;
+	}
+
+	.tc-record-grid {
+		gap: 0;
+	}
+
+	.tc-xp-fill,
+	.tc-spec-fill {
+		background: Highlight;
+	}
+
+	.tc-portrait::before,
+	.tc-portrait::after {
+		border-color: CanvasText;
+		filter: none;
+	}
+
+	.tc-brand,
+	.tc-title,
+	.tc-idno,
+	.tc-handle,
+	.tc-notice,
+	.tc-notice-warn,
+	.tc-section-title,
+	.tc-section-subtitle,
+	.tc-record-label,
+	.tc-record-value,
+	.tc-level-word,
+	.tc-level-value,
+	.tc-class-chip,
+	.tc-partner-empty,
+	.tc-trainer-name,
+	.tc-bio,
+	.tc-location {
+		color: CanvasText;
+	}
+
+	.tc-class-chip {
+		border-color: CanvasText;
+		background: Canvas;
+	}
+
+	.tc-input {
+		background: Field;
+		color: FieldText;
+		border-color: FieldText;
+	}
+}

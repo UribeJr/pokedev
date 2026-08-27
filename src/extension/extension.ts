@@ -23,11 +23,18 @@ import {
   WebviewMessage,
 } from '../common/types';
 import { availableColors, normalizeColor } from '../panel/pokemon-collection';
+import {
+  EXTRA_POKEMON_KEY_COLORS,
+  EXTRA_POKEMON_KEY_NAMES,
+  EXTRA_POKEMON_KEY_TYPES,
+} from '../common/storage-keys';
+import {
+  promptForGithubUsername,
+  setConfiguredGithubUsername,
+  TrainerCardPanel,
+} from './trainer-card-panel';
+import { getNonce } from './webview-util';
 
-const EXTRA_POKEMON_KEY = 'vscode-pokemon.extra-pokemon';
-const EXTRA_POKEMON_KEY_TYPES = EXTRA_POKEMON_KEY + '.types';
-const EXTRA_POKEMON_KEY_COLORS = EXTRA_POKEMON_KEY + '.colors';
-const EXTRA_POKEMON_KEY_NAMES = EXTRA_POKEMON_KEY + '.names';
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
 const DEFAULT_POKEMON_TYPE = getDefaultPokemonType();
@@ -1120,6 +1127,49 @@ export function activate(context: vscode.ExtensionContext) {
     ),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('vscode-pokemon.openTrainerCard', () => {
+      TrainerCardPanel.createOrShow(context);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.configure-github-trainer',
+      async () => {
+        const username = await promptForGithubUsername();
+        if (username === undefined) {
+          return;
+        }
+        await setConfiguredGithubUsername(username);
+        TrainerCardPanel.createOrShow(context);
+        // The card may already be open on a stale username; pull the new one.
+        await TrainerCardPanel.currentPanel?.refresh();
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.refresh-github-profile',
+      async () => {
+        if (!TrainerCardPanel.currentPanel) {
+          TrainerCardPanel.createOrShow(context);
+          return;
+        }
+        await TrainerCardPanel.currentPanel.refresh();
+      },
+    ),
+  );
+
+  if (vscode.window.registerWebviewPanelSerializer) {
+    vscode.window.registerWebviewPanelSerializer(TrainerCardPanel.viewType, {
+      async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+        TrainerCardPanel.revive(webviewPanel, context);
+      },
+    });
+  }
+
   if (vscode.window.registerWebviewPanelSerializer) {
     // Make sure we register a serializer in activation event
     vscode.window.registerWebviewPanelSerializer(PokemonPanel.viewType, {
@@ -1696,16 +1746,6 @@ class PokemonWebviewViewProvider extends PokemonWebviewContainer {
       return this._webviewView.webview;
     }
   }
-}
-
-function getNonce() {
-  let text = '';
-  const possible =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
 }
 
 async function createPokemonPlayground(context: vscode.ExtensionContext) {
