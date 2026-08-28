@@ -729,6 +729,58 @@ body {
 	color: var(--tc-accent);
 }
 
+/*
+ * Partner level plate.
+ *
+ * Deliberately quieter than the trainer's own level plate: the partner is a
+ * secondary track, and two competing level badges on one card read as noise.
+ */
+.tc-partner-level {
+	display: block;
+	margin-top: 4px;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.8px;
+	text-align: center;
+	color: var(--tc-ink);
+}
+
+.tc-partner-xp {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 5px;
+}
+
+/*
+ * A slimmer echo of the trainer gauge. Same colour ramp so the two read as
+ * one system, half the height so the trainer bar stays the primary one.
+ */
+.tc-partner-xp-track {
+	position: relative;
+	flex: 1 1 auto;
+	height: 7px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.tc-partner-xp-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	transition: width 600ms ease-out;
+}
+
+.tc-partner-xp-value {
+	flex: 0 0 auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
 .tc-partner-empty {
 	margin: 0;
 	font-family: 'silkscreen', var(--vscode-font-family);
@@ -1193,12 +1245,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
 	.tc-card,
 	.tc-shimmer,
+	.tc-partner-xp-fill,
 	.tc-xp-fill,
 	.tc-spec-fill,
 	.tc-status-dots::after {
 		animation: none;
 	}
 
+	.tc-partner-xp-fill,
 	.tc-xp-fill {
 		transition: none;
 	}
@@ -1242,6 +1296,7 @@ body {
 		gap: 0;
 	}
 
+	.tc-partner-xp-fill,
 	.tc-xp-fill,
 	.tc-spec-fill {
 		background: Highlight;

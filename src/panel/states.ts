@@ -34,6 +34,14 @@ export interface IPokemonType {
   isPlaying: boolean;
 
   showSpeechBubble(duration: number, friend: boolean): void;
+
+  /** Repoints this Pokemon at an evolved species, preserving everything else. */
+  evolveTo(
+    pokemonType: PokemonType,
+    pokemonRoot: string,
+    generation: string,
+    originalSpriteSize: number,
+  ): void;
 }
 
 export class PokemonInstanceState {

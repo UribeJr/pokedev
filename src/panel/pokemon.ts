@@ -45,6 +45,17 @@ export class Pokemon extends BasePokemonType {
     this.label = pokemonType;
   }
 
+  /**
+   * Re-reads the species row after an evolution.
+   *
+   * `config` backs `generation`, `pokedexNumber` and the cry, so leaving it
+   * pointing at the pre-evolution species would make an evolved Pokemon still
+   * introduce itself by its old name.
+   */
+  protected override applySpeciesChange(pokemonType: string): void {
+    this.config = POKEMON_DATA[pokemonType] || this.config;
+  }
+
   static possibleColors = [PokemonColor.default];
 
   sequence = {

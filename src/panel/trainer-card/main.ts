@@ -420,6 +420,42 @@ function renderPartner(model: TrainerCardViewModel): HTMLElement {
       naming.appendChild(el('span', 'tc-partner-shiny', '★'));
     }
     section.appendChild(naming);
+
+    section.appendChild(
+      el(
+        'span',
+        'tc-partner-level',
+        `${labels.partnerLevelLabel} ${padStart(String(partner.level), 2, '0')}`,
+      ),
+    );
+
+    // A capped partner has no next level to fill toward, so the bar would be
+    // permanently full and meaningless; the level plate says it all.
+    if (partner.xpForNextLevel > 0) {
+      const needed = partner.xpForNextLevel;
+      const pct = Math.max(
+        0,
+        Math.min(100, Math.round((partner.currentXp / needed) * 100)),
+      );
+
+      const fill = el('div', 'tc-partner-xp-fill');
+      fill.style.width = `${pct}%`;
+
+      const track = el('div', 'tc-partner-xp-track');
+      track.setAttribute('role', 'progressbar');
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', String(needed));
+      track.setAttribute('aria-valuenow', String(partner.currentXp));
+      track.setAttribute('aria-label', labels.partnerXpLabel);
+      track.appendChild(fill);
+
+      section.appendChild(
+        appendAll(el('div', 'tc-partner-xp'), [
+          track,
+          el('span', 'tc-partner-xp-value', `${partner.currentXp}/${needed}`),
+        ]),
+      );
+    }
   } else {
     section.appendChild(el('p', 'tc-partner-empty', labels.noPartnerLabel));
   }
@@ -480,7 +516,11 @@ function renderCard(model: TrainerCardViewModel): HTMLElement {
   const body = el('div', 'tc-card-body');
   body.appendChild(renderHero(model));
   body.appendChild(el('div', 'tc-rule'));
-  body.appendChild(renderDevRecord(model));
+  // Hidden by preference, not by absence of data - the GitHub block is still
+  // fetched and cached, it just is not drawn.
+  if (model.showDevRecord) {
+    body.appendChild(renderDevRecord(model));
+  }
   body.appendChild(el('div', 'tc-rule'));
 
   const lower = el('div', 'tc-lower');
@@ -667,6 +707,34 @@ function renderFooter(model: TrainerCardViewModel): HTMLElement {
       post({ command: 'trainer/changeUsername' });
     });
     footer.appendChild(change);
+
+    // Only offered when there is actually a collection to choose from.
+    if (model.partner) {
+      const partner = el('button', 'tc-button');
+      partner.type = 'button';
+      partner.textContent = labels.changePartnerShort;
+      partner.setAttribute('aria-label', labels.changePartnerButton);
+      partner.title = labels.changePartnerButton;
+      partner.addEventListener('click', () => {
+        post({ command: 'trainer/changePartner' });
+      });
+      footer.appendChild(partner);
+    }
+
+    // Labelled for what clicking it does, not for the current state.
+    const devRecord = el('button', 'tc-button');
+    devRecord.type = 'button';
+    const devRecordLabel = model.showDevRecord
+      ? labels.hideDevRecordButton
+      : labels.showDevRecordButton;
+    devRecord.textContent = devRecordLabel;
+    devRecord.setAttribute('aria-label', devRecordLabel);
+    devRecord.setAttribute('aria-pressed', String(!model.showDevRecord));
+    devRecord.title = devRecordLabel;
+    devRecord.addEventListener('click', () => {
+      post({ command: 'trainer/toggleDevRecord' });
+    });
+    footer.appendChild(devRecord);
   }
 
   const close = el('button', 'tc-button');

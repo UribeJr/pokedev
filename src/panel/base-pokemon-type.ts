@@ -4,6 +4,7 @@ import {
   PokemonExtraSprite,
   PokemonSize,
   PokemonSpeed,
+  PokemonType,
 } from '../common/types';
 import { ISequenceTree } from './sequences';
 import {
@@ -280,6 +281,60 @@ export abstract class BasePokemonType implements IPokemonType {
   faceRight() {
     this.el.style.transform = 'scaleX(1)';
   }
+
+  /**
+   * Repoints this Pokemon at a different species, in place.
+   *
+   * In-place rather than despawn-and-respawn so the instance keeps its
+   * position, its friend link and its animation state - an evolution should
+   * look like a transformation, not like one Pokemon leaving and another
+   * arriving.
+   *
+   * `el.src` is cleared deliberately and is not optional. `setAnimation`
+   * early-returns when the current src already ends with the same
+   * `_<face>_8fps.gif`, which is exactly what happens across a species change:
+   * only the path PREFIX differs. Without this reset the sprite would keep
+   * rendering the old species until the animation happened to change frame
+   * type.
+   *
+   * Subclasses override `applySpeciesChange` to refresh whatever they cache
+   * about the species; everything shared lives here.
+   */
+  evolveTo(
+    pokemonType: PokemonType,
+    pokemonRoot: string,
+    generation: string,
+    originalSpriteSize: number,
+  ) {
+    this.label = pokemonType;
+    this.pokemonRoot = pokemonRoot;
+    this._generation = generation;
+    this._originalSpriteSize = originalSpriteSize;
+    this.applySpeciesChange(pokemonType);
+
+    // See above: this reset is what makes the new sprite actually load.
+    this.el.src = '';
+
+    // An evolved form is frequently a different sprite size (32 -> 64), so the
+    // element box has to be recomputed or the new sprite renders wrong.
+    this.initSprite(this._size, this._left, this._bottom, originalSpriteSize);
+    this.setAnimation(
+      this.currentState.spriteLabel,
+      POKEMON_DATA[pokemonType]?.extraSprites?.includes(
+        PokemonExtraSprite.leftFacing,
+      ),
+    );
+  }
+
+  /**
+   * Hook for subclasses to re-read whatever they cache about the species.
+   *
+   * Abstract rather than a no-op default: a subclass that caches species data
+   * and forgets to refresh it would evolve the sprite but keep the old cry,
+   * generation and Pokedex number, which is exactly the kind of half-applied
+   * change that is painful to notice later.
+   */
+  protected abstract applySpeciesChange(pokemonType: PokemonType): void;
 
   setAnimation(face: string, hasLeftFacingSprite: boolean | undefined) {
     const validFace =

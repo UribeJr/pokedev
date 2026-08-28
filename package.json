@@ -43,6 +43,9 @@
         "onCommand:vscode-pokemon.openTrainerCard",
         "onCommand:vscode-pokemon.configure-github-trainer",
         "onCommand:vscode-pokemon.refresh-github-profile",
+        "onCommand:vscode-pokemon.toggle-dev-record",
+        "onCommand:vscode-pokemon.set-partner",
+        "onCommand:vscode-pokemon.evolve-partner",
         "onWebviewPanel:pokemonCoding",
         "onWebviewPanel:pokemonTrainerCard",
         "onView:explorer",
@@ -84,6 +87,16 @@
                     "command": "vscode-pokemon.openTrainerCard",
                     "when": "view == pokemonView",
                     "group": "navigation@4"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "vscode-pokemon.debug-add-trainer-xp",
+                    "when": "config.vscode-pokemon.enableDebugCommands"
+                },
+                {
+                    "command": "vscode-pokemon.debug-add-partner-xp",
+                    "when": "config.vscode-pokemon.enableDebugCommands"
                 }
             ]
         },
@@ -172,6 +185,31 @@
                 "command": "vscode-pokemon.refresh-github-profile",
                 "title": "Refresh GitHub Profile",
                 "category": "Pokemon Coding"
+            },
+            {
+                "command": "vscode-pokemon.toggle-dev-record",
+                "title": "Toggle Dev Record on Trainer Card",
+                "category": "Pokemon Coding"
+            },
+            {
+                "command": "vscode-pokemon.set-partner",
+                "title": "Choose Partner Pokemon",
+                "category": "Pokemon Coding"
+            },
+            {
+                "command": "vscode-pokemon.evolve-partner",
+                "title": "Evolve Partner",
+                "category": "Pokemon Coding"
+            },
+            {
+                "command": "vscode-pokemon.debug-add-trainer-xp",
+                "title": "Add 100 Trainer XP",
+                "category": "PokeDev Debug"
+            },
+            {
+                "command": "vscode-pokemon.debug-add-partner-xp",
+                "title": "Add 100 Partner XP",
+                "category": "PokeDev Debug"
             }
         ],
         "keybindings": [
@@ -288,6 +326,36 @@
                         "pattern": "^$|^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$",
                         "patternErrorMessage": "Not a valid GitHub username.",
                         "markdownDescription": "Your GitHub username, shown on the Trainer Card (**Pokemon Coding: Open Trainer Card**). Only public profile data is read; no authentication is used and no data leaves your machine except the request to GitHub."
+                    },
+                    "vscode-pokemon.trainerCard.showDevRecord": {
+                        "type": "boolean",
+                        "default": true,
+                        "markdownDescription": "Show the **DEV RECORD** section on the Trainer Card: your public GitHub repositories, stars, followers, join year and top languages. Turn this off to keep the card to your in-editor progression only. GitHub data is still fetched and cached either way."
+                    },
+                    "vscode-pokemon.progression.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Earn Trainer and partner Pokémon experience from coding activity: saving changed files, active coding time, Git commits and successful build/test tasks."
+                    },
+                    "vscode-pokemon.progression.mode": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "manual",
+                            "agentic"
+                        ],
+                        "enumDescriptions": [
+                            "Both your own typing and edits made by an AI agent count as activity. Earns experience whichever way you work.",
+                            "Only your own keyboard and mouse input counts as activity, so watching an agent work accrues no coding time. Work batches and Git commits still earn normally.",
+                            "Any edit counts as activity, with a longer idle window (15 minutes instead of 5) to cover the pauses in a long agent run."
+                        ],
+                        "default": "auto",
+                        "markdownDescription": "How you work, which decides what counts as \"still active\" for **Coding Time**. Experience weights are shared across all three modes — they are already tuned so hand-written and agent-driven sessions earn at close to the same rate. This only governs the idle clock."
+                    },
+                    "vscode-pokemon.enableDebugCommands": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Show the PokeDev Debug commands for granting experience. Intended for testing progression and evolution; leave this off for normal use."
                     }
                 }
             }
@@ -313,7 +381,7 @@
         "test:web": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
         "test:gifs": "node ./out/test/gifs.js",
         "prepare": "husky",
-        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js"
+        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/progression.test.js"
     },
     "devDependencies": {
         "@rbarilani/remove-source-map-url-webpack-plugin": "^1.1.0",

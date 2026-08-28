@@ -23,9 +23,44 @@ import { resolveGithubProfile } from './trainer-github-service';
 import { resolvePartnerPokemon } from './trainer-partner';
 import { readTrainerProfile, syncTrainerProfile } from './trainer-storage';
 import { getNonce } from './webview-util';
+import { pickPartnerPokemon } from './partner-picker';
 
 const GITHUB_USERNAME_SETTING = 'githubUsername';
 const CONFIG_SECTION = 'vscode-pokemon';
+
+/**
+ * How long to coalesce progression pushes.
+ *
+ * Long enough that a burst of saves becomes one re-render - the webview
+ * rebuilds its whole DOM per message - short enough that the card still feels
+ * live while the user is watching it.
+ */
+const PROGRESSION_PUSH_THROTTLE_MS = 2000;
+
+const DEV_RECORD_SETTING = 'trainerCard.showDevRecord';
+
+/** Whether the card shows the GitHub-derived DEV RECORD block. */
+export function isDevRecordVisible(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(DEV_RECORD_SETTING, true);
+}
+
+/**
+ * Flips DEV RECORD visibility and persists it.
+ *
+ * Written globally rather than per workspace: whether you want your GitHub
+ * stats on screen is a preference about you, not about a project.
+ */
+async function toggleDevRecordVisible(): Promise<void> {
+  await vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .update(
+      DEV_RECORD_SETTING,
+      !isDevRecordVisible(),
+      vscode.ConfigurationTarget.Global,
+    );
+}
 
 /** Only GitHub's avatar CDN is allowed as an image source. */
 const AVATAR_HOSTS =
@@ -115,6 +150,12 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
     idLabel: vscode.l10n.t('ID No.'),
     trainerWord: vscode.l10n.t('Trainer'),
     levelLabel: vscode.l10n.t('Lv.'),
+    partnerLevelLabel: vscode.l10n.t('Lv.'),
+    partnerXpLabel: vscode.l10n.t('Partner XP'),
+    changePartnerButton: vscode.l10n.t('Choose partner Pokemon'),
+    changePartnerShort: vscode.l10n.t('Change Partner'),
+    hideDevRecordButton: vscode.l10n.t('Hide Dev Record'),
+    showDevRecordButton: vscode.l10n.t('Show Dev Record'),
     devRecordLabel: vscode.l10n.t('Dev Record'),
     reposLabel: vscode.l10n.t('Repos'),
     followersLabel: vscode.l10n.t('Followers'),
@@ -181,6 +222,26 @@ export class TrainerCardPanel {
   private _disposables: vscode.Disposable[] = [];
   private _disposed = false;
 
+  /**
+   * The inputs behind the view model currently on screen.
+   *
+   * `_buildViewModel` takes the GitHub block purely from its `extras`, and
+   * resolves the partner only when the status is 'connected'. A progression
+   * push that did not restore these would therefore blank out both the DEV
+   * RECORD section and the partner - so every send records what it sent, and
+   * `notifyProgressionChanged` replays it with fresh progression.
+   */
+  private _lastStatus: TrainerCardStatus = 'loading';
+  private _lastExtras: {
+    github?: TrainerCardViewModel['github'];
+    error?: TrainerError;
+    stale?: boolean;
+    fetchedAt?: number;
+  } = {};
+
+  /** Coalesces bursts of XP events into one re-render. */
+  private _pushTimer: ReturnType<typeof setTimeout> | undefined;
+
   public static createOrShow(context: vscode.ExtensionContext): void {
     const column = vscode.window.activeTextEditor
       ? vscode.window.activeTextEditor.viewColumn
@@ -245,6 +306,10 @@ export class TrainerCardPanel {
 
   public dispose(): void {
     this._disposed = true;
+    if (this._pushTimer !== undefined) {
+      clearTimeout(this._pushTimer);
+      this._pushTimer = undefined;
+    }
     TrainerCardPanel.currentPanel = undefined;
     this._panel.dispose();
     while (this._disposables.length) {
@@ -258,6 +323,31 @@ export class TrainerCardPanel {
   /** Re-fetches from GitHub, bypassing the cache. */
   public async refresh(): Promise<void> {
     await this._load({ forceRefresh: true });
+  }
+
+  /**
+   * Re-renders the card with current progression, without touching GitHub.
+   *
+   * Throttled: the webview rebuilds its entire DOM on every message, and a
+   * burst of saves would otherwise mean a burst of full re-renders. Note that
+   * a push while the tab is hidden is simply lost - the panel deliberately
+   * does not set `retainContextWhenHidden` - which is harmless, because
+   * revealing it makes the bundle re-request state from scratch.
+   */
+  public notifyProgressionChanged(): void {
+    if (this._disposed || this._pushTimer !== undefined) {
+      return;
+    }
+    this._pushTimer = setTimeout(() => {
+      this._pushTimer = undefined;
+      if (this._disposed) {
+        return;
+      }
+      this._post({
+        command: 'trainer/state',
+        payload: this._buildViewModel(this._lastStatus, this._lastExtras),
+      });
+    }, PROGRESSION_PUSH_THROTTLE_MS);
   }
 
   private _post(message: TrainerWebviewboundMessage): void {
@@ -297,6 +387,21 @@ export class TrainerCardPanel {
         await this._connect(next);
         return;
       }
+
+      case 'trainer/changePartner': {
+        if (await pickPartnerPokemon(this._context)) {
+          this.notifyProgressionChanged();
+        }
+        return;
+      }
+
+      case 'trainer/toggleDevRecord':
+        await toggleDevRecordVisible();
+        // The configuration listener in extension.ts also refreshes on this
+        // setting, but pushing here means the card updates even if that
+        // listener is ever narrowed.
+        this.notifyProgressionChanged();
+        return;
 
       case 'trainer/close':
         this.dispose();
@@ -411,6 +516,16 @@ export class TrainerCardPanel {
     const profile =
       extras.profile ??
       readTrainerProfile(this._context, now, getConfiguredGithubUsername());
+
+    // Remember what produced this render so a later progression-only push can
+    // reproduce everything except the numbers that changed.
+    this._lastStatus = status;
+    this._lastExtras = {
+      github: extras.github,
+      error: extras.error,
+      stale: extras.stale,
+      fetchedAt: extras.fetchedAt,
+    };
     const trainerClassId = computeTrainerClass(
       extras.github ? extras.github.topLanguages : undefined,
     );
@@ -421,6 +536,7 @@ export class TrainerCardPanel {
       profile,
       tier: getTrainerCardTier(profile.trainerLevel),
       xpForNextLevel: getXpForNextTrainerLevel(profile.trainerLevel),
+      showDevRecord: isDevRecordVisible(),
       github: extras.github,
       partner:
         status === 'connected'

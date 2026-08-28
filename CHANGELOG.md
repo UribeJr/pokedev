@@ -4,6 +4,35 @@ All notable changes to the "vscode-pokemon" extension will be documented in this
 
 ## [Unreleased]
 
+- feat: progression system — coding activity earns Trainer XP and partner
+  Pokémon XP, both persisted across sessions. XP comes from batches of saved
+  work, active coding time, Git commits and successful build/test tasks
+- feat: saved work is awarded in batches rather than per file, so an
+  agent-driven change spanning many files is worth about the same as the
+  equivalent hand-written one; commits carry the most weight of any single
+  event
+- feat: level-based evolution for Generations 1–4 (165 lines), with an
+  `Evolve` / `Not now` prompt and a `Pokemon Coding: Evolve Partner` command.
+  Evolving preserves nickname, shininess, level, XP and history — only the
+  species and sprite change
+- feat: the Trainer Card's XP gauge and `Coding Time` are now live, and the
+  `PARTNER` section shows the partner's level and a small XP bar
+- feat: choose which Pokémon is your partner — a **Change Partner** button on
+  the card and a `Pokemon Coding: Choose Partner Pokemon` command. Previously
+  the partner was whichever Pokémon happened to be first in the collection.
+  Switching partners preserves each Pokémon's own level and XP
+- feat: `vscode-pokemon.trainerCard.showDevRecord` hides the GitHub `DEV RECORD`
+  section of the Trainer Card
+- feat: `vscode-pokemon.progression.mode` (`auto` / `manual` / `agentic`) —
+  decides whether AI-agent edits count as activity for Coding Time, since VS
+  Code reports an agent's edit and a human keystroke identically. Experience
+  weights are shared across modes; only the idle clock changes
+- feat: `vscode-pokemon.progression.enabled` and
+  `vscode-pokemon.enableDebugCommands` settings, plus two debug XP commands
+  hidden behind the latter
+- chore: `TrainerProfile` gains `totalTrainerXp` as its source of truth
+  (schema v2); older profiles and Pokémon saved before progression existed
+  migrate on read with no reset required
 - feat: GitHub Trainer Card (`Pokemon Coding: Open Trainer Card`) — a retro
   trainer profile combining your public GitHub data with a persistent, local
   trainer profile (level, XP, badges, Pokédex, coding time) and your partner

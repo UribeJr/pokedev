@@ -32,7 +32,7 @@ function languages(entries: [string, number][]): LanguageCount[] {
 suite('TrainerProfile defaults', () => {
   test('a fresh profile starts at level 1 with nothing earned', () => {
     const profile = createDefaultTrainerProfile(NOW, 'octocat');
-    assert.strictEqual(profile.version, 1);
+    assert.strictEqual(profile.version, 2);
     assert.strictEqual(profile.githubUsername, 'octocat');
     assert.strictEqual(profile.trainerLevel, 1);
     assert.strictEqual(profile.trainerXp, 0);
@@ -74,7 +74,7 @@ suite('normalizeTrainerProfile', () => {
       { githubUsername: 'ash', trainerLevel: 3, createdAt: created },
       NOW,
     );
-    assert.strictEqual(profile.version, 1);
+    assert.strictEqual(profile.version, 2);
     assert.strictEqual(profile.githubUsername, 'ash');
     assert.strictEqual(profile.trainerLevel, 3);
     assert.strictEqual(profile.createdAt, created);
@@ -146,10 +146,10 @@ suite('normalizeTrainerProfile', () => {
 });
 
 suite('Trainer XP helpers', () => {
-  test('the curve grows quadratically from level 1', () => {
+  test('the curve grows steadily from level 1', () => {
     assert.strictEqual(getXpForNextTrainerLevel(1), 100);
-    assert.strictEqual(getXpForNextTrainerLevel(2), 300);
-    assert.strictEqual(getXpForNextTrainerLevel(3), 600);
+    assert.strictEqual(getXpForNextTrainerLevel(2), 150);
+    assert.strictEqual(getXpForNextTrainerLevel(3), 225);
   });
 
   test('non-positive and non-finite levels fall back to level 1', () => {
@@ -178,10 +178,10 @@ suite('Trainer XP helpers', () => {
   });
 
   test('one grant can span several levels', () => {
-    // 100 (1->2) + 300 (2->3) + 600 (3->4) = 1000, leaving 50 at level 4.
+    // 100 (1->2) + 150 (2->3) + 225 (3->4) + 325 (4->5) = 800, leaving 250.
     const profile = addTrainerXp(createDefaultTrainerProfile(NOW), 1050);
-    assert.strictEqual(profile.trainerLevel, 4);
-    assert.strictEqual(profile.trainerXp, 50);
+    assert.strictEqual(profile.trainerLevel, 5);
+    assert.strictEqual(profile.trainerXp, 250);
   });
 
   test('invalid grants are a no-op', () => {

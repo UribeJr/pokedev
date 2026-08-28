@@ -23,6 +23,32 @@ export class PokemonElement {
     this.color = PokemonColor.null;
   }
 
+  /**
+   * Switches this element to an evolved species.
+   *
+   * `type`, `generation` and `color` are duplicated here as well as inside the
+   * `IPokemonType`, and it is THIS copy that `saveState` serializes. Updating
+   * only the Pokemon would make the evolution revert on the next reload.
+   */
+  evolveTo(
+    type: PokemonType,
+    color: PokemonColor,
+    generation: string,
+    originalSpriteSize: number,
+    basePokemonUri: string,
+  ) {
+    this.type = type;
+    this.color = color;
+    this.generation = generation;
+    this.originalSpriteSize = originalSpriteSize;
+    this.pokemon.evolveTo(
+      type,
+      `${basePokemonUri}/${generation}/${type}/${color}`,
+      generation,
+      originalSpriteSize,
+    );
+  }
+
   constructor(
     el: HTMLImageElement,
     collision: HTMLDivElement,

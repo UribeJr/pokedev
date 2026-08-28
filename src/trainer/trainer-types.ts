@@ -33,11 +33,22 @@ export interface TrainerAchievement {
 
 export interface TrainerProfile {
   /** Schema version, so `normalizeTrainerProfile` has something to branch on. */
-  version: 1;
+  version: 2;
   githubUsername: string;
 
+  /**
+   * The source of truth for trainer progression: every point ever earned.
+   *
+   * `trainerLevel` and `trainerXp` below are DERIVED from this and persisted
+   * only so the card can render without recomputing. `normalizeTrainerProfile`
+   * recomputes both on every read, so a hand-edited level cannot drift out of
+   * agreement with the XP that justifies it.
+   */
+  totalTrainerXp: number;
+
+  /** Derived from `totalTrainerXp`. Do not assign directly. */
   trainerLevel: number;
-  /** Experience accumulated *within* the current level. */
+  /** Derived. Experience accumulated *within* the current level. */
   trainerXp: number;
 
   pokemonCaught: number;
@@ -143,6 +154,12 @@ export interface PartnerPokemonView {
   nickname: string;
   spriteUri: string;
   shiny: boolean;
+  /** Partner progression. Present for every resolvable partner. */
+  level: number;
+  /** Experience within the current level. */
+  currentXp: number;
+  /** Experience required to advance from `level`; 0 at the level cap. */
+  xpForNextLevel: number;
 }
 
 /**
@@ -177,6 +194,18 @@ export interface TrainerCardLabels {
   partnerLabel: string;
   /** Empty state when the Pokemon collection has no usable entry. */
   noPartnerLabel: string;
+  /** Short level prefix on the partner plate, e.g. "Lv." */
+  partnerLevelLabel: string;
+  /** Accessible name for the partner's experience bar. */
+  partnerXpLabel: string;
+  /** Footer action: pick which Pokemon is the partner. */
+  changePartnerButton: string;
+  /** Short form shown on the footer button itself. */
+  changePartnerShort: string;
+  /** Footer action when the DEV RECORD block is currently visible. */
+  hideDevRecordButton: string;
+  /** Footer action when it is currently hidden. */
+  showDevRecordButton: string;
   trainerClass: string;
   createTrainerHeading: string;
   connectHint: string;
@@ -211,6 +240,14 @@ export interface TrainerCardViewModel {
   tier: TrainerCardTier;
   /** XP required to advance from the profile's current level. */
   xpForNextLevel: number;
+  /**
+   * Whether to render the GitHub-derived DEV RECORD block.
+   *
+   * A preference, not a consequence of missing data: someone may simply not
+   * want their public GitHub stats on screen while sharing it, even though the
+   * profile loaded fine. The data is still fetched and cached either way.
+   */
+  showDevRecord: boolean;
   github?: GithubProfileView;
   partner?: PartnerPokemonView;
   /** May accompany status 'connected' when a refresh failed over live cache. */
@@ -230,6 +267,8 @@ export type TrainerHostboundMessage =
   | { command: 'trainer/connect'; username: string }
   | { command: 'trainer/refresh' }
   | { command: 'trainer/changeUsername' }
+  | { command: 'trainer/changePartner' }
+  | { command: 'trainer/toggleDevRecord' }
   | { command: 'trainer/close' };
 
 export type TrainerWebviewboundMessage = {

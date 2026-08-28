@@ -268,6 +268,65 @@ function addPokemonToPanel(
   );
 }
 
+/**
+ * Swaps a Pokemon to its evolved species in place.
+ *
+ * In place rather than remove-and-respawn: the Pokemon keeps its position, its
+ * friend link and its animation state, so the change reads as a transformation
+ * of the same creature rather than a substitution.
+ *
+ * Reuses the shiny spawn sparkle as the evolution effect. A dedicated
+ * animation would be nicer, but correctness and persistence matter more here
+ * than spectacle, and this asset and its cleanup already work.
+ */
+function evolvePokemonInPanel(
+  message: {
+    name: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+  },
+  basePokemonUri: string,
+  stateApi?: VscodeStateApi,
+) {
+  if (!stateApi) {
+    return;
+  }
+  const element = allPokemon.locate(message.name);
+  if (!element) {
+    return;
+  }
+
+  element.evolveTo(
+    message.type,
+    message.color,
+    message.generation,
+    message.originalSpriteSize,
+    basePokemonUri,
+  );
+
+  const overlay = document.createElement('img');
+  overlay.src = `${basePokemonUri}/shiny-anim.gif?t=${Date.now()}`;
+  overlay.className = 'shiny-overlay';
+  overlay.style.left = element.el.style.left;
+  overlay.style.bottom = element.el.style.bottom;
+  overlay.style.width = element.el.style.width;
+  overlay.style.height = element.el.style.height;
+  (document.getElementById('pokemonContainer') as HTMLDivElement).appendChild(
+    overlay,
+  );
+  const removeOverlay = () => overlay.remove();
+  overlay.addEventListener('animationend', removeOverlay);
+  setTimeout(removeOverlay, 1500);
+
+  // A brief celebration, using the existing hold-state interrupt so the
+  // Pokemon returns to whatever it was doing on its own.
+  element.pokemon.showSpeechBubble(2000, false);
+
+  saveState(stateApi);
+}
+
 function removePokemonFromPanel(
   message: { name: string },
   stateApi?: VscodeStateApi,
@@ -596,6 +655,9 @@ export function pokemonPanelApp(
         break;
       case 'delete-pokemon':
         removePokemonFromPanel(message, stateApi);
+        break;
+      case 'evolve-pokemon':
+        evolvePokemonInPanel(message, basePokemonUri, stateApi);
         break;
       case 'reset-pokemon':
         var pokemonToRemove = [...allPokemon.pokemonCollection];

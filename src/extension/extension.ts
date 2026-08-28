@@ -29,11 +29,24 @@ import {
   EXTRA_POKEMON_KEY_TYPES,
 } from '../common/storage-keys';
 import {
+  isDevRecordVisible,
   promptForGithubUsername,
   setConfiguredGithubUsername,
   TrainerCardPanel,
 } from './trainer-card-panel';
 import { getNonce } from './webview-util';
+import { ActivityTracker } from './activity-tracker';
+import { pickPartnerPokemon } from './partner-picker';
+import { GitActivityTracker } from './git-activity';
+import {
+  evolvePartnerCommand,
+  setEvolutionPanelNotifier,
+} from './evolution-flow';
+import {
+  createProgressionEvent,
+  ProgressionService,
+  showStatusMessage,
+} from './progression-service';
 
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
@@ -372,6 +385,16 @@ export async function storeCollectionAsMemento(
 }
 
 let spawnPokemonStatusBar: vscode.StatusBarItem;
+
+/**
+ * Progression singletons.
+ *
+ * Held at module scope so `deactivate()` can flush banked coding time on the
+ * way out; VS Code gives an extension one chance to persist on shutdown.
+ */
+let progressionService: ProgressionService | undefined;
+let activityTracker: ActivityTracker | undefined;
+let gitActivityTracker: GitActivityTracker | undefined;
 
 interface IPokemonInfo {
   type: PokemonType;
@@ -1114,6 +1137,13 @@ export function activate(context: vscode.ExtensionContext) {
           updatePanelThrowWithMouse();
         }
 
+        if (
+          e.affectsConfiguration('vscode-pokemon.trainerCard.showDevRecord')
+        ) {
+          // The card is open often enough that requiring a reopen to see a
+          // visibility toggle take effect would feel broken.
+          TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+        }
         if (e.affectsConfiguration('vscode-pokemon.pokemonLanguage')) {
           // Reset the Pokemon translations cache when the language changes
           localize.resetPokemonTranslationsCache();
@@ -1158,6 +1188,111 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         await TrainerCardPanel.currentPanel.refresh();
+      },
+    ),
+  );
+
+  /* ----------------------------- progression ----------------------------- */
+
+  const progression = new ProgressionService(context);
+  progressionService = progression;
+
+  // The panel is only reachable from this module, so evolution is handed a
+  // notifier rather than importing anything back out of here - importing
+  // extension.ts from a module it imports would form a require cycle over its
+  // top-level constants.
+  setEvolutionPanelNotifier((payload) => {
+    getPokemonPanel()?.evolvePokemon(payload);
+  });
+
+  const tracker = new ActivityTracker(progression);
+  tracker.start();
+  activityTracker = tracker;
+  context.subscriptions.push(tracker);
+
+  const gitTracker = new GitActivityTracker(context, progression);
+  // Fire and forget: the Git extension may take a moment to activate, and
+  // nothing else in activation depends on commit tracking being ready.
+  void gitTracker.start();
+  gitActivityTracker = gitTracker;
+  context.subscriptions.push(gitTracker);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.toggle-dev-record',
+      async () => {
+        const next = !isDevRecordVisible();
+        await vscode.workspace
+          .getConfiguration('vscode-pokemon')
+          .update(
+            'trainerCard.showDevRecord',
+            next,
+            vscode.ConfigurationTarget.Global,
+          );
+        showStatusMessage(
+          next
+            ? vscode.l10n.t('Dev Record shown on the Trainer Card.')
+            : vscode.l10n.t('Dev Record hidden on the Trainer Card.'),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('vscode-pokemon.set-partner', async () => {
+      if (await pickPartnerPokemon(context)) {
+        progression.notifyCard();
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.evolve-partner',
+      async () => {
+        await evolvePartnerCommand(context, progression);
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.debug-add-trainer-xp',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        await progression.applyEvent({
+          ...createProgressionEvent('debug-grant', Date.now(), {
+            grant: 'trainer',
+          }),
+          trainerXp: DEBUG_XP_GRANT,
+          pokemonXp: 0,
+        });
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Trainer XP.', DEBUG_XP_GRANT),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'vscode-pokemon.debug-add-partner-xp',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        await progression.applyEvent({
+          ...createProgressionEvent('debug-grant', Date.now(), {
+            grant: 'partner',
+          }),
+          trainerXp: 0,
+          pokemonXp: DEBUG_XP_GRANT,
+        });
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Partner XP.', DEBUG_XP_GRANT),
+        );
       },
     ),
   );
@@ -1211,6 +1346,46 @@ function updateStatusBar(): void {
   spawnPokemonStatusBar.show();
 }
 
+/** How much a single debug grant is worth. */
+const DEBUG_XP_GRANT = 100;
+
+/**
+ * Debug commands are hidden from the palette by a `when` clause, but the
+ * setting is re-checked here too: a keybinding or `executeCommand` bypasses
+ * the palette entirely, and these must never fire on a default install.
+ */
+function areDebugCommandsEnabled(): boolean {
+  const enabled = vscode.workspace
+    .getConfiguration('vscode-pokemon')
+    .get<boolean>('enableDebugCommands', false);
+  if (!enabled) {
+    void vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        'PokeDev debug commands are disabled. Enable "vscode-pokemon.enableDebugCommands" to use them.',
+      ),
+    );
+  }
+  return enabled;
+}
+
+/**
+ * Persists anything held in memory before the host tears the extension down.
+ *
+ * Only active coding time is at risk: XP is written as it is earned, but time
+ * is banked between ticks so the profile is not rewritten every minute for no
+ * reason. Returning the promise gives VS Code the chance to await the write.
+ */
+export function deactivate(): Thenable<void> | undefined {
+  activityTracker?.dispose();
+  activityTracker = undefined;
+  gitActivityTracker?.dispose();
+  gitActivityTracker = undefined;
+
+  const pending = progressionService?.flush();
+  progressionService = undefined;
+  return pending;
+}
+
 export function spawnPokemonDeactivate() {
   spawnPokemonStatusBar.dispose();
 }
@@ -1241,6 +1416,13 @@ interface IPokemonPanel {
   updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind): void;
   update(): void;
   setThrowWithMouse(newThrowWithMouse: boolean): void;
+  evolvePokemon(payload: {
+    name: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+  }): void;
 }
 
 class PokemonWebviewContainer implements IPokemonPanel {
@@ -1347,6 +1529,19 @@ class PokemonWebviewContainer implements IPokemonPanel {
   public resetPokemon(): void {
     void this.getWebview().postMessage({
       command: 'reset-pokemon',
+    });
+  }
+
+  public evolvePokemon(payload: {
+    name: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+  }): void {
+    void this.getWebview().postMessage({
+      command: 'evolve-pokemon',
+      ...payload,
     });
   }
 

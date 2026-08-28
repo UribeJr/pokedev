@@ -6,9 +6,13 @@
  * editor. Everything here is pure and free of `vscode`, so it is unit-testable
  * and safe to import from the webview bundle.
  *
- * In V1 nothing calls `addTrainerXp`; it exists so that later systems (coding
- * streaks, catching, Git-based XP) can grant experience without the Trainer
- * Card needing to change.
+ * `totalTrainerXp` is the source of truth. `trainerLevel` and `trainerXp` are
+ * derived from it and persisted only so the card can render without
+ * recomputing; `normalizeTrainerProfile` re-derives both on every read, so the
+ * three can never disagree.
+ *
+ * XP is granted by `src/extension/progression-service.ts`, which is the only
+ * writer. Nothing else should call `addTrainerXp`.
  */
 import {
   TrainerAchievement,
@@ -23,16 +27,61 @@ export const MAX_TRAINER_LEVEL = 100;
 /**
  * Experience needed to advance FROM `level` to `level + 1`.
  *
- * A gentle quadratic: 100 XP for level 1 -> 2, 300 for 2 -> 3, 600 for 3 -> 4.
- * Fixed now rather than later because changing the curve after release would
- * retroactively re-level everyone.
+ * 100, 150, 225, 325, 450, 600, ... - the cost rises by a flat 25 more each
+ * level, so early levels arrive quickly and later ones stretch out without the
+ * requirement ever exploding the way a geometric curve would.
+ *
+ * `n * (n - 1)` is a product of consecutive integers and therefore always
+ * even, so the halving is exact and every requirement is a whole number.
+ *
+ * This replaced an earlier `50 * L * (L + 1)` curve. That was safe to change
+ * because no release ever granted a single point of XP: `addTrainerXp` had no
+ * caller until this milestone, so every profile in the wild was level 1 with
+ * 0 XP and nobody was re-levelled.
  */
 export function getXpForNextTrainerLevel(level: number): number {
   if (!isFiniteNumber(level) || level < 1) {
     return getXpForNextTrainerLevel(1);
   }
+  const n = Math.min(Math.floor(level), MAX_TRAINER_LEVEL) - 1;
+  return 100 + 50 * n + (25 * (n * (n - 1))) / 2;
+}
+
+/**
+ * Total experience required to *reach* `level` from level 1.
+ *
+ * Summed rather than closed-form: the loop runs at most `MAX_TRAINER_LEVEL`
+ * times, and keeping it as a sum means the curve above stays the single place
+ * the progression is defined.
+ */
+export function getCumulativeTrainerXp(level: number): number {
+  if (!isFiniteNumber(level) || level <= 1) {
+    return 0;
+  }
   const capped = Math.min(Math.floor(level), MAX_TRAINER_LEVEL);
-  return 50 * capped * (capped + 1);
+  let total = 0;
+  for (let l = 1; l < capped; l++) {
+    total += getXpForNextTrainerLevel(l);
+  }
+  return total;
+}
+
+/** The level a given lifetime XP total earns. Inverse of the curve above. */
+export function getTrainerLevelFromXp(totalXp: number): number {
+  if (!isFiniteNumber(totalXp) || totalXp <= 0) {
+    return 1;
+  }
+  let level = 1;
+  let remaining = Math.floor(totalXp);
+  while (level < MAX_TRAINER_LEVEL) {
+    const needed = getXpForNextTrainerLevel(level);
+    if (remaining < needed) {
+      break;
+    }
+    remaining -= needed;
+    level += 1;
+  }
+  return level;
 }
 
 /** Card face colour tier. In V1 every trainer is level 1, i.e. 'base'. */
@@ -57,8 +106,9 @@ export function createDefaultTrainerProfile(
   githubUsername = '',
 ): TrainerProfile {
   return {
-    version: 1,
+    version: 2,
     githubUsername,
+    totalTrainerXp: 0,
     trainerLevel: 1,
     trainerXp: 0,
     pokemonCaught: 0,
@@ -87,22 +137,23 @@ export function normalizeTrainerProfile(
     return defaults;
   }
 
-  const level = clampInt(raw['trainerLevel'], 1, MAX_TRAINER_LEVEL, 1);
+  const totalTrainerXp = readTotalTrainerXp(raw);
+  const level = getTrainerLevelFromXp(totalTrainerXp);
 
   return {
-    version: 1,
+    version: 2,
     githubUsername:
       githubUsername ??
       asString(raw['githubUsername'], defaults.githubUsername),
+    totalTrainerXp,
+    // Both derived, never trusted from storage: a hand-edited level cannot
+    // drift away from the XP that justifies it, and a corrupt within-level
+    // value cannot render a progress bar past 100%.
     trainerLevel: level,
-    // Never carry more XP than the current level can hold; a corrupt value
-    // would otherwise render a progress bar past 100%.
-    trainerXp: clampInt(
-      raw['trainerXp'],
-      0,
-      getXpForNextTrainerLevel(level) - 1,
-      0,
-    ),
+    trainerXp:
+      level >= MAX_TRAINER_LEVEL
+        ? 0
+        : totalTrainerXp - getCumulativeTrainerXp(level),
     pokemonCaught: clampInt(
       raw['pokemonCaught'],
       0,
@@ -147,24 +198,46 @@ export function addTrainerXp(
     return profile;
   }
 
-  let level = profile.trainerLevel;
-  let xp = profile.trainerXp + grant;
+  // Cap the lifetime total at what the last level costs, so a runaway grant
+  // cannot store an absurd number that later curve changes would inherit.
+  const maxTotal = getCumulativeTrainerXp(MAX_TRAINER_LEVEL);
+  const totalTrainerXp = Math.min(profile.totalTrainerXp + grant, maxTotal);
+  const level = getTrainerLevelFromXp(totalTrainerXp);
 
-  while (level < MAX_TRAINER_LEVEL) {
-    const needed = getXpForNextTrainerLevel(level);
-    if (xp < needed) {
-      break;
-    }
-    xp -= needed;
-    level += 1;
+  return {
+    ...profile,
+    totalTrainerXp,
+    trainerLevel: level,
+    trainerXp:
+      level >= MAX_TRAINER_LEVEL
+        ? 0
+        : totalTrainerXp - getCumulativeTrainerXp(level),
+  };
+}
+
+/**
+ * Reads the lifetime XP total, migrating profiles written before it existed.
+ *
+ * A v1 profile stored only `trainerLevel` plus within-level `trainerXp`. The
+ * equivalent total is the cost of reaching that level plus the remainder. In
+ * practice every v1 profile is level 1 with 0 XP - nothing ever granted any -
+ * so this reconstructs 0, but doing the arithmetic properly costs nothing and
+ * keeps a hand-edited profile from being silently zeroed.
+ */
+function readTotalTrainerXp(raw: Record<string, unknown>): number {
+  const stored = raw['totalTrainerXp'];
+  if (isFiniteNumber(stored)) {
+    return clampInt(stored, 0, getCumulativeTrainerXp(MAX_TRAINER_LEVEL), 0);
   }
 
-  if (level >= MAX_TRAINER_LEVEL) {
-    level = MAX_TRAINER_LEVEL;
-    xp = 0;
-  }
-
-  return { ...profile, trainerLevel: level, trainerXp: xp };
+  const legacyLevel = clampInt(raw['trainerLevel'], 1, MAX_TRAINER_LEVEL, 1);
+  const legacyXp = clampInt(
+    raw['trainerXp'],
+    0,
+    Math.max(getXpForNextTrainerLevel(legacyLevel) - 1, 0),
+    0,
+  );
+  return getCumulativeTrainerXp(legacyLevel) + legacyXp;
 }
 
 /* ------------------------------- helpers ------------------------------- */
