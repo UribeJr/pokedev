@@ -99,7 +99,7 @@
 	"{0} has no known evolution yet.": "{0} n’a pas encore d’évolution connue.",
 	"Granted {0} Trainer XP.": "{0} XP de Dresseur accordés.",
 	"Granted {0} Partner XP.": "{0} XP de partenaire accordés.",
-	"PokeDev debug commands are disabled. Enable \"vscode-pokemon.enableDebugCommands\" to use them.": "Les commandes de débogage PokéDev sont désactivées. Activez \"vscode-pokemon.enableDebugCommands\".",
+	"PokeDev debug commands are disabled. Enable \"pokedev.enableDebugCommands\" to use them.": "Les commandes de débogage PokéDev sont désactivées. Activez \"pokedev.enableDebugCommands\".",
 	"Partner XP": "XP partenaire",
 	"You have no Pokemon yet. Spawn one first!": "Vous n'avez pas encore de Pokémon. Faites-en apparaître un !",
 	"Lv. {0}": "N. {0}",
@@ -113,5 +113,15 @@
 	"Hide Dev Record": "Masquer le Dev Record",
 	"Show Dev Record": "Afficher le Dev Record",
 	"Dev Record shown on the Trainer Card.": "Le Dev Record est affiché sur la carte de Dresseur.",
-	"Dev Record hidden on the Trainer Card.": "Le Dev Record est masqué sur la carte de Dresseur."
+	"Dev Record hidden on the Trainer Card.": "Le Dev Record est masqué sur la carte de Dresseur.",
+	"XP": "XP",
+	"No Pokemon yet": "Aucun Pokémon",
+	"Connect a GitHub account to finish your card.": "Connectez un compte GitHub pour compléter votre carte.",
+	"Connect": "Connecter",
+	"Open Full Card": "Ouvrir la carte complète",
+	"Make this your partner": "En faire votre partenaire",
+	"PARTNER": "PARTENAIRE",
+	"Shiny": "Chromatique",
+	"Focus Trainer view": "Afficher la vue Dresseur",
+	"Focus Pokemon view": "Afficher la vue Pokémon"
 }

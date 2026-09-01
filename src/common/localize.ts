@@ -32,12 +32,12 @@ export function resetPokemonTranslationsCache(): void {
 
 /**
  * Gets the configured locale for Pokemon names
- * Uses vscode-pokemon.pokemonLanguage configuration if set,
+ * Uses pokedev.pokemonLanguage configuration if set,
  * otherwise falls back to VS Code's language
  * @returns The locale string (e.g., 'fr-FR', 'en-US')
  */
 function getPokemonLocale(): string {
-  const config = vscode.workspace.getConfiguration('vscode-pokemon');
+  const config = vscode.workspace.getConfiguration('pokedev');
   const configuredLocale = config.get<string>('pokemonLanguage', 'auto');
 
   // If a specific language is configured and different from 'auto'
@@ -53,7 +53,7 @@ function getPokemonLocale(): string {
  * Gets the extension path, with caching
  */
 function getExtensionPath(): string | undefined {
-  const extension = vscode.extensions.getExtension('jakobhoeg.vscode-pokemon');
+  const extension = vscode.extensions.getExtension('uribejr.pokedev');
   return extension?.extensionPath;
 }
 

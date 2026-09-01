@@ -28,7 +28,7 @@ import {
   writePokemonProgress,
   writeProgressionLog,
 } from './progression-storage';
-import { TrainerCardPanel } from './trainer-card-panel';
+import { pokedevState } from './pokedev-state';
 import { resolvePartnerIdentity } from './trainer-partner';
 import { readTrainerProfile, writeTrainerProfile } from './trainer-storage';
 
@@ -73,7 +73,7 @@ export class ProgressionService {
   /** Whether the user has progression switched on. */
   public static isEnabled(): boolean {
     return vscode.workspace
-      .getConfiguration('vscode-pokemon')
+      .getConfiguration('pokedev')
       .get<boolean>('progression.enabled', true);
   }
 
@@ -255,13 +255,19 @@ export class ProgressionService {
     await writeProgressionLog(this._context, log);
   }
 
-  /** Pushes fresh progression to the Trainer Card, if one is open. */
+  /**
+   * Announces that progression changed.
+   *
+   * Broadcast rather than pushed: this service has no business knowing which
+   * surfaces exist. The full card and both Explorer views subscribe to the
+   * hub, so adding a fourth surface never touches this file.
+   */
   public notifyCard(): void {
     this._notifyCard();
   }
 
   private _notifyCard(): void {
-    TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+    pokedevState.notify('progression');
   }
 
   /** Test/debug seam: forget the in-memory rate-limit windows. */

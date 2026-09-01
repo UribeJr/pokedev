@@ -1,38 +1,32 @@
 <div align='center'>
 
-# VS Code Pokémon
+# PokéDev
 
-![icon](https://github.com/jakobhoeg/vscode-pokemon/raw/main/icon.png)
+![icon](https://github.com/UribeJr/pokedev/raw/main/icon.png)
 </div>
 
 <p align="center">
-    Puts cute Pokémon in your code editor to boost productivity ✨
+    Pokémon that live in your editor, earn experience as you code, level up and evolve ✨
     <br>
     <br>
-    <a href="https://github.com/jakobhoeg/vscode-pokemon/issues/new?assignees=&labels=feature&template=bug_report.md&title=">Report a Bug</a>
+    <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=bug_report.md&title=">Report a Bug</a>
     ·
-    <a href="https://github.com/jakobhoeg/vscode-pokemon/issues/new?assignees=&labels=feature&template=feature_request.md&title=">Request feature</a>
+    <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=feature_request.md&title=">Request feature</a>
 </p>
 
 <div align="center">
-
-![Visual Studio Marketplace Version](https://vsmarketplacebadges.dev/version-short/jakobhoeg.vscode-pokemon.png)
-![Visual Studio Marketplace Installs](https://vsmarketplacebadges.dev/installs-short/jakobhoeg.vscode-pokemon.png)
-![Visual Studio Marketplace Downloads](https://vsmarketplacebadges.dev/downloads-short/jakobhoeg.vscode-pokemon.png)
-
-</div>
-
-<div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/jakobhoeg/vscode-pokemon/raw/main/vscode-pokemon.gif">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/jakobhoeg/vscode-pokemon/raw/main/vscode-pokemon-light.gif">
-  <img alt="Shows gif in dark or light mode" src="https://github.com/jakobhoeg/vscode-pokemon/raw/main/vscode-pokemon-light.gif">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/UribeJr/pokedev/raw/main/pokedev.gif">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/UribeJr/pokedev/raw/main/pokedev-light.gif">
+  <img alt="Shows gif in dark or light mode" src="https://github.com/UribeJr/pokedev/raw/main/pokedev-light.gif">
 </picture>
 </div>
 
 <div align="center">
 
-Seen used by engineers at [Microsoft](https://code.visualstudio.com/updates/v1_101#_chat-ux-improvements)!
+A fork of [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) by
+[jakobhoeg](https://github.com/jakobhoeg), extended with a GitHub Trainer Card
+and a full progression system.
 
 </div>
 
@@ -42,31 +36,39 @@ If you enjoy this project, please consider supporting me.
 Manually creating the `.gif` files for each sprite takes a lot of time and effort.
 Your sponsorship helps me dedicate more energy to improve and expand the project.
 
-[![GitHub Sponsor](https://img.shields.io/badge/Sponsor-❤-blue?style=flat&logo=github)](https://github.com/sponsors/jakobhoeg)
+PokéDev builds on [jakobhoeg](https://github.com/jakobhoeg)'s work. If you find
+it useful, consider sponsoring the original author:
+
+[![GitHub Sponsor](https://img.shields.io/badge/Sponsor%20jakobhoeg-❤-blue?style=flat&logo=github)](https://github.com/sponsors/jakobhoeg)
 
 ## Installation
 
-Install this extension from the [VS Code marketplace](https://marketplace.visualstudio.com/items?itemName=jakobhoeg.vscode-pokemon) or the [Open VSX Registry](https://open-vsx.org/extension/jakobhoeg/vscode-pokemon).
+PokéDev is not published to any marketplace — it installs from a `.vsix` file.
 
-![Default view](https://github.com/jakobhoeg/vscode-pokemon/raw/main/install.png)
+Download the latest `.vsix` from
+[Releases](https://github.com/UribeJr/pokedev/releases), then either:
 
-OR
+```bash
+code --install-extension pokedev-6.0.0.vsix
+```
 
-With VS Code open, search for `vscode-pokemon` in the extension panel (`Ctrl+Shift+X` on Windows/Linux or `Cmd(⌘)+Shift+X` on MacOS) and click install.
+(use `cursor --install-extension` for Cursor), **or** open the Extensions panel
+(`Ctrl+Shift+X` / `Cmd(⌘)+Shift+X`), click the `···` menu, and choose
+**Install from VSIX…**
 
-OR
+### Building it yourself
 
-With VS Code open, launch VS Code Quick Open (`Ctrl+P` on Windows/Linux or `Cmd(⌘)+P` on MacOS), paste the following command, and press enter.
+```bash
+npm install && npm run compile && npx @vscode/vsce package
+```
 
-`ext install jakobhoeg.vscode-pokemon`
-
-## Using VS Code Pokémon
+## Using PokéDev
 
 After installing, open the command palette with `Ctrl+Shift+P` on Windows/Linux or `Cmd(⌘)+Shift+P` on MacOS.
 
-Run the "Start Pokemon coding session" command (`vscode-pokemon.start`) to see a Bulbasaur in VS Code:
+Run the "Start Pokemon coding session" command (`pokedev.start`) to see a Bulbasaur in VS Code:
 
-![Default view](https://github.com/jakobhoeg/vscode-pokemon/raw/main/usage.png)
+![Default view](https://github.com/UribeJr/pokedev/raw/main/usage.png)
 
 Enjoy interacting with your favourite Pokémon!
 
@@ -74,14 +76,14 @@ Enjoy interacting with your favourite Pokémon!
 
 VS Code Pokémon comes with default keyboard shortcuts to make managing your Pokémon quick and easy:
 
-![Keybindings](https://github.com/jakobhoeg/vscode-pokemon/raw/main/keybindings.png)
+![Keybindings](https://github.com/UribeJr/pokedev/raw/main/keybindings.png)
 
 ### Configuring Keyboard Shortcuts
 
 You can customize these shortcuts to match your preferences:
 
 1. Open the command palette (`Ctrl+Shift+P` on Windows/Linux or `Cmd(⌘)+Shift+P` on MacOS)
-2. Run the **`Pokemon Coding: Configure keybindings`** command
+2. Run the **`PokéDev: Configure keybindings`** command
 3. Select the command you want to customize
 4. VS Code will open the Keyboard Shortcuts editor filtered to that command
 5. Click the pencil icon next to the command and press your desired key combination
@@ -100,7 +102,7 @@ To configure default Pokémon, add the following to your `settings.json`:
 
 ```json
 {
-  "vscode-pokemon.defaultPokemon": [
+  "pokedev.defaultPokemon": [
     {
       "type": "pikachu",
       "name": "Sparky"
@@ -129,7 +131,7 @@ To configure default Pokémon, add the following to your `settings.json`:
 
 - **`type`** (required): The Pokémon species (e.g., `"pikachu"`, `"charizard"`, `"mewtwo"`), or `"random"` to spawn a random species
 - **`name`** (optional): A custom name for your Pokémon. If not provided, a random name will be assigned
-- **`shiny`** (optional): Determines if the Pokémon is shiny, if not set will use `vscode-pokemon.shinyOdds` setting.
+- **`shiny`** (optional): Determines if the Pokémon is shiny, if not set will use `pokedev.shinyOdds` setting.
 - **`pool`** (optional): Only used when `type` is `"random"`. Restricts the random selection to this list of species. Invalid entries are dropped with a warning; if none are valid, selection falls back to any Pokémon.
 
 **Note:** The extension automatically saves your current Pokémon between sessions. The `defaultPokemon` setting is only used when:
@@ -148,7 +150,7 @@ You can customize the language used for Pokémon names. The extension supports o
 #### Using the Command
 
 1. Open the command palette (`Ctrl+Shift+P` on Windows/Linux or `Cmd(⌘)+Shift+P` on MacOS)
-2. Run the **`Pokemon Coding: Change Pokemon language`** command
+2. Run the **`PokéDev: Change Pokemon language`** command
 3. Select your preferred language from the list
 
 #### Using Settings
@@ -157,7 +159,7 @@ You can also configure the language directly in your `settings.json`:
 
 ```json
 {
-  "vscode-pokemon.pokemonLanguage": "fr-FR"
+  "pokedev.pokemonLanguage": "fr-FR"
 }
 ```
 
@@ -170,6 +172,23 @@ Available options:
 
 **Note:** The language setting applies to all Pokémon names throughout the extension, including in the spawn selection menu, roll-call, and export features. Translations are available for all Pokémon from Generations 1, 2, 3, and 4.
 
+## In the Explorer sidebar
+
+PokéDev adds two compact sections to your normal Explorer, alongside your files,
+Outline and Timeline:
+
+- **PokéDev Trainer** — your avatar, name, Trainer level, a live XP bar, coding
+  time and your current partner, with small actions for `Open Full Card`,
+  `Refresh` and `Change Partner`.
+- **Pokémon** — everything in your collection with each one's level, the
+  current partner clearly marked. Click any other Pokémon to make it your
+  partner; the change takes effect everywhere immediately, and experience starts
+  going to the new one.
+
+Both are ordinary collapsible Explorer sections — collapse them, reorder them,
+or hide them like any other view. They are additional surfaces: the full Trainer
+Card and the Pokémon walking along the bottom of your editor are unchanged.
+
 ## GitHub Trainer Card
 
 A retro Trainer Card for your editor. It pairs your public GitHub profile with a
@@ -179,9 +198,9 @@ Trainer level, XP and coding time (see [Progression](#progression)).
 ### Opening it
 
 1. Open the command palette (`Ctrl+Shift+P` on Windows/Linux or `Cmd(⌘)+Shift+P` on macOS)
-2. Run **`Pokemon Coding: Open Trainer Card`**
+2. Run **`PokéDev: Open Trainer Card`**
 
-There is also a Trainer Card button in the title bar of the **VS Code Pokémon**
+There is also a Trainer Card button in the title bar of the **PokéDev**
 view in the Explorer.
 
 ### Connecting your GitHub username
@@ -193,11 +212,11 @@ You can also set it directly in `settings.json`:
 
 ```json
 {
-  "vscode-pokemon.githubUsername": "octocat"
+  "pokedev.githubUsername": "octocat"
 }
 ```
 
-or run **`Pokemon Coding: Configure GitHub Trainer`**. To point the card at a
+or run **`PokéDev: Configure GitHub Trainer`**. To point the card at a
 different account later, use **Change GitHub Username** on the card itself.
 
 ### What it shows
@@ -224,7 +243,7 @@ the slot reads `NO PARTNER SELECTED`.
 
 The partner is the Pokémon that earns experience and the one that evolves, so
 it is worth picking deliberately. Use **Change Partner** on the card itself, or
-run **`Pokemon Coding: Choose Partner Pokemon`**. The picker lists everything in
+run **`PokéDev: Choose Partner Pokemon`**. The picker lists everything in
 your collection with its current level.
 
 Until you choose, the partner is the first Pokémon in your collection — the
@@ -241,7 +260,7 @@ resume if you switch back.
 
 If you would rather keep the card to your in-editor progression — or simply not
 put your public GitHub stats on screen while sharing it — set
-`vscode-pokemon.trainerCard.showDevRecord` to `false`. The section disappears
+`pokedev.trainerCard.showDevRecord` to `false`. The section disappears
 and the card takes the change immediately, without needing to be reopened.
 GitHub data is still fetched and cached either way; only the display changes.
 
@@ -261,7 +280,7 @@ would not add up.
 
 Results are cached for 45 minutes, so reopening the card doesn't re-query
 GitHub. Use **Refresh GitHub Profile** on the card, or the
-**`Pokemon Coding: Refresh GitHub Profile`** command, to fetch immediately.
+**`PokéDev: Refresh GitHub Profile`** command, to fetch immediately.
 
 If GitHub can't be reached, the card keeps showing your saved data with a notice
 rather than going blank.
@@ -279,8 +298,12 @@ rather than going blank.
 ## Progression
 
 Coding earns experience on two tracks that persist across sessions: your
-**Trainer**, and your **Partner Pokémon** — the first Pokémon in your
-collection.
+**Trainer**, and your **Partner Pokémon**.
+
+> **New here?** [**docs/PROGRESSION.md**](docs/PROGRESSION.md) explains the whole
+> system in plain language — what earns XP, what deliberately doesn't, how levels
+> and evolution work, and how it handles AI-agent work. The rest of this section
+> is the reference version.
 
 ### How XP is earned
 
@@ -311,7 +334,7 @@ guarded:
 - **Coding time** only accrues while the window is focused *and* the editor has
   seen activity recently, so an editor left open overnight earns nothing. This
   is what fills the `Coding Time` field. What counts as activity depends on
-  `vscode-pokemon.progression.mode` — see [Working style](#working-style).
+  `pokedev.progression.mode` — see [Working style](#working-style).
 - **Commits** are the most valuable single event, because a commit is a
   milestone someone deliberately recorded — which stays true whether you or an
   agent wrote the diff. Each commit hash is counted once and remembered per
@@ -346,7 +369,7 @@ When your partner reaches its evolution level you are asked:
 > What? Bella is ready to evolve!  `Evolve`  `Not now`
 
 Choosing **Not now** changes nothing and simply defers the question to the next
-level-up; you can also evolve at any time with **`Pokemon Coding: Evolve
+level-up; you can also evolve at any time with **`PokéDev: Evolve
 Partner`**.
 
 Evolving preserves your Pokémon's **nickname, shininess, level, XP and
@@ -364,7 +387,7 @@ is excluded because most of its species have no sprites in this repository yet.
 ### Working style
 
 VS Code reports an edit made by an AI agent and a keystroke made by you as the
-same event, so it cannot tell them apart on its own. `vscode-pokemon.progression.mode`
+same event, so it cannot tell them apart on its own. `pokedev.progression.mode`
 decides which signals to trust for **Coding Time**:
 
 | Mode | What counts as activity | Idle window |
@@ -386,14 +409,14 @@ is a deliberate act.
 
 ### Settings and debugging
 
-`vscode-pokemon.progression.enabled` (default `true`) turns the whole system off.
+`pokedev.progression.enabled` (default `true`) turns the whole system off.
 
 Progression is slow to test by design, so two debug commands can grant XP
 directly. They are hidden unless you set
-`vscode-pokemon.enableDebugCommands` to `true`:
+`pokedev.enableDebugCommands` to `true`:
 
-- **`PokeDev Debug: Add 100 Trainer XP`**
-- **`PokeDev Debug: Add 100 Partner XP`**
+- **`PokéDev Debug: Add 100 Trainer XP`**
+- **`PokéDev Debug: Add 100 Partner XP`**
 
 ### Where it is stored
 
@@ -426,7 +449,17 @@ Extracting and creating .gif files involves quite a bit of tedious manual work, 
   (see [media/Silkscreen-LICENSE.txt](media/Silkscreen-LICENSE.txt))
 
 ### Acknowledgments
-- All sprites are property of their original creators
-- This repository is a fan project and is not affiliated with Nintendo, The Pokémon Company, or Game Freak
 
-This repository is inspired by and based on [vscode-pets](https://github.com/tonybaloney/vscode-pets) by [tonybaloney](https://github.com/tonybaloney).
+PokéDev is a fork of [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon)
+by [jakobhoeg](https://github.com/jakobhoeg), which is itself inspired by and
+based on [vscode-pets](https://github.com/tonybaloney/vscode-pets) by
+[tonybaloney](https://github.com/tonybaloney). The original code is released
+under CC0; this fork keeps that dedication and adds the GitHub Trainer Card and
+the progression system.
+
+- All sprites are property of their original creators
+- This repository is a fan project and is **not affiliated with, endorsed by, or
+  sponsored by** Nintendo, The Pokémon Company, or Game Freak
+- Pokémon and all related names and artwork are trademarks of Nintendo /
+  Creatures Inc. / GAME FREAK inc. They are used here for non-commercial,
+  personal, fan-project purposes only

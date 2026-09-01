@@ -24,6 +24,7 @@ import {
   readPokemonProgress,
   writePokemonProgress,
 } from './progression-storage';
+import { pokedevState } from './pokedev-state';
 import type { ProgressionService } from './progression-service';
 import { resolvePartnerIdentity } from './trainer-partner';
 
@@ -188,6 +189,7 @@ export async function applyEvolution(
   });
 
   service.notifyCard();
+  pokedevState.notify('collection');
 
   void vscode.window.showInformationMessage(
     vscode.l10n.t(

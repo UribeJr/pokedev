@@ -14,6 +14,7 @@
 import * as vscode from 'vscode';
 import { getLocalizedPokemonName } from '../common/localize';
 import { MAX_POKEMON_LEVEL } from '../progression/pokemon-progression';
+import { pokedevState } from './pokedev-state';
 import { readPokemonProgress } from './progression-storage';
 import {
   listPartnerCandidates,
@@ -83,6 +84,7 @@ export async function pickPartnerPokemon(
   }
 
   await setPartnerNickname(context, picked.nickname);
+  pokedevState.notify('partner');
 
   const chosen = candidates.find((e) => e.nickname === picked.nickname);
   if (chosen) {

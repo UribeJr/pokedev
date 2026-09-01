@@ -14,28 +14,11 @@
  * and outside hosts, so no new art files are needed.
  */
 
-:root {
-	/* Geometry */
-	--tc-shell-max: 760px;
-	--tc-gap: 12px;
-	--tc-radius: 10px;
-	--tc-ball: url('pokeball_sprite_sheet.png');
-
-	/* Card face palette (base tier). */
-	--tc-face-top: #2f6bb5;
-	--tc-face-bottom: #16386a;
-	--tc-face-edge: #0c2447;
-	--tc-edge-light: rgba(255, 255, 255, 0.22);
-	--tc-ink: #f4f7ff;
-	--tc-ink-dim: #a9c2ea;
-	--tc-slot: rgba(6, 17, 36, 0.42);
-	--tc-surface: rgba(6, 17, 36, 0.3);
-	--tc-rule: rgba(255, 255, 255, 0.16);
-	--tc-accent: #ffd75f;
-	--tc-xp-from: #ffe89a;
-	--tc-xp-to: #f5b52a;
-	--tc-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
-}
+/*
+ * Palette and geometry live in media/pokedev-tokens.css, which every PokeDev
+ * surface links before its own stylesheet. Kept there so the Trainer Card and
+ * the compact Explorer views cannot drift apart.
+ */
 
 body {
 	margin: 0;

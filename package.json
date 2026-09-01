@@ -1,56 +1,62 @@
 {
-    "name": "vscode-pokemon",
-    "displayName": "vscode-pokemon",
-    "description": "Pokémon for your VS Code",
-    "version": "5.0.1",
+    "name": "pokedev",
+    "displayName": "PokéDev",
+    "description": "Pokémon that live in your editor, earn experience as you code, level up and evolve.",
+    "version": "6.1.0",
     "engines": {
         "vscode": "^1.73.0"
     },
     "l10n": "./l10n",
     "repository": {
         "type": "github",
-        "url": "https://github.com/jakobhoeg/vscode-pokemon"
+        "url": "https://github.com/UribeJr/pokedev"
     },
-    "homepage": "https://github.com/jakobhoeg/vscode-pokemon",
-    "bugs": "https://github.com/jakobhoeg/vscode-pokemon/issues",
-    "publisher": "jakobhoeg",
+    "homepage": "https://github.com/UribeJr/pokedev",
+    "bugs": "https://github.com/UribeJr/pokedev/issues",
+    "publisher": "uribejr",
     "pricing": "Free",
     "categories": [
         "Other"
     ],
     "keywords": [
         "pokemon",
+        "pokédev",
+        "pokedev",
         "pets",
-        "pokémon",
         "pixelart",
         "pixel",
-        "pixel",
-        "vscode"
+        "gamification",
+        "xp",
+        "productivity"
     ],
     "license": "MIT",
     "icon": "icon.png",
     "activationEvents": [
-        "onCommand:vscode-pokemon.start",
-        "onCommand:vscode-pokemon.spawn-pokemon",
-        "onCommand:vscode-pokemon.spawn-random-pokemon",
-        "onCommand:vscode-pokemon.delete-pokemon",
-        "onCommand:vscode-pokemon.remove-all-pokemon",
-        "onCommand:vscode-pokemon.roll-call",
-        "onCommand:vscode-pokemon.export-pokemon-list",
-        "onCommand:vscode-pokemon.import-pokemon-list",
-        "onCommand:vscode-pokemon.configure-keybindings",
-        "onCommand:vscode-pokemon.change-pokemon-language",
-        "onCommand:vscode-pokemon.openTrainerCard",
-        "onCommand:vscode-pokemon.configure-github-trainer",
-        "onCommand:vscode-pokemon.refresh-github-profile",
-        "onCommand:vscode-pokemon.toggle-dev-record",
-        "onCommand:vscode-pokemon.set-partner",
-        "onCommand:vscode-pokemon.evolve-partner",
-        "onWebviewPanel:pokemonCoding",
-        "onWebviewPanel:pokemonTrainerCard",
+        "onCommand:pokedev.start",
+        "onCommand:pokedev.spawn-pokemon",
+        "onCommand:pokedev.spawn-random-pokemon",
+        "onCommand:pokedev.delete-pokemon",
+        "onCommand:pokedev.remove-all-pokemon",
+        "onCommand:pokedev.roll-call",
+        "onCommand:pokedev.export-pokemon-list",
+        "onCommand:pokedev.import-pokemon-list",
+        "onCommand:pokedev.configure-keybindings",
+        "onCommand:pokedev.change-pokemon-language",
+        "onCommand:pokedev.openTrainerCard",
+        "onCommand:pokedev.configure-github-trainer",
+        "onCommand:pokedev.refresh-github-profile",
+        "onCommand:pokedev.toggle-dev-record",
+        "onCommand:pokedev.set-partner",
+        "onCommand:pokedev.evolve-partner",
+        "onWebviewPanel:pokedevPanel",
+        "onWebviewPanel:pokedevTrainerCard",
         "onView:explorer",
-        "onView:pokemonView",
-        "onStartupFinished"
+        "onView:pokedevView",
+        "onView:pokedev.pokemonView",
+        "onView:pokedev.trainerView",
+        "onStartupFinished",
+        "onCommand:pokedev.focus-trainer-view",
+        "onCommand:pokedev.focus-pokemon-view"
     ],
     "main": "./out/extension/extension.js",
     "browser": "./dist/web/extension-web.js",
@@ -59,186 +65,231 @@
             "explorer": [
                 {
                     "type": "webview",
-                    "id": "pokemonView",
-                    "name": "VS Code Pokémon",
-                    "when": "vscode-pokemon.position == 'explorer'",
+                    "id": "pokedevView",
+                    "name": "PokéDev",
+                    "when": "pokedev.position == 'explorer'",
                     "icon": "media/icon/dark-add.svg"
+                },
+                {
+                    "type": "webview",
+                    "id": "pokedev.trainerView",
+                    "name": "PokéDev Trainer"
+                },
+                {
+                    "type": "webview",
+                    "id": "pokedev.pokemonView",
+                    "name": "Pokémon"
                 }
             ]
         },
         "menus": {
             "view/title": [
                 {
-                    "command": "vscode-pokemon.spawn-pokemon",
-                    "when": "view == pokemonView",
+                    "command": "pokedev.spawn-pokemon",
+                    "when": "view == pokedevView",
                     "group": "navigation@1"
                 },
                 {
-                    "command": "vscode-pokemon.spawn-random-pokemon",
-                    "when": "view == pokemonView",
+                    "command": "pokedev.spawn-random-pokemon",
+                    "when": "view == pokedevView",
                     "group": "navigation@2"
                 },
                 {
-                    "command": "vscode-pokemon.delete-pokemon",
-                    "when": "view == pokemonView",
+                    "command": "pokedev.delete-pokemon",
+                    "when": "view == pokedevView",
                     "group": "navigation@3"
                 },
                 {
-                    "command": "vscode-pokemon.openTrainerCard",
-                    "when": "view == pokemonView",
+                    "command": "pokedev.openTrainerCard",
+                    "when": "view == pokedevView",
                     "group": "navigation@4"
+                },
+                {
+                    "command": "pokedev.openTrainerCard",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pokedev.refresh-github-profile",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pokedev.spawn-pokemon",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pokedev.spawn-random-pokemon",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pokedev.set-partner",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@3"
                 }
             ],
             "commandPalette": [
                 {
-                    "command": "vscode-pokemon.debug-add-trainer-xp",
-                    "when": "config.vscode-pokemon.enableDebugCommands"
+                    "command": "pokedev.debug-add-trainer-xp",
+                    "when": "config.pokedev.enableDebugCommands"
                 },
                 {
-                    "command": "vscode-pokemon.debug-add-partner-xp",
-                    "when": "config.vscode-pokemon.enableDebugCommands"
+                    "command": "pokedev.debug-add-partner-xp",
+                    "when": "config.pokedev.enableDebugCommands"
                 }
             ]
         },
         "commands": [
             {
-                "command": "vscode-pokemon.start",
+                "command": "pokedev.start",
                 "title": "Start pokemon coding session",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.export-pokemon-list",
+                "command": "pokedev.export-pokemon-list",
                 "title": "Export pokemon list",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.import-pokemon-list",
+                "command": "pokedev.import-pokemon-list",
                 "title": "Import pokemon list",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.spawn-pokemon",
+                "command": "pokedev.spawn-pokemon",
                 "title": "Spawn additional pokemon",
-                "category": "Pokemon Coding",
+                "category": "PokéDev",
                 "icon": {
                     "dark": "media/icon/dark-add.svg",
                     "light": "media/icon/light-add.svg"
                 }
             },
             {
-                "command": "vscode-pokemon.spawn-random-pokemon",
+                "command": "pokedev.spawn-random-pokemon",
                 "title": "Spawn random additional pokemon",
-                "category": "Pokemon Coding",
+                "category": "PokéDev",
                 "icon": {
                     "dark": "media/icon/dark-random.svg",
                     "light": "media/icon/light-random.svg"
                 }
             },
             {
-                "command": "vscode-pokemon.delete-pokemon",
+                "command": "pokedev.delete-pokemon",
                 "title": "Remove pokemon",
-                "category": "Pokemon Coding",
+                "category": "PokéDev",
                 "icon": {
                     "dark": "media/icon/dark-trash.svg",
                     "light": "media/icon/light-trash.svg"
                 }
             },
             {
-                "command": "vscode-pokemon.remove-all-pokemon",
+                "command": "pokedev.remove-all-pokemon",
                 "title": "Remove all pokemon",
-                "category": "Pokemon Coding",
+                "category": "PokéDev",
                 "icon": {
                     "dark": "media/icon/dark-trash.svg",
                     "light": "media/icon/light-trash.svg"
                 }
             },
             {
-                "command": "vscode-pokemon.roll-call",
+                "command": "pokedev.roll-call",
                 "title": "Roll-call",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.configure-keybindings",
+                "command": "pokedev.configure-keybindings",
                 "title": "Configure keybindings",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.change-pokemon-language",
+                "command": "pokedev.change-pokemon-language",
                 "title": "Change Pokemon language",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.openTrainerCard",
+                "command": "pokedev.openTrainerCard",
                 "title": "Open Trainer Card",
-                "category": "Pokemon Coding",
+                "category": "PokéDev",
                 "icon": {
                     "dark": "media/icon/dark-trainer.svg",
                     "light": "media/icon/light-trainer.svg"
                 }
             },
             {
-                "command": "vscode-pokemon.configure-github-trainer",
+                "command": "pokedev.configure-github-trainer",
                 "title": "Configure GitHub Trainer",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.refresh-github-profile",
+                "command": "pokedev.refresh-github-profile",
                 "title": "Refresh GitHub Profile",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.toggle-dev-record",
+                "command": "pokedev.toggle-dev-record",
                 "title": "Toggle Dev Record on Trainer Card",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.set-partner",
+                "command": "pokedev.set-partner",
                 "title": "Choose Partner Pokemon",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.evolve-partner",
+                "command": "pokedev.evolve-partner",
                 "title": "Evolve Partner",
-                "category": "Pokemon Coding"
+                "category": "PokéDev"
             },
             {
-                "command": "vscode-pokemon.debug-add-trainer-xp",
+                "command": "pokedev.debug-add-trainer-xp",
                 "title": "Add 100 Trainer XP",
-                "category": "PokeDev Debug"
+                "category": "PokéDev Debug"
             },
             {
-                "command": "vscode-pokemon.debug-add-partner-xp",
+                "command": "pokedev.debug-add-partner-xp",
                 "title": "Add 100 Partner XP",
-                "category": "PokeDev Debug"
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.focus-trainer-view",
+                "title": "Focus Trainer View",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.focus-pokemon-view",
+                "title": "Focus Pokémon View",
+                "category": "PokéDev"
             }
         ],
         "keybindings": [
             {
-                "command": "vscode-pokemon.spawn-pokemon",
+                "command": "pokedev.spawn-pokemon",
                 "key": "alt+shift+w",
                 "mac": "alt+shift+w"
             },
             {
-                "command": "vscode-pokemon.spawn-random-pokemon",
+                "command": "pokedev.spawn-random-pokemon",
                 "key": "alt+shift+q",
                 "mac": "alt+shift+q"
             },
             {
-                "command": "vscode-pokemon.delete-pokemon",
+                "command": "pokedev.delete-pokemon",
                 "key": "alt+shift+d",
                 "mac": "alt+shift+d"
             },
             {
-                "command": "vscode-pokemon.remove-all-pokemon",
+                "command": "pokedev.remove-all-pokemon",
                 "key": "alt+shift+backspace",
                 "mac": "alt+shift+backspace"
             }
         ],
         "configuration": [
             {
-                "title": "VS Code Pokemon",
+                "title": "PokéDev",
                 "properties": {
-                    "vscode-pokemon.pokemonSize": {
+                    "pokedev.pokemonSize": {
                         "type": "string",
                         "enum": [
                             "nano",
@@ -249,7 +300,7 @@
                         "default": "medium",
                         "description": "Pokemon size"
                     },
-                    "vscode-pokemon.position": {
+                    "pokedev.position": {
                         "type": "string",
                         "enum": [
                             "panel",
@@ -258,7 +309,7 @@
                         "default": "explorer",
                         "description": "VSCode pokemon webview position"
                     },
-                    "vscode-pokemon.theme": {
+                    "pokedev.theme": {
                         "type": "string",
                         "enum": [
                             "none",
@@ -269,7 +320,7 @@
                         "default": "none",
                         "description": "Background theme assets for your pokemon"
                     },
-                    "vscode-pokemon.defaultPokemon": {
+                    "pokedev.defaultPokemon": {
                         "type": "array",
                         "items": {
                             "type": "object",
@@ -284,7 +335,7 @@
                                 },
                                 "shiny": {
                                     "type": "boolean",
-                                    "description": "Force this pokemon to be shiny (true) or non-shiny (false). If omitted, uses vscode-pokemon.shinyOdds (optional)"
+                                    "description": "Force this pokemon to be shiny (true) or non-shiny (false). If omitted, uses pokedev.shinyOdds (optional)"
                                 },
                                 "pool": {
                                     "type": "array",
@@ -301,13 +352,13 @@
                         "default": [],
                         "description": "List of default pokemon to automatically spawn on startup. Each pokemon should have a 'type' (required, or 'random' to spawn a random species), and optionally 'name', 'shiny', and 'pool' (for random selection). Example: [{\"type\": \"pikachu\", \"name\": \"Sparky\"}, {\"type\": \"random\", \"pool\": [\"eevee\", \"gengar\", \"snorlax\"]}]"
                     },
-                    "vscode-pokemon.shinyOdds": {
+                    "pokedev.shinyOdds": {
                         "type": "number",
                         "default": 8192,
                         "minimum": 1,
                         "description": "Odds (1 in N) for a Pokémon to be shiny. Lower = more shinies. Default is 8192."
                     },
-                    "vscode-pokemon.pokemonLanguage": {
+                    "pokedev.pokemonLanguage": {
                         "type": "string",
                         "enum": [
                             "auto",
@@ -319,7 +370,7 @@
                         "default": "auto",
                         "description": "Language for Pokemon names. 'auto' uses VS Code's language, or you can choose a specific language (e.g., 'fr-FR' for French, 'en-US' for English, 'de-DE' for German, 'ja-JP' for Japanese). Only official Pokemon languages are supported."
                     },
-                    "vscode-pokemon.githubUsername": {
+                    "pokedev.githubUsername": {
                         "type": "string",
                         "default": "",
                         "scope": "application",
@@ -327,17 +378,17 @@
                         "patternErrorMessage": "Not a valid GitHub username.",
                         "markdownDescription": "Your GitHub username, shown on the Trainer Card (**Pokemon Coding: Open Trainer Card**). Only public profile data is read; no authentication is used and no data leaves your machine except the request to GitHub."
                     },
-                    "vscode-pokemon.trainerCard.showDevRecord": {
+                    "pokedev.trainerCard.showDevRecord": {
                         "type": "boolean",
                         "default": true,
                         "markdownDescription": "Show the **DEV RECORD** section on the Trainer Card: your public GitHub repositories, stars, followers, join year and top languages. Turn this off to keep the card to your in-editor progression only. GitHub data is still fetched and cached either way."
                     },
-                    "vscode-pokemon.progression.enabled": {
+                    "pokedev.progression.enabled": {
                         "type": "boolean",
                         "default": true,
                         "description": "Earn Trainer and partner Pokémon experience from coding activity: saving changed files, active coding time, Git commits and successful build/test tasks."
                     },
-                    "vscode-pokemon.progression.mode": {
+                    "pokedev.progression.mode": {
                         "type": "string",
                         "enum": [
                             "auto",
@@ -352,7 +403,7 @@
                         "default": "auto",
                         "markdownDescription": "How you work, which decides what counts as \"still active\" for **Coding Time**. Experience weights are shared across all three modes — they are already tuned so hand-written and agent-driven sessions earn at close to the same rate. This only governs the idle clock."
                     },
-                    "vscode-pokemon.enableDebugCommands": {
+                    "pokedev.enableDebugCommands": {
                         "type": "boolean",
                         "default": false,
                         "description": "Show the PokeDev Debug commands for granting experience. Intended for testing progression and evolution; leave this off for normal use."

@@ -24,9 +24,10 @@ import { resolvePartnerPokemon } from './trainer-partner';
 import { readTrainerProfile, syncTrainerProfile } from './trainer-storage';
 import { getNonce } from './webview-util';
 import { pickPartnerPokemon } from './partner-picker';
+import { pokedevState } from './pokedev-state';
 
 const GITHUB_USERNAME_SETTING = 'githubUsername';
-const CONFIG_SECTION = 'vscode-pokemon';
+const CONFIG_SECTION = 'pokedev';
 
 /**
  * How long to coalesce progression pushes.
@@ -293,6 +294,12 @@ export class TrainerCardPanel {
     };
 
     this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+
+    // Subscribe rather than being pushed to: progression, partner switches and
+    // GitHub refreshes all arrive through the same hub the Explorer views use.
+    this._disposables.push(
+      pokedevState.onDidChange(() => this.notifyProgressionChanged()),
+    );
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     this._panel.webview.onDidReceiveMessage(
@@ -570,6 +577,7 @@ export class TrainerCardPanel {
 
     const scriptUri = media('trainer-card-bundle.js');
     const resetUri = media('reset.css');
+    const tokensUri = media('pokedev-tokens.css');
     const cardUri = media('trainer-card.css');
     const fontUri = media('Silkscreen-Regular.ttf');
     const nonce = getNonce();
@@ -581,6 +589,7 @@ export class TrainerCardPanel {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} ${AVATAR_HOSTS}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${resetUri}" rel="stylesheet" nonce="${nonce}">
+    <link href="${tokensUri}" rel="stylesheet" nonce="${nonce}">
     <link href="${cardUri}" rel="stylesheet" nonce="${nonce}">
     <style nonce="${nonce}">
     @font-face {

@@ -45,7 +45,7 @@ const GITHUB_HEADERS: Record<string, string> = {
   'x-github-api-version': '2022-11-28',
   // Required by the GitHub API for server-side clients; browsers and
   // webworkers ignore it.
-  'user-agent': 'vscode-pokemon',
+  'user-agent': 'pokedev',
 };
 
 export interface GithubResolution {
@@ -101,7 +101,7 @@ export async function resolveGithubProfile(
     (e: unknown): GithubResolution => {
       // fetchAndCache maps expected failures itself; this is the backstop for
       // anything unforeseen, so a bug there cannot reject into the panel.
-      console.error('vscode-pokemon: trainer profile fetch failed', e);
+      console.error('pokedev: trainer profile fetch failed', e);
       return { error: makeError('unknown') };
     },
   );

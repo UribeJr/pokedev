@@ -42,6 +42,10 @@ import {
   XP_RULES,
 } from '../../progression/xp-rules';
 import {
+  POKEMON_EXPLORER_VIEW_TYPE,
+  TRAINER_EXPLORER_VIEW_TYPE,
+} from '../../trainer/explorer-types';
+import {
   addTrainerXp,
   createDefaultTrainerProfile,
   getCumulativeTrainerXp,
@@ -1013,5 +1017,38 @@ suite('Identity across evolution', () => {
     ).progress;
     const round = normalizePokemonProgress(original, 'gible', NOW);
     assert.deepStrictEqual(round, original);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Explorer views
+ * ------------------------------------------------------------------ */
+
+suite('Explorer view identity', () => {
+  /**
+   * View ids are a GLOBAL namespace in VS Code, not per-extension. Two
+   * extensions declaring the same id collide and the loser's view silently
+   * never registers - which is exactly how the Explorer playground broke when
+   * this fork still shared upstream's `pokemonView`.
+   */
+  test('the Explorer view ids are namespaced to this extension', () => {
+    for (const id of [TRAINER_EXPLORER_VIEW_TYPE, POKEMON_EXPLORER_VIEW_TYPE]) {
+      assert.ok(id.startsWith('pokedev.'), id);
+    }
+  });
+
+  test('the two Explorer views do not share an id', () => {
+    assert.notStrictEqual(
+      TRAINER_EXPLORER_VIEW_TYPE,
+      POKEMON_EXPLORER_VIEW_TYPE,
+    );
+  });
+
+  test('neither collides with the walking-sprite playground view', () => {
+    // The playground is `pokedevView`; a prefix clash would be invisible until
+    // one of the three failed to appear.
+    for (const id of [TRAINER_EXPLORER_VIEW_TYPE, POKEMON_EXPLORER_VIEW_TYPE]) {
+      assert.notStrictEqual(id, 'pokedevView');
+    }
   });
 });

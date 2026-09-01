@@ -8,7 +8,7 @@
  */
 
 /** Webview panel view type, also used as the serializer key. */
-export const TRAINER_CARD_VIEW_TYPE = 'pokemonTrainerCard';
+export const TRAINER_CARD_VIEW_TYPE = 'pokedevTrainerCard';
 
 /** Number of badge slots on the card. Mirrors the eight-gym convention. */
 export const TRAINER_BADGE_SLOTS = 8;

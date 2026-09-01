@@ -97,7 +97,7 @@
   "{0} has no known evolution yet.": "{0} hat noch keine bekannte Entwicklung.",
   "Granted {0} Trainer XP.": "{0} Trainer-EP gewährt.",
   "Granted {0} Partner XP.": "{0} Partner-EP gewährt.",
-  "PokeDev debug commands are disabled. Enable \"vscode-pokemon.enableDebugCommands\" to use them.": "PokéDev-Debug-Befehle sind deaktiviert. Aktiviere \"vscode-pokemon.enableDebugCommands\".",
+  "PokeDev debug commands are disabled. Enable \"pokedev.enableDebugCommands\" to use them.": "PokéDev-Debug-Befehle sind deaktiviert. Aktiviere \"pokedev.enableDebugCommands\".",
   "Partner XP": "Partner-EP",
   "You have no Pokemon yet. Spawn one first!": "Du hast noch keine Pokémon. Beschwöre zuerst eines!",
   "Lv. {0}": "Lv. {0}",
@@ -111,5 +111,15 @@
   "Hide Dev Record": "Dev-Rekord ausblenden",
   "Show Dev Record": "Dev-Rekord anzeigen",
   "Dev Record shown on the Trainer Card.": "Dev-Rekord wird auf der Trainerkarte angezeigt.",
-  "Dev Record hidden on the Trainer Card.": "Dev-Rekord auf der Trainerkarte ausgeblendet."
+  "Dev Record hidden on the Trainer Card.": "Dev-Rekord auf der Trainerkarte ausgeblendet.",
+  "XP": "EP",
+  "No Pokemon yet": "Noch keine Pokémon",
+  "Connect a GitHub account to finish your card.": "Verbinde ein GitHub-Konto, um deine Karte zu vervollständigen.",
+  "Connect": "Verbinden",
+  "Open Full Card": "Ganze Karte öffnen",
+  "Make this your partner": "Zum Partner machen",
+  "PARTNER": "PARTNER",
+  "Shiny": "Schillernd",
+  "Focus Trainer view": "Trainer-Ansicht fokussieren",
+  "Focus Pokemon view": "Pokémon-Ansicht fokussieren"
 }

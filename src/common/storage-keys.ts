@@ -9,6 +9,14 @@
  * `undefined` depending on module evaluation order.
  *
  * The three list keys hold index-aligned parallel arrays.
+ *
+ * NOTE ON THE `vscode-pokemon.` PREFIX
+ * ------------------------------------
+ * Every user-facing identifier was renamed to `pokedev.` when this fork took
+ * its own identity, but these storage keys deliberately were not. They are
+ * invisible to users - nobody types them - and renaming them would orphan
+ * every existing collection, trainer profile and progression record behind a
+ * key nothing reads any more. There is no benefit to weigh against that.
  */
 export const EXTRA_POKEMON_KEY = 'vscode-pokemon.extra-pokemon';
 export const EXTRA_POKEMON_KEY_TYPES = EXTRA_POKEMON_KEY + '.types';

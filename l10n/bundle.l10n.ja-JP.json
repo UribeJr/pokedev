@@ -97,7 +97,7 @@
   "{0} has no known evolution yet.": "{0}に しられている しんかは ありません。",
   "Granted {0} Trainer XP.": "トレーナーけいけんち {0} を あたえた。",
   "Granted {0} Partner XP.": "パートナーけいけんち {0} を あたえた。",
-  "PokeDev debug commands are disabled. Enable \"vscode-pokemon.enableDebugCommands\" to use them.": "PokéDev デバッグコマンドは むこうです。\"vscode-pokemon.enableDebugCommands\" を ゆうこうに してください。",
+  "PokeDev debug commands are disabled. Enable \"pokedev.enableDebugCommands\" to use them.": "PokéDev デバッグコマンドは むこうです。\"pokedev.enableDebugCommands\" を ゆうこうに してください。",
   "Partner XP": "パートナーけいけんち",
   "You have no Pokemon yet. Spawn one first!": "ポケモンが いません。まず よびだして ください！",
   "Lv. {0}": "レベル{0}",
@@ -111,5 +111,15 @@
   "Hide Dev Record": "かいはつきろくを かくす",
   "Show Dev Record": "かいはつきろくを ひょうじ",
   "Dev Record shown on the Trainer Card.": "トレーナーカードに かいはつきろくを ひょうじします。",
-  "Dev Record hidden on the Trainer Card.": "トレーナーカードの かいはつきろくを かくしました。"
+  "Dev Record hidden on the Trainer Card.": "トレーナーカードの かいはつきろくを かくしました。",
+  "XP": "けいけんち",
+  "No Pokemon yet": "ポケモンが いません",
+  "Connect a GitHub account to finish your card.": "GitHub アカウントを せつぞくして カードを かんせいさせよう。",
+  "Connect": "せつぞく",
+  "Open Full Card": "カードを ひらく",
+  "Make this your partner": "パートナーに する",
+  "PARTNER": "パートナー",
+  "Shiny": "いろちがい",
+  "Focus Trainer view": "トレーナービューを ひょうじ",
+  "Focus Pokemon view": "ポケモンビューを ひょうじ"
 }

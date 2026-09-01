@@ -97,7 +97,7 @@
   "{0} has no known evolution yet.": "{0} has no known evolution yet.",
   "Granted {0} Trainer XP.": "Granted {0} Trainer XP.",
   "Granted {0} Partner XP.": "Granted {0} Partner XP.",
-  "PokeDev debug commands are disabled. Enable \"vscode-pokemon.enableDebugCommands\" to use them.": "PokéDev debug commands are disabled. Enable \"vscode-pokemon.enableDebugCommands\" to use them.",
+  "PokeDev debug commands are disabled. Enable \"pokedev.enableDebugCommands\" to use them.": "PokéDev debug commands are disabled. Enable \"pokedev.enableDebugCommands\" to use them.",
   "Partner XP": "Partner XP",
   "You have no Pokemon yet. Spawn one first!": "You have no Pokémon yet. Spawn one first!",
   "Lv. {0}": "Lv. {0}",
@@ -111,5 +111,15 @@
   "Hide Dev Record": "Hide Dev Record",
   "Show Dev Record": "Show Dev Record",
   "Dev Record shown on the Trainer Card.": "Dev Record shown on the Trainer Card.",
-  "Dev Record hidden on the Trainer Card.": "Dev Record hidden on the Trainer Card."
+  "Dev Record hidden on the Trainer Card.": "Dev Record hidden on the Trainer Card.",
+  "XP": "XP",
+  "No Pokemon yet": "No Pokémon yet",
+  "Connect a GitHub account to finish your card.": "Connect a GitHub account to finish your card.",
+  "Connect": "Connect",
+  "Open Full Card": "Open Full Card",
+  "Make this your partner": "Make this your partner",
+  "PARTNER": "PARTNER",
+  "Shiny": "Shiny",
+  "Focus Trainer view": "Focus Trainer view",
+  "Focus Pokemon view": "Focus Pokémon view"
 }

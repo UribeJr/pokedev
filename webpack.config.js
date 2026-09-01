@@ -84,6 +84,48 @@ const trainerCardConfig = {
 	},
 };
 
+// Explorer sidebar views. Its own config for the same reason the trainer card
+// has one: desktopConfig declares a single global library name and strips
+// source-map URLs with a plugin keyed to /main-bundle\.js$/, neither of which
+// applies here. Both Explorer views share this one bundle.
+const explorerConfig = {
+	mode: "development",
+	devtool: "inline-source-map",
+	entry: {
+		"explorer": "./src/panel/explorer/main.ts",
+	},
+	output: {
+		path: path.resolve(__dirname, './media'),
+		filename: "[name]-bundle.js",
+		library: {
+			name: 'pokedevExplorer',
+			type: 'global'
+		}
+	},
+	plugins: [
+		new removeSourceMapUrlWebpackPlugin({
+			test: /explorer-bundle\.js$/
+		})
+	],
+	resolve: {
+		extensions: [".ts", ".tsx", ".js"],
+	},
+	module: {
+		rules: [{
+			test: /\.ts$/,
+			exclude: /node_modules/,
+			use: [
+				{
+					loader: 'ts-loader',
+					options: {
+						configFile: 'tsconfig.panel.json'
+					}
+				},
+			],
+		}]
+	},
+};
+
 const webExtensionConfig = {
 	mode: 'none', // this leaves the source code as close as possible to the original (when packaging we set this to 'production')
 	target: 'webworker', // extensions run in a webworker context
@@ -141,4 +183,4 @@ const webExtensionConfig = {
 	devtool: 'nosources-source-map', // create a source map that points to the original source file
 };
 
-module.exports = [desktopConfig, trainerCardConfig, webExtensionConfig];
+module.exports = [desktopConfig, trainerCardConfig, explorerConfig, webExtensionConfig];

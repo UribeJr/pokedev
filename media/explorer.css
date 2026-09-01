@@ -1,0 +1,453 @@
+/*
+ * Compact PokeDev views for the Explorer sidebar.
+ *
+ * Palette and geometry come from media/pokedev-tokens.css, shared with the
+ * full Trainer Card, so the HUD reads as the same product rather than an
+ * unrelated widget.
+ *
+ * Designed for 220px-450px. Everything is fluid or wraps; nothing has a fixed
+ * width that could force horizontal scrolling. Deliberately does NOT reuse
+ * media/pokemon.css, which sets `body { overflow: hidden }` and would clip a
+ * list taller than the view.
+ */
+
+body {
+	margin: 0;
+	padding: 8px;
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	/* Transparent, so the view sits on the Explorer's own background in every
+	   theme rather than punching a differently-coloured hole in it. */
+	background: transparent;
+	overflow-x: hidden;
+}
+
+#root {
+	max-width: 100%;
+}
+
+/* ------------------------------- card face ------------------------------ */
+
+/*
+ * A smaller sibling of .tc-card: same bevel and gradient, less ornament. The
+ * fixed retro face is what makes it recognisably PokeDev in light themes too.
+ */
+.pd-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 8px;
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	box-shadow:
+		inset 0 1px 0 var(--tc-edge-light),
+		inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* -------------------------------- identity ------------------------------ */
+
+.pd-identity {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.pd-portrait {
+	flex: 0 0 auto;
+	width: 38px;
+	height: 38px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+.pd-avatar {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.pd-avatar-empty {
+	background:
+		var(--tc-ball) center / 60% no-repeat,
+		var(--tc-slot);
+	opacity: 0.45;
+}
+
+.pd-who {
+	display: flex;
+	flex-direction: column;
+	/* min-width:0 is what actually lets the ellipsis work inside a flex row. */
+	min-width: 0;
+	gap: 1px;
+}
+
+.pd-name,
+.pd-login {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+}
+
+.pd-name {
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--tc-ink);
+}
+
+.pd-login {
+	font-size: 10px;
+	color: var(--tc-ink-dim);
+}
+
+.pd-level {
+	margin-top: 2px;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+}
+
+/* --------------------------------- rows --------------------------------- */
+
+.pd-row-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pd-row-spaced {
+	margin-top: 4px;
+}
+
+.pd-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
+.pd-label-section {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--tc-rule);
+}
+
+.pd-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	color: var(--tc-ink);
+	white-space: nowrap;
+}
+
+/* -------------------------------- xp bars ------------------------------- */
+
+.pd-xp-track {
+	position: relative;
+	height: 10px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 3px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.pd-xp-fill,
+.pd-mini-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	transition: width 500ms ease-out;
+}
+
+/* The row-level bar: thinner, so it never competes with the trainer gauge. */
+.pd-mini-track {
+	position: relative;
+	height: 4px;
+	margin-top: 3px;
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+/* -------------------------------- partner ------------------------------- */
+
+.pd-partner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.pd-partner-sprite,
+.pd-item-sprite {
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+	/* Sprites are small pixel gifs; smoothing turns them to mush. */
+	image-rendering: pixelated;
+}
+
+.pd-sprite-missing {
+	background: var(--tc-ball) center / contain no-repeat;
+	opacity: 0.35;
+}
+
+.pd-partner-meta {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.pd-partner-name,
+.pd-item-name {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+}
+
+.pd-partner-species,
+.pd-item-species {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.pd-partner-level,
+.pd-item-level {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--tc-accent);
+	white-space: nowrap;
+}
+
+.pd-shiny {
+	flex: 0 0 auto;
+	font-size: 9px;
+	color: var(--tc-accent);
+}
+
+/* ------------------------------- team list ------------------------------ */
+
+.pd-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.pd-item {
+	min-width: 0;
+}
+
+/*
+ * A real <button> so keyboard and screen readers get selection for free,
+ * stripped back to look like a row rather than a control.
+ */
+.pd-item-button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	padding: 4px 6px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.pd-item-button:hover:not(:disabled) {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.pd-item-button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.pd-item-button:disabled {
+	cursor: default;
+}
+
+/* The current partner: accented border plus a badge, so it does not rely on
+   colour alone. */
+.pd-item-partner .pd-item-button {
+	border-color: var(--tc-accent);
+	background: var(--vscode-list-inactiveSelectionBackground);
+}
+
+.pd-item-meta {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+/* Inside the list the species uses theme colours, not the card palette — the
+   list sits on the sidebar background, not on a card face. */
+.pd-item-species {
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+}
+
+.pd-item-detail {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pd-item-level {
+	color: var(--vscode-descriptionForeground);
+}
+
+.pd-item-sub {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.pd-badge {
+	flex: 0 0 auto;
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	color: #21160a;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+}
+
+/* -------------------------------- actions ------------------------------- */
+
+.pd-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--tc-rule);
+}
+
+/* Small game-menu utilities, deliberately not calls to action. */
+.pd-action {
+	flex: 0 1 auto;
+	padding: 3px 7px;
+	border: 1px solid var(--tc-edge-light);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.pd-action:hover {
+	background: var(--tc-slot);
+	border-color: var(--tc-accent);
+}
+
+.pd-action:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.pd-empty {
+	margin: 4px 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+/* An empty team list sits on the sidebar, not on a card. */
+#root > .pd-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+/* ------------------------------ narrow width ---------------------------- */
+
+/*
+ * Around 240px the avatar row and the name stop fitting side by side. Stack
+ * identity, drop the secondary species line, and shrink the portrait — but
+ * never shrink the text, which is already at its readable floor.
+ */
+@media (max-width: 240px) {
+	.pd-identity {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+
+	.pd-portrait {
+		width: 30px;
+		height: 30px;
+	}
+
+	.pd-item-sub {
+		display: none;
+	}
+
+	.pd-actions {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.pd-action {
+		text-align: center;
+	}
+}
+
+/* ---------------------------- motion / a11y ----------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.pd-xp-fill,
+	.pd-mini-fill {
+		transition: none;
+	}
+}
+
+@media (forced-colors: active) {
+	.pd-card,
+	.pd-item-partner .pd-item-button,
+	.pd-action {
+		border-color: CanvasText;
+	}
+
+	.pd-xp-fill,
+	.pd-mini-fill,
+	.pd-badge {
+		background: Highlight;
+	}
+}

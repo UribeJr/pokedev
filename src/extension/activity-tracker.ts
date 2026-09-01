@@ -149,7 +149,7 @@ export class ActivityTracker implements vscode.Disposable {
   private _mode(): ProgressionMode {
     return normalizeProgressionMode(
       vscode.workspace
-        .getConfiguration('vscode-pokemon')
+        .getConfiguration('pokedev')
         .get<string>('progression.mode', 'auto'),
     );
   }

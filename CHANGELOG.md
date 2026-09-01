@@ -1,6 +1,35 @@
 # Change Log
 
-All notable changes to the "vscode-pokemon" extension will be documented in this file.
+All notable changes to the PokeDev extension are documented in this file.
+
+## [6.1.0]
+
+- feat: two compact PokeDev views inside the standard Explorer sidebar —
+  **PokeDev Trainer** (avatar, name, level, XP bar, coding time, partner) and
+  **Pokemon** (your collection, with the partner marked). Both are ordinary
+  collapsible Explorer sections; no separate Activity Bar container
+- feat: selecting a Pokemon in the Explorer makes it your partner, routed
+  through the same setter the QuickPick uses — there is still exactly one
+  partner state
+- feat: `PokeDev: Focus Trainer View` and `PokeDev: Focus Pokemon View`
+- chore: a shared `pokedevState` hub now broadcasts progression, partner,
+  collection and GitHub changes. Every surface subscribes, which removed the
+  direct dependency `progression-service` had on the Trainer Card panel
+- chore: palette and geometry extracted to `media/pokedev-tokens.css`, shared
+  by the full card and the Explorer views so they cannot drift apart
+- note: the full Trainer Card panel and the walking-sprite playground are
+  unchanged; the Explorer views are additional surfaces
+
+## [6.0.0]
+
+- **PokeDev** — this project is now a distinct fork of
+  [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) rather than a
+  patched copy of it. Published as `uribejr.pokedev`
+- breaking: every command and setting moved from the `vscode-pokemon.` prefix
+  to `pokedev.`, and the command palette category is now `PokeDev`. Existing
+  settings and custom keybindings need updating to the new ids
+- note: saved data is untouched. Storage keys deliberately keep their original
+  prefix, so collections, trainer profiles and progression carry over intact
 
 ## [Unreleased]
 
