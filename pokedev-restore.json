@@ -1,0 +1,7 @@
+[
+  { "type": "squirtle",  "color": "default", "size": "medium", "name": "Squirtle" },
+  { "type": "pidgeotto", "color": "default", "size": "medium", "name": "Pidgeotto" },
+  { "type": "abra",      "color": "default", "size": "medium", "name": "Abra" },
+  { "type": "mankey",    "color": "default", "size": "medium", "name": "Mankey" },
+  { "type": "psyduck",   "color": "default", "size": "medium", "name": "Psyduck" }
+]
