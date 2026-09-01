@@ -54,6 +54,7 @@ import {
   ProgressionService,
   showStatusMessage,
 } from './progression-service';
+import { resolvePartnerIdentity } from './trainer-partner';
 
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
@@ -1363,6 +1364,33 @@ export function activate(context: vscode.ExtensionContext) {
     ),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.debug-grant-5-exp', async () => {
+      if (!areDebugCommandsEnabled()) {
+        return;
+      }
+      const partner = resolvePartnerIdentity(context);
+      if (!partner) {
+        void vscode.window.showWarningMessage(
+          vscode.l10n.t('No partner Pokémon to grant EXP to.'),
+        );
+        return;
+      }
+      const accepted = await progression.applyEvent({
+        ...createProgressionEvent('debug-grant', Date.now(), {
+          grant: 'partner-small',
+        }),
+        trainerXp: 0,
+        pokemonXp: DEBUG_SMALL_XP_GRANT,
+      });
+      if (accepted) {
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Partner EXP.', DEBUG_SMALL_XP_GRANT),
+        );
+      }
+    }),
+  );
+
   if (vscode.window.registerWebviewPanelSerializer) {
     vscode.window.registerWebviewPanelSerializer(TrainerCardPanel.viewType, {
       async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
@@ -1414,6 +1442,9 @@ function updateStatusBar(): void {
 
 /** How much a single debug grant is worth. */
 const DEBUG_XP_GRANT = 100;
+
+/** Small debug grant for manually testing in-world toasts. */
+const DEBUG_SMALL_XP_GRANT = 5;
 
 /**
  * Debug commands are hidden from the palette by a `when` clause, but the

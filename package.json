@@ -105,6 +105,11 @@
                     "group": "navigation@4"
                 },
                 {
+                    "command": "pokedev.debug-grant-5-exp",
+                    "when": "view == pokedevView && config.pokedev.enableDebugCommands",
+                    "group": "navigation@5"
+                },
+                {
                     "command": "pokedev.openTrainerCard",
                     "when": "view == pokedev.trainerView",
                     "group": "navigation@1"
@@ -137,6 +142,10 @@
                 },
                 {
                     "command": "pokedev.debug-add-partner-xp",
+                    "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-grant-5-exp",
                     "when": "config.pokedev.enableDebugCommands"
                 }
             ]
@@ -251,6 +260,15 @@
                 "command": "pokedev.debug-add-partner-xp",
                 "title": "Add 100 Partner XP",
                 "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.debug-grant-5-exp",
+                "title": "Grant 5 Partner EXP",
+                "category": "PokéDev Debug",
+                "icon": {
+                    "dark": "media/icon/dark-circle-outline.svg",
+                    "light": "media/icon/light-circle-outline.svg"
+                }
             },
             {
                 "command": "pokedev.focus-trainer-view",
