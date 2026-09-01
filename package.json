@@ -412,6 +412,11 @@
                         "type": "boolean",
                         "default": true,
                         "description": "Show brief, charming Pokémon reactions to meaningful coding events: saving changed files, Git commits, failed build/test tasks, and Pokémon level-ups."
+                    },
+                    "pokedev.toasts.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Show tiny in-world activity messages when Pokémon gain experience or level up."
                     }
                 }
             }

@@ -20,6 +20,7 @@ import {
 import { PokemonElementState, PokemonPanelState } from './states';
 import { getRandomPokemonConfig } from '../common/pokemon-data';
 import { reactionController } from './reaction-controller';
+import { toastController } from './toast-controller';
 
 /* This is how the VS Code API can be invoked from the panel */
 declare global {
@@ -116,6 +117,7 @@ function startAnimations(
     });
     pokemon.nextFrame();
     reactionController.tick(pokemon, allPokemon);
+    toastController.tick(pokemon, allPokemon);
     saveState(stateApi);
   }, 100);
 }
@@ -354,6 +356,7 @@ function removePokemonFromPanel(
   // Remove from collection immediately so rapid deletes of Pokemon don't interfere with each other
   allPokemon.removeFromCollection(message.name);
   reactionController.forget(message.name);
+  toastController.forget(message.name);
   pokemon.collision.remove();
   pokemon.speech.remove();
   pokemonCounter = normalizePokemonCounter(pokemonCounter - 1);
@@ -664,6 +667,9 @@ export function pokemonPanelApp(
         break;
       case 'pokemon-reaction':
         reactionController.handleMessage(message, allPokemon);
+        break;
+      case 'pokemon-toast':
+        toastController.handleMessage(message, allPokemon);
         break;
       case 'reset-pokemon':
         var pokemonToRemove = [...allPokemon.pokemonCollection];

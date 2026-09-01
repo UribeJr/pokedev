@@ -44,6 +44,7 @@ import { pokedevState } from './pokedev-state';
 import { pickPartnerPokemon } from './partner-picker';
 import { GitActivityTracker } from './git-activity';
 import { reactionHub } from './reaction-service';
+import { toastHub } from './toast-service';
 import {
   evolvePartnerCommand,
   setEvolutionPanelNotifier,
@@ -1270,6 +1271,19 @@ export function activate(context: vscode.ExtensionContext) {
       }
       void webview.postMessage({
         command: 'pokemon-reaction',
+        ...event,
+      });
+    }),
+  );
+
+  context.subscriptions.push(
+    toastHub.onDidToast((event) => {
+      const webview = getWebview();
+      if (!webview) {
+        return;
+      }
+      void webview.postMessage({
+        command: 'pokemon-toast',
         ...event,
       });
     }),

@@ -430,6 +430,96 @@ img.pokemon {
   .pokemon.pokedev-flash {
     animation: none;
   }
+
+  .pokedev-world-toast {
+    animation: none;
+    opacity: 1;
+  }
+
+  .pokedev-world-toast.is-exiting {
+    animation: pokedev-toast-fade-only 200ms ease-out forwards;
+  }
+}
+
+/* -------------------------------- world toasts ----------------------------- */
+
+.pokedev-world-toast {
+  position: absolute;
+  z-index: 1001;
+  pointer-events: none;
+  transform: translateX(-50%);
+  max-width: min(168px, calc(100vw - 16px));
+  padding: 3px 6px;
+  border: 2px solid #2a2a2a;
+  border-radius: 2px;
+  background: #f7f0d8;
+  color: #1a1a1a;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
+  font-family: 'silkscreen', monospace;
+  font-size: 8px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: nowrap;
+  animation: pokedev-toast-in 180ms ease-out;
+}
+
+.pokedev-world-toast::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #2a2a2a;
+}
+
+.pokedev-world-toast-text {
+  display: inline-block;
+}
+
+.pokedev-world-toast-xp {
+  font-weight: bold;
+}
+
+.pokedev-world-toast-large {
+  border-color: #6b4b00;
+  background: #fff4c7;
+  box-shadow: 1px 1px 0 rgba(107, 75, 0, 0.35);
+}
+
+.pokedev-world-toast-large::before {
+  content: '★';
+  margin-right: 3px;
+  font-size: 7px;
+  color: #b8860b;
+}
+
+.pokedev-world-toast-level-up {
+  border-color: #5a1f4f;
+  background: #ffe8f8;
+}
+
+@keyframes pokedev-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes pokedev-toast-fade-only {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 .pokemon.fade-out {

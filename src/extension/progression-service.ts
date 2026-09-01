@@ -30,6 +30,7 @@ import {
 } from './progression-storage';
 import { pokedevState } from './pokedev-state';
 import { reactionHub } from './reaction-service';
+import { getPokemonToastDisplayName, toastHub } from './toast-service';
 import { resolvePartnerIdentity } from './trainer-partner';
 import { readTrainerProfile, writeTrainerProfile } from './trainer-storage';
 
@@ -193,15 +194,31 @@ export class ProgressionService {
       species: partner.species,
     });
 
+    const actualXp = progress.totalXp - before.totalXp;
+    const displayName = getPokemonToastDisplayName(
+      partner.nickname,
+      partner.species,
+    );
+    toastHub.notifyXp(
+      partner.nickname,
+      displayName,
+      actualXp,
+      event.type === 'git-commit' ? 'large' : 'normal',
+      now,
+    );
+
     if (!result.levelledUp) {
       return;
     }
 
-    const displayName = partner.nickname || partner.species;
     showStatusMessage(
       vscode.l10n.t('{0} reached Lv. {1}!', displayName, result.toLevel),
     );
     reactionHub.notifyLevelUp(partner.nickname);
+
+    for (let level = result.fromLevel + 1; level <= result.toLevel; level++) {
+      toastHub.notifyLevelUp(partner.nickname, displayName, level, now);
+    }
 
     await this._maybeOfferEvolution(partner.nickname, result.toLevel);
   }
