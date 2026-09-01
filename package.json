@@ -2,7 +2,7 @@
     "name": "pokedev",
     "displayName": "PokéDev",
     "description": "Pokémon that live in your editor, earn experience as you code, level up and evolve.",
-    "version": "6.1.0",
+    "version": "6.2.0",
     "engines": {
         "vscode": "^1.73.0"
     },
@@ -407,6 +407,11 @@
                         "type": "boolean",
                         "default": false,
                         "description": "Show the PokeDev Debug commands for granting experience. Intended for testing progression and evolution; leave this off for normal use."
+                    },
+                    "pokedev.reactions.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Show brief, charming Pokémon reactions to meaningful coding events: saving changed files, Git commits, failed build/test tasks, and Pokémon level-ups."
                     }
                 }
             }
@@ -432,7 +437,7 @@
         "test:web": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
         "test:gifs": "node ./out/test/gifs.js",
         "prepare": "husky",
-        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/progression.test.js"
+        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js"
     },
     "devDependencies": {
         "@rbarilani/remove-source-map-url-webpack-plugin": "^1.1.0",

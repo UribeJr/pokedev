@@ -43,6 +43,7 @@ import {
 import { pokedevState } from './pokedev-state';
 import { pickPartnerPokemon } from './partner-picker';
 import { GitActivityTracker } from './git-activity';
+import { reactionHub } from './reaction-service';
 import {
   evolvePartnerCommand,
   setEvolutionPanelNotifier,
@@ -1255,6 +1256,24 @@ export function activate(context: vscode.ExtensionContext) {
   void gitTracker.start();
   gitActivityTracker = gitTracker;
   context.subscriptions.push(gitTracker);
+
+  /* ------------------------------- reactions ------------------------------ */
+
+  // The reaction hub only ever raises events; this is the one place that
+  // turns one into a `postMessage` to whichever surface currently shows the
+  // world, so the hub itself never needs to know a webview exists.
+  context.subscriptions.push(
+    reactionHub.onDidReact((event) => {
+      const webview = getWebview();
+      if (!webview) {
+        return;
+      }
+      void webview.postMessage({
+        command: 'pokemon-reaction',
+        ...event,
+      });
+    }),
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('pokedev.toggle-dev-record', async () => {

@@ -29,6 +29,7 @@ import {
   writeProgressionLog,
 } from './progression-storage';
 import { pokedevState } from './pokedev-state';
+import { reactionHub } from './reaction-service';
 import { resolvePartnerIdentity } from './trainer-partner';
 import { readTrainerProfile, writeTrainerProfile } from './trainer-storage';
 
@@ -172,6 +173,8 @@ export class ProgressionService {
       return;
     }
 
+    this._reactToEvent(event, partner.nickname);
+
     const now = Date.now();
     const before = readPokemonProgress(
       this._context,
@@ -198,8 +201,41 @@ export class ProgressionService {
     showStatusMessage(
       vscode.l10n.t('{0} reached Lv. {1}!', displayName, result.toLevel),
     );
+    reactionHub.notifyLevelUp(partner.nickname);
 
     await this._maybeOfferEvolution(partner.nickname, result.toLevel);
+  }
+
+  /**
+   * Raises the world reaction for the event types that have one.
+   *
+   * Deliberately keyed off `event.type`, not `event.source`/metadata: the
+   * event's type is exactly what `git-activity.ts` and `activity-tracker.ts`
+   * already used to decide this was a genuine work-batch or a new commit, so
+   * this adds no new "was it meaningful" logic of its own - it only maps an
+   * already-accepted progression event onto a reaction.
+   */
+  private _reactToEvent(event: ProgressionEvent, pokemonId: string): void {
+    if (event.type === 'work-batch') {
+      reactionHub.notifySave(pokemonId);
+    } else if (event.type === 'git-commit') {
+      reactionHub.notifyCommit(pokemonId);
+    }
+  }
+
+  /**
+   * Reaction-only signal for a failed Build/Test task.
+   *
+   * Deliberately outside `applyEvent`: a failure earns no XP and is never
+   * logged, so it must not touch the ledger, the hourly cap or the activity
+   * log - only the reaction hub, which owns its own per-task cooldown.
+   */
+  public reactToTaskFailure(taskName: string): void {
+    const partner = resolvePartnerIdentity(this._context);
+    if (!partner) {
+      return;
+    }
+    reactionHub.notifyTaskFailure(taskName, partner.nickname);
   }
 
   /**

@@ -290,23 +290,31 @@ export class ActivityTracker implements vscode.Disposable {
   /* ------------------------------- tasks ------------------------------- */
 
   /**
-   * Awards a successful build or test run.
+   * Awards a successful build or test run, and raises the `confused`
+   * reaction for a reliably-failed one.
    *
-   * Uses the task process's real exit code. There is deliberately no terminal
-   * output parsing anywhere in this system: scanning for words like "success"
-   * would be both trivially farmable and wrong for most toolchains.
+   * Both branches use only the task process's real exit code. There is
+   * deliberately no terminal output parsing anywhere in this system: scanning
+   * for words like "failed" would be both trivially farmable/false-positive
+   * prone and wrong for most toolchains. An `exitCode` of `undefined` (the
+   * process was killed rather than exiting) is not a reliable failure signal
+   * either way, so it is ignored.
    */
   private async _onTaskEnd(event: vscode.TaskProcessEndEvent): Promise<void> {
-    if (event.exitCode !== 0) {
-      return;
-    }
-
     const group = event.execution.task.group;
     if (group !== vscode.TaskGroup.Build && group !== vscode.TaskGroup.Test) {
       return;
     }
 
     const name = event.execution.task.name;
+
+    if (event.exitCode !== 0) {
+      if (event.exitCode !== undefined) {
+        this._service.reactToTaskFailure(name);
+      }
+      return;
+    }
+
     const now = Date.now();
     const previous = this._lastTask.get(name);
     if (previous !== undefined && now - previous < TASK_COOLDOWN_MS) {

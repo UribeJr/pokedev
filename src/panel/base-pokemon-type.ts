@@ -276,10 +276,18 @@ export abstract class BasePokemonType implements IPokemonType {
 
   faceLeft() {
     this.el.style.transform = 'scaleX(-1)';
+    // Also stamped as a custom property, not just the inline transform: a
+    // reaction's bounce/shake animation needs to compose ITS transform with
+    // the current facing direction, and a running CSS animation overrides
+    // even an inline `transform` for the properties it animates - so the
+    // facing has to be readable from somewhere an animation's keyframes can
+    // reference (see `.pokedev-bounce` / `.pokedev-shake` in pokemon.css).
+    this.el.style.setProperty('--pokedev-facing', '-1');
   }
 
   faceRight() {
     this.el.style.transform = 'scaleX(1)';
+    this.el.style.setProperty('--pokedev-facing', '1');
   }
 
   /**

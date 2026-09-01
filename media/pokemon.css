@@ -284,6 +284,154 @@ img.pokemon {
   }
 }
 
+/* -------------------------------- reactions -------------------------------- */
+
+.pokedev-reaction-symbol {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  font-family: 'silkscreen', monospace;
+  font-weight: bold;
+  line-height: 1;
+  transform: translateX(-50%);
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
+  animation: pokedev-reaction-pop 220ms ease-out;
+}
+
+.pokedev-reaction-notice {
+  font-size: 16px;
+  color: #fce75b;
+}
+
+.pokedev-reaction-celebrate {
+  font-size: 18px;
+  color: #ffd23f;
+}
+
+.pokedev-reaction-confused {
+  font-size: 16px;
+  color: #7fd1ff;
+}
+
+.pokedev-reaction-level-up {
+  font-size: 22px;
+  color: #ff6bd6;
+}
+
+@keyframes pokedev-reaction-pop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-3px) scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.pokedev-particle {
+  position: absolute;
+  z-index: 999;
+  pointer-events: none;
+  font-size: 8px;
+  color: #ffd23f;
+  transform: translateX(-50%);
+  animation: pokedev-particle-rise 700ms ease-out forwards;
+}
+
+@keyframes pokedev-particle-rise {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translate(0, 0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translate(var(--px, 0), -28px) scale(1);
+  }
+}
+
+/*
+ * `img.pokemon` is mirrored via an inline `transform: scaleX(...)` that
+ * `faceLeft()`/`faceRight()` update every frame (see base-pokemon-type.ts).
+ * A running CSS animation overrides even an inline transform for the
+ * duration it plays, so these keyframes fold `--pokedev-facing` (stamped
+ * alongside that inline style) back in rather than clobbering it.
+ */
+.pokemon.pokedev-bounce {
+  animation: pokedev-bounce 480ms ease-in-out 2;
+}
+
+@keyframes pokedev-bounce {
+  0%,
+  100% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateY(0);
+  }
+  50% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateY(-8px);
+  }
+}
+
+.pokemon.pokedev-shake {
+  animation: pokedev-shake 400ms ease-in-out;
+}
+
+@keyframes pokedev-shake {
+  0%,
+  100% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateX(0);
+  }
+  20% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateX(-4px);
+  }
+  40% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateX(4px);
+  }
+  60% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateX(-3px);
+  }
+  80% {
+    transform: scaleX(var(--pokedev-facing, -1)) translateX(3px);
+  }
+}
+
+.pokemon.pokedev-flash {
+  animation: pokedev-flash 300ms ease-in-out 3;
+}
+
+@keyframes pokedev-flash {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.6) saturate(1.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pokedev-reaction-symbol {
+    animation: none;
+    opacity: 1;
+  }
+
+  .pokemon.pokedev-bounce,
+  .pokemon.pokedev-shake,
+  .pokemon.pokedev-flash {
+    animation: none;
+  }
+}
+
 .pokemon.fade-out {
   animation: pokemon-fade-out 220ms ease-out;
 }

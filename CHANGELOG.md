@@ -2,6 +2,21 @@
 
 All notable changes to the PokeDev extension are documented in this file.
 
+## [6.2.0]
+
+- feat: Pokemon now visually react to real coding events — a meaningful save
+  (`!`), a Git commit (`★` + a small burst of stars, and rarely a nearby
+  Pokemon joining in), a reliably-failed Build/Test task (`?`), and a Pokemon
+  levelling up (`✦` + a stronger celebration). Reactions target the current
+  Partner, are brief (1.2-3s), never overlap on one Pokemon, and always
+  return it to normal walking/idle behavior afterward
+- feat: `pokedev.reactions.enabled` setting (default on) turns all of the
+  above off if you'd rather keep the world quiet
+- chore: reactions are driven by the same progression events already used
+  for XP (meaningful save, unique commit) — no new "was this meaningful"
+  logic, no XP awarded for reacting, and no idle/sleep/wake behavior of any
+  kind
+
 ## [6.1.0]
 
 - feat: two compact PokeDev views inside the standard Explorer sidebar —
