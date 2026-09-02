@@ -20,9 +20,14 @@ import {
   POKEMON_EXPLORER_VIEW_TYPE,
   TRAINER_EXPLORER_VIEW_TYPE,
 } from '../trainer/explorer-types';
+import { showStatusMessage } from './progression-service';
 import { pickPartnerPokemon } from './partner-picker';
 import { pokedevState } from './pokedev-state';
-import { setPartnerNickname } from './trainer-partner';
+import {
+  isExpShareEnabled,
+  setExpShareEnabled,
+  setPartnerNickname,
+} from './trainer-partner';
 import {
   promptForGithubUsername,
   setConfiguredGithubUsername,
@@ -184,6 +189,21 @@ abstract class PokedevExplorerViewProvider
         // one partner state in the extension.
         await setPartnerNickname(this._context, message.nickname);
         pokedevState.notify('partner');
+        return;
+      }
+
+      case 'explorer/toggleExpShare': {
+        const next = !isExpShareEnabled();
+        await setExpShareEnabled(next);
+        // Mirrors the `pokedev.toggle-dev-record` command: a transient
+        // status-bar note, not a toast or a modal notification, for a
+        // preference change nobody needs to acknowledge.
+        showStatusMessage(
+          next
+            ? vscode.l10n.t('EXP Share turned on!')
+            : vscode.l10n.t('EXP Share turned off!'),
+        );
+        pokedevState.notify('progression');
         return;
       }
     }

@@ -70,6 +70,8 @@ export interface ExplorerPokemonEntry {
 
 export interface ExplorerPokemonViewModel {
   pokemon: ExplorerPokemonEntry[];
+  /** Whether non-partner active party Pokemon additionally earn shared XP. */
+  expShareEnabled: boolean;
   labels: ExplorerLabels;
 }
 
@@ -101,6 +103,12 @@ export interface ExplorerLabels {
   makePartnerHint: string;
   partnerBadge: string;
   shinyLabel: string;
+  /** "EXP SHARE" - the compact toggle heading above the team list. */
+  expShareLabel: string;
+  expShareOnLabel: string;
+  expShareOffLabel: string;
+  /** Tooltip on the EXP Share toggle. */
+  expShareTooltip: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -114,7 +122,9 @@ export type ExplorerHostboundMessage =
   | { command: 'explorer/changePartner' }
   | { command: 'explorer/connect' }
   /** Sent when a row in the team list is chosen. */
-  | { command: 'explorer/selectPartner'; nickname: string };
+  | { command: 'explorer/selectPartner'; nickname: string }
+  /** Sent when the EXP Share toggle in the team list is activated. */
+  | { command: 'explorer/toggleExpShare' };
 
 export type ExplorerWebviewboundMessage =
   | { command: 'explorer/trainerState'; payload: ExplorerTrainerViewModel }

@@ -38,6 +38,7 @@ import { readPokemonProgress } from './progression-storage';
 import { getConfiguredGithubUsername } from './trainer-card-panel';
 import { readGithubCache, readTrainerProfile } from './trainer-storage';
 import {
+  isExpShareEnabled,
   listPartnerCandidates,
   resolvePartnerIdentity,
 } from './trainer-partner';
@@ -189,7 +190,11 @@ class PokedevState {
         };
       },
     );
-    return { pokemon, labels: buildExplorerLabels() };
+    return {
+      pokemon,
+      expShareEnabled: isExpShareEnabled(),
+      labels: buildExplorerLabels(),
+    };
   }
 }
 
@@ -245,5 +250,9 @@ export function buildExplorerLabels(): ExplorerLabels {
     makePartnerHint: vscode.l10n.t('Make this your partner'),
     partnerBadge: vscode.l10n.t('PARTNER'),
     shinyLabel: vscode.l10n.t('Shiny'),
+    expShareLabel: vscode.l10n.t('EXP Share'),
+    expShareOnLabel: vscode.l10n.t('ON'),
+    expShareOffLabel: vscode.l10n.t('OFF'),
+    expShareTooltip: vscode.l10n.t('Shares 50% EXP with other party Pokémon.'),
   };
 }

@@ -20,6 +20,10 @@ import {
 import { ProgressionEvent } from '../progression/progression-types';
 import { appendToLog, XpLedger } from '../progression/xp-ledger';
 import { XP_RULES } from '../progression/xp-rules';
+import {
+  distributePokemonXp,
+  PokemonXpGrant,
+} from '../progression/xp-distribution';
 import { addTrainerXp } from '../trainer/trainer-profile';
 import { promptToEvolvePartner } from './evolution-flow';
 import {
@@ -31,7 +35,12 @@ import {
 import { pokedevState } from './pokedev-state';
 import { reactionHub } from './reaction-service';
 import { getPokemonToastDisplayName, toastHub } from './toast-service';
-import { resolvePartnerIdentity } from './trainer-partner';
+import {
+  isExpShareEnabled,
+  listPartnerCandidates,
+  PartnerIdentity,
+  resolvePartnerIdentity,
+} from './trainer-partner';
 import { readTrainerProfile, writeTrainerProfile } from './trainer-storage';
 
 /** How long a level-up message lingers in the status bar. */
@@ -132,7 +141,7 @@ export class ProgressionService {
     }
 
     await this._grantTrainerXp(event);
-    await this._grantPartnerXp(event);
+    await this._grantPokemonXp(event);
     await this._log(event);
     this._notifyCard();
     return true;
@@ -159,13 +168,17 @@ export class ProgressionService {
   }
 
   /**
-   * Grants XP to the current partner and, on a level-up, offers evolution.
+   * Grants XP to the current partner and, when EXP Share is on, to the rest
+   * of the active party - then offers evolution on a partner level-up.
    *
-   * Only the partner earns Pokemon XP in this milestone. Progression is keyed
-   * by nickname, so it survives an evolution - which changes species but never
+   * `distributePokemonXp` (src/progression/xp-distribution.ts) is the one
+   * place that decides who receives how much; this method only applies
+   * whatever it returns to the existing per-Pokemon XP/level system, exactly
+   * as it already did for the partner alone. Progression is keyed by
+   * nickname, so it survives an evolution - which changes species but never
    * the name - without any migration.
    */
-  private async _grantPartnerXp(event: ProgressionEvent): Promise<void> {
+  private async _grantPokemonXp(event: ProgressionEvent): Promise<void> {
     if (event.pokemonXp <= 0) {
       return;
     }
@@ -174,53 +187,123 @@ export class ProgressionService {
       return;
     }
 
+    // Reacting is about the coding event happening, not about whether any
+    // party member still had room to gain XP - unchanged from before EXP
+    // Share existed.
     this._reactToEvent(event, partner.nickname);
 
+    const party = listPartnerCandidates(this._context);
+    const grants = distributePokemonXp({
+      baseXp: event.pokemonXp,
+      partnerNickname: partner.nickname,
+      party,
+      expShareEnabled: isExpShareEnabled(),
+    });
+
     const now = Date.now();
+    let sharedAmountGranted = 0;
+
+    for (const grant of grants) {
+      const identity = grant.isPartner
+        ? partner
+        : party.find((candidate) => candidate.nickname === grant.nickname);
+      if (!identity) {
+        continue;
+      }
+      const applied = await this._applyPokemonXpGrant(
+        identity,
+        grant,
+        event,
+        now,
+      );
+      if (applied && !grant.isPartner) {
+        sharedAmountGranted = grant.amount;
+      }
+    }
+
+    // One grouped toast for the whole party rather than one per shared
+    // Pokemon - a save would otherwise pop up to three or four toasts at
+    // once. Anchored to the partner, who is always the one guaranteed to be
+    // rendered in the world.
+    if (sharedAmountGranted > 0) {
+      toastHub.notifySystem(
+        partner.nickname,
+        vscode.l10n.t('EXP Share: Party gained {0} EXP!', sharedAmountGranted),
+        now,
+      );
+    }
+  }
+
+  /**
+   * Applies one Pokemon's share of an XP award: writes progress, raises its
+   * XP toast (partner only - see `_grantPokemonXp`), and on a level-up raises
+   * the same status message, reaction and toast the partner always has, plus
+   * an evolution offer when it is the partner. Returns whether the grant
+   * actually changed anything, so a Pokemon already at the level cap is not
+   * counted as "shared XP was granted" by the caller.
+   */
+  private async _applyPokemonXpGrant(
+    identity: PartnerIdentity,
+    grant: PokemonXpGrant,
+    event: ProgressionEvent,
+    now: number,
+  ): Promise<boolean> {
     const before = readPokemonProgress(
       this._context,
-      partner.nickname,
-      partner.species,
+      identity.nickname,
+      identity.species,
       now,
     );
-    const { progress, result } = addPokemonXp(before, event.pokemonXp);
+    const { progress, result } = addPokemonXp(before, grant.amount);
     if (progress.totalXp === before.totalXp) {
-      return;
+      return false;
     }
 
     // Keep the recorded species current; the collection stays authoritative.
-    await writePokemonProgress(this._context, partner.nickname, {
+    await writePokemonProgress(this._context, identity.nickname, {
       ...progress,
-      species: partner.species,
+      species: identity.species,
     });
 
     const actualXp = progress.totalXp - before.totalXp;
     const displayName = getPokemonToastDisplayName(
-      partner.nickname,
-      partner.species,
-    );
-    toastHub.notifyXp(
-      partner.nickname,
-      displayName,
-      actualXp,
-      event.type === 'git-commit' ? 'large' : 'normal',
-      now,
+      identity.nickname,
+      identity.species,
     );
 
-    if (!result.levelledUp) {
-      return;
+    if (grant.isPartner) {
+      // Shared Pokemon deliberately get no individual XP toast - the grouped
+      // "Party gained" message in `_grantPokemonXp` covers them so ordinary
+      // shared XP stays a single subtle notice, not a toast per Pokemon.
+      toastHub.notifyXp(
+        identity.nickname,
+        displayName,
+        actualXp,
+        event.type === 'git-commit' ? 'large' : 'normal',
+        now,
+      );
     }
 
+    if (!result.levelledUp) {
+      return true;
+    }
+
+    // A level-up is significant enough to get its full existing feedback
+    // regardless of whether this Pokemon is the partner or shared.
     showStatusMessage(
       vscode.l10n.t('{0} reached Lv. {1}!', displayName, result.toLevel),
     );
-    reactionHub.notifyLevelUp(partner.nickname);
+    reactionHub.notifyLevelUp(identity.nickname);
 
     for (let level = result.fromLevel + 1; level <= result.toLevel; level++) {
-      toastHub.notifyLevelUp(partner.nickname, displayName, level, now);
+      toastHub.notifyLevelUp(identity.nickname, displayName, level, now);
     }
 
-    await this._maybeOfferEvolution(partner.nickname, result.toLevel);
+    if (grant.isPartner) {
+      await this._maybeOfferEvolution(identity.nickname, result.toLevel);
+    }
+
+    return true;
   }
 
   /**

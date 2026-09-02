@@ -250,6 +250,49 @@ body {
 	color: var(--tc-accent);
 }
 
+/* ----------------------------- exp share toggle -------------------------- */
+
+.pd-exp-share {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	margin-bottom: 6px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid var(--tc-rule);
+}
+
+/* Same game-menu treatment as .pd-action, plus an ON state distinguishable
+   without relying on colour alone (the label itself flips ON/OFF). */
+.pd-toggle {
+	flex: 0 0 auto;
+	padding: 2px 8px;
+	border: 1px solid var(--tc-edge-light);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink-dim);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.pd-toggle:hover {
+	border-color: var(--tc-accent);
+}
+
+.pd-toggle:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.pd-toggle-on {
+	background: var(--tc-accent);
+	border-color: var(--tc-accent);
+	color: #21160a;
+}
+
 /* ------------------------------- team list ------------------------------ */
 
 .pd-list {
@@ -441,13 +484,15 @@ body {
 @media (forced-colors: active) {
 	.pd-card,
 	.pd-item-partner .pd-item-button,
-	.pd-action {
+	.pd-action,
+	.pd-toggle {
 		border-color: CanvasText;
 	}
 
 	.pd-xp-fill,
 	.pd-mini-fill,
-	.pd-badge {
+	.pd-badge,
+	.pd-toggle-on {
 		background: Highlight;
 	}
 }

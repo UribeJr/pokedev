@@ -196,6 +196,7 @@ function renderPokemon(model) {
     const labels = model.labels;
     const host = root();
     host.textContent = '';
+    host.appendChild(renderExpShareToggle(model.expShareEnabled, labels));
     if (model.pokemon.length === 0) {
         host.appendChild(el('p', 'pd-empty', labels.noPokemonLabel));
         return;
@@ -207,6 +208,26 @@ function renderPokemon(model) {
         list.appendChild(renderPokemonRow(entry, labels));
     }
     host.appendChild(list);
+}
+/**
+ * A compact, game-style toggle: "EXP SHARE   ON" / "EXP SHARE   OFF".
+ *
+ * Deliberately not a modern switch control - it would clash with the retro
+ * card styling everywhere else in this sidebar. `pd-toggle-on`/`-off` give it
+ * a visually distinct state without relying on colour alone.
+ */
+function renderExpShareToggle(enabled, labels) {
+    const row = el('div', 'pd-exp-share');
+    row.appendChild(el('span', 'pd-label', labels.expShareLabel));
+    const stateLabel = enabled ? labels.expShareOnLabel : labels.expShareOffLabel;
+    const button = el('button', enabled ? 'pd-toggle pd-toggle-on' : 'pd-toggle pd-toggle-off', stateLabel);
+    button.type = 'button';
+    button.title = labels.expShareTooltip;
+    button.setAttribute('aria-label', `${labels.expShareLabel}: ${stateLabel}. ${labels.expShareTooltip}`);
+    button.setAttribute('aria-pressed', String(enabled));
+    button.addEventListener('click', () => post({ command: 'explorer/toggleExpShare' }));
+    row.appendChild(button);
+    return row;
 }
 function renderPokemonRow(entry, labels) {
     const item = el('li', entry.isPartner ? 'pd-item pd-item-partner' : 'pd-item');

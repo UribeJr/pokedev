@@ -406,6 +406,11 @@
                         "default": true,
                         "description": "Earn Trainer and partner Pokémon experience from coding activity: saving changed files, active coding time, Git commits and successful build/test tasks."
                     },
+                    "pokedev.progression.expShareEnabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Share Pokémon experience with the rest of your active party. The partner always keeps its full award; every other party Pokémon additionally gains 50% of it. Off by default so existing progression is unaffected."
+                    },
                     "pokedev.progression.mode": {
                         "type": "string",
                         "enum": [

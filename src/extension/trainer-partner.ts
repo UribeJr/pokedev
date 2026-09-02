@@ -128,6 +128,34 @@ export async function setPartnerNickname(
 }
 
 /**
+ * Whether Pokemon XP awards are additionally shared with the rest of the
+ * active party, on top of the partner's normal full award.
+ *
+ * A VS Code setting rather than a `globalState` field: it is a gameplay
+ * preference exactly like `progression.mode` or `reactions.enabled`, not
+ * progression data, and existing settings already default absent users to
+ * today's behaviour for free - no migration needed. Defaults to `false` so a
+ * save written before this feature existed loads with EXACTLY today's
+ * Partner-only behaviour.
+ */
+export function isExpShareEnabled(): boolean {
+  return vscode.workspace
+    .getConfiguration('pokedev')
+    .get<boolean>('progression.expShareEnabled', false);
+}
+
+/** Persists the user's EXP Share choice. Takes effect on the next XP award. */
+export async function setExpShareEnabled(enabled: boolean): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('pokedev')
+    .update(
+      'progression.expShareEnabled',
+      enabled,
+      vscode.ConfigurationTarget.Global,
+    );
+}
+
+/**
  * Resolves a "partner Pokémon" to show on the Trainer Card.
  *
  * This reads the persisted collection straight out of `globalState` rather than

@@ -45,6 +45,7 @@ import {
   POKEMON_EXPLORER_VIEW_TYPE,
   TRAINER_EXPLORER_VIEW_TYPE,
 } from '../../trainer/explorer-types';
+import { distributePokemonXp } from '../../progression/xp-distribution';
 import {
   addTrainerXp,
   createDefaultTrainerProfile,
@@ -1050,5 +1051,258 @@ suite('Explorer view identity', () => {
     for (const id of [TRAINER_EXPLORER_VIEW_TYPE, POKEMON_EXPLORER_VIEW_TYPE]) {
       assert.notStrictEqual(id, 'pokedevView');
     }
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * EXP Share distribution
+ * ------------------------------------------------------------------ */
+
+suite('EXP Share distribution', () => {
+  const party = [
+    { nickname: 'Squirtle' },
+    { nickname: 'Charmander' },
+    { nickname: 'Mankey' },
+    { nickname: 'Cacturne' },
+  ];
+
+  test('OFF: the partner gets the full award', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party,
+      expShareEnabled: false,
+    });
+    assert.deepStrictEqual(grants, [
+      { nickname: 'Squirtle', amount: 25, isPartner: true },
+    ]);
+  });
+
+  test('OFF: nobody else is granted anything', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party,
+      expShareEnabled: false,
+    });
+    assert.strictEqual(grants.length, 1);
+  });
+
+  test('ON: the partner still gets the full award, not a reduced share', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party,
+      expShareEnabled: true,
+    });
+    const partnerGrant = grants.find((g) => g.isPartner);
+    assert.deepStrictEqual(partnerGrant, {
+      nickname: 'Squirtle',
+      amount: 25,
+      isPartner: true,
+    });
+  });
+
+  test('ON: every other active party member gets half, floored', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party,
+      expShareEnabled: true,
+    });
+    const shared = grants.filter((g) => !g.isPartner);
+    assert.deepStrictEqual(shared.map((g) => g.nickname).sort(), [
+      'Cacturne',
+      'Charmander',
+      'Mankey',
+    ]);
+    for (const grant of shared) {
+      assert.strictEqual(grant.amount, 12);
+    }
+  });
+
+  test('the rounding table from the spec: 25/10/8/5/2/1 -> 12/5/4/2/1/0', () => {
+    const table: [number, number][] = [
+      [25, 12],
+      [10, 5],
+      [8, 4],
+      [5, 2],
+      [2, 1],
+      [1, 0],
+    ];
+    for (const [baseXp, expectedShared] of table) {
+      const grants = distributePokemonXp({
+        baseXp,
+        partnerNickname: 'Squirtle',
+        party,
+        expShareEnabled: true,
+      });
+      const shared = grants.filter((g) => !g.isPartner);
+      if (expectedShared > 0) {
+        assert.ok(shared.length > 0, `baseXp ${baseXp}`);
+        for (const grant of shared) {
+          assert.strictEqual(grant.amount, expectedShared, `baseXp ${baseXp}`);
+        }
+      } else {
+        // No artificial minimum: a shared amount of 0 grants nothing at all.
+        assert.strictEqual(shared.length, 0, `baseXp ${baseXp}`);
+      }
+    }
+  });
+
+  test('the partner is never granted twice, even though party includes them', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party,
+      expShareEnabled: true,
+    });
+    const squirtleGrants = grants.filter((g) => g.nickname === 'Squirtle');
+    assert.strictEqual(squirtleGrants.length, 1);
+    assert.strictEqual(squirtleGrants[0].amount, 25);
+  });
+
+  test('duplicate species are distinguished by instance id (nickname)', () => {
+    const twoSquirtles = [{ nickname: 'Squirtle' }, { nickname: 'Squirtle 2' }];
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party: twoSquirtles,
+      expShareEnabled: true,
+    });
+    assert.deepStrictEqual(grants.map((g) => g.nickname).sort(), [
+      'Squirtle',
+      'Squirtle 2',
+    ]);
+  });
+
+  test('one Pokemon: the partner alone gets 100%, no shared xp is generated', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party: [{ nickname: 'Squirtle' }],
+      expShareEnabled: true,
+    });
+    assert.deepStrictEqual(grants, [
+      { nickname: 'Squirtle', amount: 25, isPartner: true },
+    ]);
+  });
+
+  test('two Pokemon: partner 100%, the other 50%', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party: [{ nickname: 'Squirtle' }, { nickname: 'Charmander' }],
+      expShareEnabled: true,
+    });
+    assert.deepStrictEqual(grants, [
+      { nickname: 'Squirtle', amount: 25, isPartner: true },
+      { nickname: 'Charmander', amount: 12, isPartner: false },
+    ]);
+  });
+
+  test('only the active party is eligible - a member not in the list earns nothing', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Squirtle',
+      party: [{ nickname: 'Squirtle' }, { nickname: 'Charmander' }],
+      expShareEnabled: true,
+    });
+    assert.strictEqual(
+      grants.some((g) => g.nickname === 'Cacturne'),
+      false,
+    );
+  });
+
+  test('no partner: nothing is distributed', () => {
+    const grants = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: undefined,
+      party,
+      expShareEnabled: true,
+    });
+    assert.deepStrictEqual(grants, []);
+  });
+
+  test('a non-positive or non-finite base award distributes nothing', () => {
+    for (const baseXp of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const grants = distributePokemonXp({
+        baseXp,
+        partnerNickname: 'Squirtle',
+        party,
+        expShareEnabled: true,
+      });
+      assert.deepStrictEqual(grants, []);
+    }
+  });
+
+  test('switching partner: the new partner gets 100%, the old one becomes a 50% party member', () => {
+    const asCharmander = distributePokemonXp({
+      baseXp: 25,
+      partnerNickname: 'Charmander',
+      party,
+      expShareEnabled: true,
+    });
+    assert.deepStrictEqual(
+      asCharmander.find((g) => g.nickname === 'Charmander'),
+      { nickname: 'Charmander', amount: 25, isPartner: true },
+    );
+    assert.deepStrictEqual(
+      asCharmander.find((g) => g.nickname === 'Squirtle'),
+      { nickname: 'Squirtle', amount: 12, isPartner: false },
+    );
+  });
+});
+
+suite('EXP Share applied through the level system', () => {
+  // Exercises the same `addPokemonXp` every partner grant already used,
+  // confirming shared XP needs no special-cased level-up logic of its own.
+
+  test('a shared grant can level up a Pokemon normally', () => {
+    const before = createDefaultPokemonProgress('mankey', NOW); // level 5, 0 current xp
+    const { progress, result } = addPokemonXp(before, 12);
+    assert.strictEqual(result.levelledUp, false);
+    assert.strictEqual(progress.currentXp, 12);
+
+    // 75 xp needed for level 5 -> 6; six shared grants of 12 crosses it.
+    let running = before;
+    let levelledUp = false;
+    for (let i = 0; i < 7; i++) {
+      const step = addPokemonXp(running, 12);
+      running = step.progress;
+      if (step.result.levelledUp) {
+        levelledUp = true;
+      }
+    }
+    assert.strictEqual(levelledUp, true);
+    assert.strictEqual(running.level, 6);
+  });
+
+  test('several party members can each level up from the same base event independently', () => {
+    // Mankey is one grant away from levelling; Cacturne starts fresh and is
+    // not. Applying the same shared amount to both must not let one outcome
+    // affect the other.
+    const mankeyBefore = {
+      ...createDefaultPokemonProgress('mankey', NOW),
+      totalXp: getCumulativePokemonXp(5) + 70,
+      level: 5,
+      currentXp: 70,
+    };
+    const cacturneBefore = createDefaultPokemonProgress('cacturne', NOW);
+
+    const mankeyAfter = addPokemonXp(mankeyBefore, 12);
+    const cacturneAfter = addPokemonXp(cacturneBefore, 12);
+
+    assert.strictEqual(mankeyAfter.result.levelledUp, true);
+    assert.strictEqual(mankeyAfter.result.toLevel, 6);
+    assert.strictEqual(cacturneAfter.result.levelledUp, false);
+    assert.strictEqual(cacturneAfter.progress.level, 5);
+  });
+
+  test('the level cap is respected for a shared grant exactly as for the partner', () => {
+    const before = createDefaultPokemonProgress('cacturne', NOW);
+    const { progress } = addPokemonXp(before, Number.MAX_SAFE_INTEGER);
+    assert.strictEqual(progress.level, MAX_POKEMON_LEVEL);
+    assert.strictEqual(progress.currentXp, 0);
   });
 });
