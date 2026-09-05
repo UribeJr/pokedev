@@ -12,15 +12,22 @@ import * as vscode from 'vscode';
 import {
   getAvailableEvolution,
   getEvolutionLevel,
+  hasFriendshipEvolutionRule,
 } from '../progression/evolution-service';
 import {
+  friendshipXpEventAmount,
+  FRIENDSHIP_GAIN_LEVEL_UP,
+} from '../progression/friendship-rules';
+import {
   addPokemonXp,
+  applyFriendshipGrant,
   getPokemonXpForNextLevel,
 } from '../progression/pokemon-progression';
 import {
   LevelUpResult,
   ProgressionEvent,
 } from '../progression/progression-types';
+import { getTimeOfDay } from '../progression/time-of-day';
 import { appendToLog, XpLedger } from '../progression/xp-ledger';
 import { XP_RULES } from '../progression/xp-rules';
 import {
@@ -29,6 +36,7 @@ import {
 } from '../progression/xp-distribution';
 import { addTrainerXp } from '../trainer/trainer-profile';
 import { promptToEvolvePartner } from './evolution-flow';
+import { friendshipTierDisplayName } from './friendship-labels';
 import {
   readPokemonProgress,
   readProgressionLog,
@@ -392,6 +400,16 @@ export class ProgressionService {
       levelUp: result.levelledUp ? result : undefined,
     };
 
+    // Friendship only ever grows for the partner - see the module doc on
+    // `PokemonProgress.friendship`. Shared EXP-Share recipients earn XP but
+    // never Friendship; this is the one place that distinction is made.
+    if (grant.isPartner) {
+      const friendshipAmount =
+        friendshipXpEventAmount(event.type) +
+        (result.levelledUp ? FRIENDSHIP_GAIN_LEVEL_UP : 0);
+      await this._grantFriendship(identity, friendshipAmount, now);
+    }
+
     if (!result.levelledUp) {
       return outcome;
     }
@@ -412,6 +430,77 @@ export class ProgressionService {
     }
 
     return outcome;
+  }
+
+  /**
+   * Grants Friendship to one Pokemon's progression record, raises the
+   * tier-up toast/reaction, and - only when this is the current partner -
+   * checks whether a friendship evolution just became available.
+   *
+   * The one place `friendship` is ever written. Both the automatic per-event
+   * gains above and every explicit caller (Daily Challenges, the partnered
+   * coding-time bonus, the debug command) funnel through this, so the
+   * tier-up feedback and the evolution check can never be duplicated or
+   * forgotten by a new caller.
+   */
+  private async _grantFriendship(
+    identity: PartnerIdentity,
+    amount: number,
+    now: number,
+  ): Promise<void> {
+    if (amount <= 0) {
+      return;
+    }
+    const before = readPokemonProgress(
+      this._context,
+      identity.nickname,
+      identity.species,
+      now,
+    );
+    const { progress, result } = applyFriendshipGrant(before, amount);
+    if (progress.friendship === before.friendship) {
+      return;
+    }
+
+    await writePokemonProgress(this._context, identity.nickname, {
+      ...progress,
+      species: identity.species,
+    });
+    this._notifyCard();
+
+    if (result.tierUp) {
+      const displayName = getPokemonToastDisplayName(
+        identity.nickname,
+        identity.species,
+      );
+      toastHub.notifySystem(
+        identity.nickname,
+        vscode.l10n.t(
+          '{0} is now {1}!',
+          displayName,
+          friendshipTierDisplayName(result.tierAfter),
+        ),
+        now,
+      );
+      reactionHub.notifyFriendshipUp(identity.nickname);
+    }
+
+    await this._maybeOfferFriendshipEvolution(identity.nickname);
+  }
+
+  /**
+   * Grants Friendship to the CURRENT partner outside the normal XP-grant path
+   * - Daily Challenge completion, the partnered coding-time bonus, and the
+   * debug command are the current callers. Returns whether there was a
+   * partner to grant to, so callers can warn the user when there is none.
+   */
+  public async grantFriendshipToPartner(amount: number): Promise<boolean> {
+    const partner = resolvePartnerIdentity(this._context);
+    if (!partner) {
+      return false;
+    }
+    await this._grantFriendship(partner, amount, Date.now());
+    return true;
   }
 
   /**
@@ -498,6 +587,56 @@ export class ProgressionService {
       Date.now(),
     );
     if (progress.declinedEvolutionAtLevel === level) {
+      return;
+    }
+
+    await promptToEvolvePartner(this._context, this);
+  }
+
+  /**
+   * Offers evolution when a Friendship gain has made one possible.
+   *
+   * Mirrors `_maybeOfferEvolution` exactly, but checked on every Friendship
+   * grant to the partner rather than on a level-up - Friendship evolutions
+   * are never gated by level at all, so a level-up is not the right moment to
+   * look for them. `hasFriendshipEvolutionRule` is the same kind of cheap
+   * early-exit `getEvolutionLevel` gives the level-up path: the vast majority
+   * of species have no friendship rule and skip the rest of this entirely.
+   *
+   * Reuses `declinedEvolutionAtLevel` for the "not now" cooldown even though
+   * the gating condition here is Friendship, not level: `addPokemonXp`
+   * already clears that field on every level gain, so a decline naturally
+   * stops suppressing the offer once the partner next levels up from any XP
+   * source - a reasonable "ask again later" without a second decline field.
+   */
+  private async _maybeOfferFriendshipEvolution(
+    nickname: string,
+  ): Promise<void> {
+    const partner = resolvePartnerIdentity(this._context);
+    if (!partner || partner.nickname !== nickname) {
+      return;
+    }
+    if (!hasFriendshipEvolutionRule(partner.species)) {
+      return;
+    }
+
+    const now = Date.now();
+    const progress = readPokemonProgress(
+      this._context,
+      partner.nickname,
+      partner.species,
+      now,
+    );
+    const availability = getAvailableEvolution(
+      partner.species,
+      progress.level,
+      partner.shiny,
+      { friendship: progress.friendship, timeOfDay: getTimeOfDay() },
+    );
+    if (!availability.available) {
+      return;
+    }
+    if (progress.declinedEvolutionAtLevel === progress.level) {
       return;
     }
 

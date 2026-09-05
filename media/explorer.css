@@ -387,6 +387,15 @@ body {
 	color: var(--vscode-descriptionForeground);
 }
 
+.pd-hearts {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: 10px;
+	letter-spacing: 1px;
+	color: #ff5f7e;
+	white-space: nowrap;
+}
+
 .pd-badge {
 	flex: 0 0 auto;
 	padding: 1px 4px;
@@ -548,7 +557,8 @@ body {
 		height: 30px;
 	}
 
-	.pd-item-sub {
+	.pd-item-sub,
+	.pd-hearts {
 		display: none;
 	}
 

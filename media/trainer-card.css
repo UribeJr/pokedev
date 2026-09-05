@@ -995,6 +995,13 @@ button.tc-party-slot {
 	color: var(--tc-ink-dim);
 }
 
+.tc-partner-hearts {
+	display: block;
+	font-size: 10px;
+	letter-spacing: 1.5px;
+	color: #ff5f7e;
+}
+
 .tc-partner-xp {
 	display: flex;
 	align-items: center;

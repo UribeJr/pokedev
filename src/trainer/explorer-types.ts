@@ -12,6 +12,7 @@
  */
 
 import { DailyChallengesViewModel } from '../challenges/daily-challenges-view-types';
+import { FriendshipTierId } from '../progression/friendship-rules';
 
 /** Explorer view ids, also used as the `when` clauses' view names. */
 export const TRAINER_EXPLORER_VIEW_TYPE = 'pokedev.trainerView';
@@ -34,6 +35,8 @@ export interface ExplorerPartnerView {
   currentXp: number;
   /** 0 at the level cap, where there is nothing left to fill toward. */
   xpForNextLevel: number;
+  /** 0-255, see `progression/friendship-rules.ts`. */
+  friendship: number;
 }
 
 export interface ExplorerTrainerViewModel {
@@ -82,6 +85,8 @@ export interface ExplorerPokemonEntry {
   currentXp: number;
   xpForNextLevel: number;
   isPartner: boolean;
+  /** 0-255, see `progression/friendship-rules.ts`. */
+  friendship: number;
 }
 
 export interface ExplorerPokemonViewModel {
@@ -127,6 +132,11 @@ export interface ExplorerLabels {
   expShareOffLabel: string;
   /** Tooltip on the EXP Share toggle. */
   expShareTooltip: string;
+  /** Localized Friendship tier names, keyed by tier id - used as the
+   * accessible label/tooltip on the heart meter. Shares its five strings
+   * with the in-world tier-up toast (`friendshipTierDisplayName` in
+   * `progression-service.ts`) so the wording never drifts between them. */
+  friendshipTierLabels: Record<FriendshipTierId, string>;
 }
 
 /* ------------------------------------------------------------------ *

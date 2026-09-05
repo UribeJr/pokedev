@@ -13,6 +13,11 @@ import { DevBadge } from '../../trainer/dev-badge-parse';
 import { ExplorerPokemonEntry } from '../../trainer/explorer-types';
 import { resolveDisplayName } from '../../trainer/pokemon-display-name';
 import {
+  FriendshipTierId,
+  getFriendshipHearts,
+  getFriendshipTier,
+} from '../../progression/friendship-rules';
+import {
   TrainerGeneration,
   TRAINER_GENERATIONS,
 } from '../../trainer/trainer-sprite-catalog';
@@ -168,6 +173,31 @@ function padStart(value: string, length: number, pad: string): string {
     out = pad + out;
   }
   return out;
+}
+
+/**
+ * A compact 5-heart Friendship meter: filled hearts for the current tier,
+ * hollow for the rest. Plain text glyphs (not emoji artwork), matching
+ * `heartMeter` in `panel/explorer/main.ts` - duplicated rather than shared
+ * because each compact surface is its own separate webpack bundle (see
+ * `xpBar` above, likewise defined twice); only the pure tier math
+ * (`friendship-rules.ts`) is actually shared.
+ */
+function heartMeter(
+  friendship: number,
+  tierLabels: Record<FriendshipTierId, string>,
+  className: string,
+): HTMLElement {
+  const hearts = getFriendshipHearts(friendship);
+  const tier = getFriendshipTier(friendship);
+  let glyphs = '';
+  for (let i = 0; i < 5; i++) {
+    glyphs += i < hearts ? '♥' : '♡';
+  }
+  const meter = el('span', className, glyphs);
+  meter.title = tierLabels[tier];
+  meter.setAttribute('aria-label', tierLabels[tier]);
+  return meter;
 }
 
 /** ISO timestamp -> "Jan 2011". */
@@ -605,6 +635,14 @@ function renderPartnerBox(model: TrainerCardViewModel): HTMLElement {
       'span',
       'tc-partner-level',
       `${labels.partnerLevelLabel} ${padStart(String(partner.level), 2, '0')}`,
+    ),
+  );
+
+  meta.appendChild(
+    heartMeter(
+      partner.friendship,
+      labels.friendshipTierLabels,
+      'tc-partner-hearts',
     ),
   );
 

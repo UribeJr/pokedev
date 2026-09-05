@@ -16,7 +16,8 @@ export type PokemonReactionType =
   | 'notice'
   | 'celebrate'
   | 'confused'
-  | 'level-up';
+  | 'level-up'
+  | 'friendship-up';
 
 /** What triggered the reaction. */
 export type PokemonReactionSource =
@@ -24,7 +25,8 @@ export type PokemonReactionSource =
   | 'git-commit'
   | 'task-failure'
   | 'pokemon-level-up'
-  | 'dev-action';
+  | 'dev-action'
+  | 'friendship-tier-up';
 
 export interface PokemonReactionEvent {
   type: PokemonReactionType;

@@ -13,10 +13,11 @@ import {
   shouldAwardBatch,
 } from '../../progression/activity-rules';
 import { EVOLUTION_RULES } from '../../progression/evolution-data';
+import { MAX_FRIENDSHIP } from '../../progression/friendship-rules';
 import {
   getAvailableEvolution,
   getEvolutionLevel,
-  getEvolutionRule,
+  getEvolutionRules,
 } from '../../progression/evolution-service';
 import {
   addPokemonXp,
@@ -879,11 +880,40 @@ suite('Evolution data integrity', () => {
     assert.deepStrictEqual(missing, []);
   });
 
-  test('no species has two conflicting rules', () => {
-    const seen = new Set<string>();
+  test('a species with more than one rule only ever splits by time of day', () => {
+    // Eevee (Espeon by day / Umbreon by night) is the one legitimate case: two
+    // rules for the same species are safe ONLY when no context could ever
+    // satisfy both at once - `getTimeOfDay()` is always exactly one of
+    // 'day'/'night', never both, so a same-species pair here must be
+    // `friendship-time` with different `time` values. Anything else (two
+    // plain `level` rules, or a `friendship` rule alongside another) would be
+    // genuinely ambiguous: `getAvailableEvolution` resolves ties by table
+    // order, not by asking, which is exactly the "do not pick randomly"
+    // requirement this guards.
+    const bySpecies = new Map<string, (typeof EVOLUTION_RULES)[number][]>();
     for (const rule of EVOLUTION_RULES) {
-      assert.strictEqual(seen.has(rule.from), false, rule.from);
-      seen.add(rule.from);
+      const existing = bySpecies.get(rule.from);
+      if (existing) {
+        existing.push(rule);
+      } else {
+        bySpecies.set(rule.from, [rule]);
+      }
+    }
+    for (const [species, rules] of bySpecies) {
+      if (rules.length === 1) {
+        continue;
+      }
+      assert.strictEqual(rules.length, 2, species);
+      const times = rules.map((rule) =>
+        rule.condition.type === 'friendship-time'
+          ? rule.condition.time
+          : undefined,
+      );
+      assert.ok(
+        times.every((time) => time !== undefined),
+        `${species}: every rule in a multi-rule species must be friendship-time`,
+      );
+      assert.notStrictEqual(times[0], times[1], species);
     }
   });
 
@@ -893,11 +923,30 @@ suite('Evolution data integrity', () => {
     }
   });
 
-  test('every threshold is a sane level', () => {
+  test('every level threshold is a sane level', () => {
     for (const rule of EVOLUTION_RULES) {
+      if (rule.condition.type !== 'level') {
+        continue;
+      }
       assert.ok(
         rule.condition.level >= 2 && rule.condition.level <= MAX_POKEMON_LEVEL,
         `${rule.from} at ${rule.condition.level}`,
+      );
+    }
+  });
+
+  test('every friendship threshold is a sane, high friendship value', () => {
+    for (const rule of EVOLUTION_RULES) {
+      if (
+        rule.condition.type !== 'friendship' &&
+        rule.condition.type !== 'friendship-time'
+      ) {
+        continue;
+      }
+      assert.ok(
+        rule.condition.minFriendship > 0 &&
+          rule.condition.minFriendship <= MAX_FRIENDSHIP,
+        `${rule.from} at ${rule.condition.minFriendship}`,
       );
     }
   });
@@ -913,30 +962,78 @@ suite('Evolution data integrity', () => {
       ['gastly', 'haunter', 25],
     ];
     for (const [from, to, level] of expected) {
-      const rule = getEvolutionRule(from);
+      const rules = getEvolutionRules(from);
+      const rule = rules.find(
+        (candidate) => candidate.condition.type === 'level',
+      );
       assert.ok(rule, from);
-      assert.strictEqual(rule.to, to);
-      assert.strictEqual(rule.condition.level, level);
+      assert.strictEqual(rule?.to, to);
+      assert.strictEqual(
+        rule?.condition.type === 'level' ? rule.condition.level : undefined,
+        level,
+      );
     }
   });
 
   test('conditions this milestone does not model are left out', () => {
-    // Stone, trade and friendship evolutions must not have been guessed at.
+    // Stone, trade, known-move, beauty and stat/random splits must not have
+    // been guessed at. Friendship-based species (golbat, eevee, togepi, ...)
+    // are deliberately NOT in this list any more - this milestone adds them.
     for (const from of [
       'pikachu', // thunder stone
       'kadabra', // trade
       'machoke', // trade
       'graveler', // trade
       'haunter', // trade
-      'golbat', // friendship
-      'eevee', // stone / friendship / location
-      'togepi', // friendship
       'feebas', // beauty
       'tyrogue', // stat-dependent split
       'wurmple', // random split
     ]) {
-      assert.strictEqual(getEvolutionRule(from), undefined, from);
+      assert.strictEqual(getEvolutionRules(from).length, 0, from);
     }
+  });
+
+  test('the friendship-based species this milestone adds are present', () => {
+    const friendOnly: [string, string][] = [
+      ['golbat', 'crobat'],
+      ['chansey', 'blissey'],
+      ['pichu', 'pikachu'],
+      ['cleffa', 'clefairy'],
+      ['igglybuff', 'jigglypuff'],
+      ['togepi', 'togetic'],
+      ['azurill', 'marill'],
+      ['buneary', 'lopunny'],
+    ];
+    for (const [from, to] of friendOnly) {
+      const rules = getEvolutionRules(from);
+      assert.strictEqual(rules.length, 1, from);
+      assert.strictEqual(rules[0].to, to);
+      assert.strictEqual(rules[0].condition.type, 'friendship');
+    }
+
+    const friendTime: [string, string, 'day' | 'night'][] = [
+      ['budew', 'roselia', 'day'],
+      ['chingling', 'chimecho', 'night'],
+      ['riolu', 'lucario', 'day'],
+    ];
+    for (const [from, to, time] of friendTime) {
+      const rules = getEvolutionRules(from);
+      assert.strictEqual(rules.length, 1, from);
+      assert.strictEqual(rules[0].to, to);
+      assert.strictEqual(rules[0].condition.type, 'friendship-time');
+      assert.strictEqual(
+        rules[0].condition.type === 'friendship-time'
+          ? rules[0].condition.time
+          : undefined,
+        time,
+      );
+    }
+
+    // Eevee is the one species with two mutually exclusive rules.
+    const eeveeRules = getEvolutionRules('eevee');
+    assert.strictEqual(eeveeRules.length, 2);
+    assert.ok(eeveeRules.some((rule) => rule.to === 'espeon'));
+    assert.ok(eeveeRules.some((rule) => rule.to === 'umbreon'));
   });
 });
 
@@ -972,22 +1069,50 @@ suite('Evolution availability', () => {
     assert.strictEqual(result.available, false);
   });
 
+  /** The level/friendship/time context that satisfies exactly `rule`'s own
+   * condition, so these shiny tests exercise every rule type uniformly. */
+  function contextSatisfying(rule: (typeof EVOLUTION_RULES)[number]): {
+    level: number;
+    friendship: number;
+    timeOfDay: 'day' | 'night';
+  } {
+    switch (rule.condition.type) {
+      case 'level':
+        return { level: rule.condition.level, friendship: 0, timeOfDay: 'day' };
+      case 'friendship':
+        return {
+          level: MAX_POKEMON_LEVEL,
+          friendship: rule.condition.minFriendship,
+          timeOfDay: 'day',
+        };
+      case 'friendship-time':
+        return {
+          level: MAX_POKEMON_LEVEL,
+          friendship: rule.condition.minFriendship,
+          timeOfDay: rule.condition.time,
+        };
+    }
+  }
+
   test('a shiny evolves only when the evolved form has a shiny sprite', () => {
     // Every Gen 1-4 target ships one, so shininess must never block these.
     for (const rule of EVOLUTION_RULES) {
       const target = POKEMON_DATA[rule.to];
+      const context = contextSatisfying(rule);
       if (target.possibleColors.indexOf(PokemonColor.shiny) === -1) {
         const blocked = getAvailableEvolution(
           rule.from,
-          rule.condition.level,
+          context.level,
           true,
+          context,
         );
         assert.strictEqual(blocked.reason, 'shiny-unavailable', rule.from);
       } else {
         const allowed = getAvailableEvolution(
           rule.from,
-          rule.condition.level,
+          context.level,
           true,
+          context,
         );
         assert.strictEqual(allowed.available, true, rule.from);
       }
@@ -998,10 +1123,12 @@ suite('Evolution availability', () => {
     // Whenever a shiny is refused, the reason must say so explicitly rather
     // than the evolution quietly proceeding without shininess.
     for (const rule of EVOLUTION_RULES) {
+      const context = contextSatisfying(rule);
       const result = getAvailableEvolution(
         rule.from,
-        rule.condition.level,
+        context.level,
         true,
+        context,
       );
       if (!result.available) {
         assert.strictEqual(result.reason, 'shiny-unavailable', rule.from);

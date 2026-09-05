@@ -209,5 +209,6 @@ export function resolvePartnerPokemon(
       progress.level >= MAX_POKEMON_LEVEL
         ? 0
         : getPokemonXpForNextLevel(progress.level),
+    friendship: progress.friendship,
   };
 }

@@ -8,6 +8,12 @@
  *
  * Pure: no `vscode`, no DOM.
  */
+import {
+  addFriendship,
+  clampFriendship,
+  DEFAULT_POKEMON_FRIENDSHIP,
+  FriendshipGrantResult,
+} from './friendship-rules';
 import { LevelUpResult, PokemonProgress } from './progression-types';
 
 /**
@@ -116,6 +122,7 @@ export function createDefaultPokemonProgress(
     level: startLevel,
     currentXp: 0,
     createdAt: now,
+    friendship: DEFAULT_POKEMON_FRIENDSHIP,
   };
 }
 
@@ -161,6 +168,14 @@ export function normalizePokemonProgress(
         }
       : {}),
     createdAt: clampInt(raw['createdAt'], 1, Number.MAX_SAFE_INTEGER, now),
+    // Every Pokemon saved before Friendship existed simply has no field here -
+    // this is that migration, applied on every read rather than as a
+    // one-time pass, so it is safe no matter which release last wrote this
+    // record. `isFiniteNumber` rejects both "missing" and any hand-edited
+    // non-number, both of which fall back to the same safe default.
+    friendship: isFiniteNumber(raw['friendship'])
+      ? clampFriendship(raw['friendship'])
+      : DEFAULT_POKEMON_FRIENDSHIP,
   };
 }
 
@@ -214,6 +229,30 @@ export function addPokemonXp(
       fromLevel: progress.level,
       toLevel: level,
     },
+  };
+}
+
+/**
+ * Grants Friendship to a Pokemon's progression record, clamped to the valid
+ * range. Pure: returns a new record plus what happened, exactly mirroring
+ * `addPokemonXp`'s shape.
+ *
+ * Deliberately separate from `addPokemonXp`: Friendship never affects
+ * `totalXp`/`level`, and levelling never affects Friendship directly (a
+ * level-up's own Friendship bonus is a distinct, explicit grant - see
+ * `ProgressionService`).
+ */
+export function applyFriendshipGrant(
+  progress: PokemonProgress,
+  amount: number,
+): { progress: PokemonProgress; result: FriendshipGrantResult } {
+  const result = addFriendship(progress.friendship, amount);
+  if (result.value === progress.friendship) {
+    return { progress, result };
+  }
+  return {
+    progress: { ...progress, friendship: result.value },
+    result,
   };
 }
 

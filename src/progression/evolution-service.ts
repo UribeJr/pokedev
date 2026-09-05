@@ -16,6 +16,7 @@ import {
   EvolutionCondition,
   EvolutionRule,
 } from './evolution-data';
+import { TimeOfDay } from './time-of-day';
 
 /**
  * Whether a rule's condition is one stale-save reconciliation is allowed to
@@ -38,6 +39,8 @@ export function isReconcilableEvolutionCondition(
 export type EvolutionBlockedReason =
   | 'no-rule'
   | 'level-too-low'
+  | 'friendship-too-low'
+  | 'wrong-time-of-day'
   | 'species-unavailable'
   | 'shiny-unavailable';
 
@@ -47,40 +50,100 @@ export interface EvolutionAvailability {
   reason?: EvolutionBlockedReason;
   /** Level the species needs to reach, when a rule exists but is unmet. */
   requiredLevel?: number;
-}
-
-/** Index built once at module load: this table is read on every level-up. */
-const RULES_BY_SPECIES: Record<string, EvolutionRule> = {};
-for (const rule of EVOLUTION_RULES) {
-  RULES_BY_SPECIES[rule.from] = rule;
-}
-
-/** The rule for a species, regardless of whether its condition is met. */
-export function getEvolutionRule(
-  species: PokemonType,
-): EvolutionRule | undefined {
-  return RULES_BY_SPECIES[species];
+  /** Friendship the species needs to reach, when a `friendship`/
+   * `friendship-time` rule exists but is unmet. */
+  requiredFriendship?: number;
+  /** The time of day a `friendship-time` rule requires, when friendship is
+   * already sufficient but the clock is not. */
+  requiredTimeOfDay?: TimeOfDay;
 }
 
 /**
- * Whether `species` at `level` can evolve right now.
+ * What the live/host side already knows about the Pokemon that a
+ * `friendship`/`friendship-time` rule needs to evaluate.
+ *
+ * Optional and defaulted to "never eligible" (0 friendship, no time
+ * context) rather than required, so every EXISTING call site that only ever
+ * dealt with `level` rules keeps compiling and behaving identically -
+ * `reconcileEntryEvolutions`'s internal call in particular only ever reaches
+ * a `level` rule (see its own doc comment), so it is correct to never pass
+ * this at all.
+ */
+export interface EvolutionEligibilityContext {
+  friendship?: number;
+  timeOfDay?: TimeOfDay;
+}
+
+/**
+ * Index built once at module load: this table is read on every level-up.
+ *
+ * A species maps to an ARRAY, not a single rule, because one species can
+ * have more than one mutually-exclusive evolution path - Eevee's Espeon/
+ * Umbreon split by time of day is the only current example, but the shape
+ * exists generally so a future stone/trade split does not need another
+ * rework of this file.
+ */
+const RULES_BY_SPECIES: Record<string, EvolutionRule[]> = {};
+for (const rule of EVOLUTION_RULES) {
+  const existing = RULES_BY_SPECIES[rule.from];
+  if (existing) {
+    existing.push(rule);
+  } else {
+    RULES_BY_SPECIES[rule.from] = [rule];
+  }
+}
+
+/** Every rule for a species, regardless of whether any condition is met. */
+export function getEvolutionRules(species: PokemonType): EvolutionRule[] {
+  return RULES_BY_SPECIES[species] ?? [];
+}
+
+/**
+ * Whether `species` at `level`/`friendship`/`timeOfDay` can evolve right now.
  *
  * `shiny` matters: a shiny Pokemon whose evolved form ships no shiny sprite is
  * reported as blocked rather than evolved into a default-coloured one.
  * Silently dropping shininess would destroy something the user is very likely
  * to care about, and the sprite would 404 besides. Every target in the V1
  * table does have a shiny sprite, so this guard is defensive.
+ *
+ * When a species has more than one rule (Eevee), each is checked in turn and
+ * the first one whose condition is actually satisfied wins - so Eevee
+ * resolves to whichever of Espeon/Umbreon matches the CURRENT time of day,
+ * never both, never at random. If none is currently satisfied, the reason
+ * reported is whichever rule was checked last; for every rule in this table
+ * today, sibling rules for one species share the same `minFriendship`, so
+ * the rejection reason is equivalent regardless of which one is reported.
  */
 export function getAvailableEvolution(
   species: PokemonType,
   level: number,
   shiny: boolean,
+  context: EvolutionEligibilityContext = {},
 ): EvolutionAvailability {
-  const rule = RULES_BY_SPECIES[species];
-  if (!rule) {
+  const rules = RULES_BY_SPECIES[species];
+  if (!rules || rules.length === 0) {
     return { available: false, reason: 'no-rule' };
   }
 
+  let lastResult: EvolutionAvailability | undefined;
+  for (const rule of rules) {
+    const result = evaluateRule(rule, level, shiny, context);
+    if (result.available) {
+      return result;
+    }
+    lastResult = result;
+  }
+  // Every rule was checked; `rules.length > 0` guarantees this is defined.
+  return lastResult as EvolutionAvailability;
+}
+
+function evaluateRule(
+  rule: EvolutionRule,
+  level: number,
+  shiny: boolean,
+  context: EvolutionEligibilityContext,
+): EvolutionAvailability {
   const target = POKEMON_DATA[rule.to];
   if (!target) {
     // `PokemonType` collapses to `string`, so a target can type-check and
@@ -104,6 +167,50 @@ export function getAvailableEvolution(
         };
       }
       return { available: true, rule, requiredLevel: rule.condition.level };
+
+    case 'friendship': {
+      const friendship = context.friendship ?? 0;
+      if (friendship < rule.condition.minFriendship) {
+        return {
+          available: false,
+          rule,
+          reason: 'friendship-too-low',
+          requiredFriendship: rule.condition.minFriendship,
+        };
+      }
+      return {
+        available: true,
+        rule,
+        requiredFriendship: rule.condition.minFriendship,
+      };
+    }
+
+    case 'friendship-time': {
+      const friendship = context.friendship ?? 0;
+      if (friendship < rule.condition.minFriendship) {
+        return {
+          available: false,
+          rule,
+          reason: 'friendship-too-low',
+          requiredFriendship: rule.condition.minFriendship,
+        };
+      }
+      if (context.timeOfDay !== rule.condition.time) {
+        return {
+          available: false,
+          rule,
+          reason: 'wrong-time-of-day',
+          requiredFriendship: rule.condition.minFriendship,
+          requiredTimeOfDay: rule.condition.time,
+        };
+      }
+      return {
+        available: true,
+        rule,
+        requiredFriendship: rule.condition.minFriendship,
+        requiredTimeOfDay: rule.condition.time,
+      };
+    }
   }
 }
 
@@ -111,13 +218,32 @@ export function getAvailableEvolution(
  * The level at which `species` would next be able to evolve, if ever.
  *
  * Used to decide whether a level-up has just crossed an evolution threshold.
+ * `undefined` both for a species with no rule at all and for one whose only
+ * rule(s) are friendship-based - a level-up is never the right moment to
+ * check those; see `ProgressionService`'s friendship-driven check instead.
  */
 export function getEvolutionLevel(species: PokemonType): number | undefined {
-  const rule = RULES_BY_SPECIES[species];
-  if (!rule || rule.condition.type !== 'level') {
-    return undefined;
-  }
-  return rule.condition.level;
+  const rules = RULES_BY_SPECIES[species];
+  const levelRule = rules?.find((rule) => rule.condition.type === 'level');
+  return levelRule?.condition.type === 'level'
+    ? levelRule.condition.level
+    : undefined;
+}
+
+/** Whether `species` has at least one friendship-based (with or without a
+ * time-of-day requirement) evolution rule. Lets callers cheaply skip the
+ * friendship-evolution check for the vast majority of species that have
+ * none, mirroring how `getEvolutionLevel` lets the level-up path skip
+ * species with no level rule. */
+export function hasFriendshipEvolutionRule(species: PokemonType): boolean {
+  const rules = RULES_BY_SPECIES[species];
+  return (
+    rules?.some(
+      (rule) =>
+        rule.condition.type === 'friendship' ||
+        rule.condition.type === 'friendship-time',
+    ) ?? false
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -242,8 +368,15 @@ export function reconcileEntryEvolutions(
   let species = entry.species;
 
   for (let i = 0; i < maxSteps; i++) {
-    const rule = RULES_BY_SPECIES[species];
-    if (!rule || !isReconcilableEvolutionCondition(rule.condition)) {
+    // A species with more than one rule (Eevee) never has a reconcilable one -
+    // friendship/friendship-time conditions always fail
+    // `isReconcilableEvolutionCondition` - so finding the first reconcilable
+    // rule here is equivalent to finding THE rule for every species that
+    // actually reaches this point.
+    const rule = RULES_BY_SPECIES[species]?.find((candidate) =>
+      isReconcilableEvolutionCondition(candidate.condition),
+    );
+    if (!rule) {
       break;
     }
     if (

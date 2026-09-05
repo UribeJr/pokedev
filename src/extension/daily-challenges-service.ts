@@ -39,6 +39,7 @@ import {
   DailyChallengeInstance,
   DailyChallengeState,
 } from '../challenges/daily-challenge-types';
+import { FRIENDSHIP_GAIN_DAILY_COMPLETE } from '../progression/friendship-rules';
 import { detectDevActionCapabilities } from './dev-action-capabilities';
 import { GitActivityTracker } from './git-activity';
 import {
@@ -312,6 +313,12 @@ export class DailyChallengesService implements vscode.Disposable {
     for (const challenge of newlyCompleted) {
       this._celebrateCompletion(challenge);
       await this._progression.grantFlatTrainerXp(challenge.rewardTrainerXp);
+      // Friendship, not XP: the current partner at completion time grows
+      // closer regardless of who (if anyone) the challenge itself tracked
+      // progress against - see the module doc on `FRIENDSHIP_GAIN_DAILY_COMPLETE`.
+      await this._progression.grantFriendshipToPartner(
+        FRIENDSHIP_GAIN_DAILY_COMPLETE,
+      );
     }
   }
 

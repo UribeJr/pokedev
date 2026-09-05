@@ -23,6 +23,11 @@ import {
 } from '../../trainer/explorer-types';
 import { hasDistinctNickname } from '../../trainer/pokemon-display-name';
 import { DEV_BADGE_SLOTS } from '../../trainer/trainer-types';
+import {
+  FriendshipTierId,
+  getFriendshipHearts,
+  getFriendshipTier,
+} from '../../progression/friendship-rules';
 
 interface VscodeApi {
   postMessage(message: ExplorerHostboundMessage): void;
@@ -114,6 +119,29 @@ function xpBar(
   track.setAttribute('aria-label', ariaLabel);
   track.appendChild(fill);
   return track;
+}
+
+/**
+ * A compact 5-heart Friendship meter: filled hearts for the current tier,
+ * hollow for the rest. Plain text glyphs (not emoji artwork) styled via CSS,
+ * matching the rest of the pixel-styled sidebar - never the raw 0-255 number,
+ * which stays internal (see `progression/friendship-rules.ts`).
+ */
+function heartMeter(
+  friendship: number,
+  tierLabels: Record<FriendshipTierId, string>,
+  className: string,
+): HTMLElement {
+  const hearts = getFriendshipHearts(friendship);
+  const tier = getFriendshipTier(friendship);
+  let glyphs = '';
+  for (let i = 0; i < 5; i++) {
+    glyphs += i < hearts ? '♥' : '♡';
+  }
+  const meter = el('span', className, glyphs);
+  meter.title = tierLabels[tier];
+  meter.setAttribute('aria-label', tierLabels[tier]);
+  return meter;
 }
 
 /**
@@ -416,6 +444,9 @@ function renderPokemonRow(
     // when the sidebar gets narrow.
     detail.appendChild(el('span', 'pd-item-sub', entry.species));
   }
+  detail.appendChild(
+    heartMeter(entry.friendship, labels.friendshipTierLabels, 'pd-hearts'),
+  );
   meta.appendChild(detail);
 
   if (entry.xpForNextLevel > 0) {

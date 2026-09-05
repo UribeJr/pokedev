@@ -394,10 +394,27 @@ suite('Evolution persistence: non-level evolution safety', () => {
     );
   });
 
-  test('every rule in the real table is level-based today, so reconciliation is safe for the whole catalog', () => {
+  test('exactly the level-conditioned rules in the real table are reconcilable', () => {
+    // The table now legitimately mixes level, friendship and friendship-time
+    // rules (see evolution-data.ts) - reconciliation must still only ever
+    // walk the level ones, never guessing at a friendship/time-of-day
+    // condition it was never told the live friendship/clock for.
     assert.ok(EVOLUTION_RULES.length > 0);
+    let levelRuleCount = 0;
     for (const rule of EVOLUTION_RULES) {
-      assert.ok(isReconcilableEvolutionCondition(rule.condition), rule.from);
+      const reconcilable = isReconcilableEvolutionCondition(rule.condition);
+      assert.strictEqual(
+        reconcilable,
+        rule.condition.type === 'level',
+        rule.from,
+      );
+      if (rule.condition.type === 'level') {
+        levelRuleCount++;
+      }
     }
+    // Sanity: the table still has plenty of level rules for reconciliation to
+    // actually exercise - this must not silently become 0 as more
+    // friendship-based species are added later.
+    assert.ok(levelRuleCount > 0);
   });
 });

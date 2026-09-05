@@ -377,6 +377,11 @@ img.pokemon {
   color: #ff6bd6;
 }
 
+.pokedev-reaction-friendship-up {
+  font-size: 18px;
+  color: #ff5f7e;
+}
+
 @keyframes pokedev-reaction-pop {
   0% {
     opacity: 0;

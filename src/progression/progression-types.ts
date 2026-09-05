@@ -101,6 +101,16 @@ export interface PokemonProgress {
   declinedEvolutionAtLevel?: number;
   /** Epoch milliseconds of the first time this nickname earned anything. */
   createdAt: number;
+  /**
+   * How much the user has worked alongside this specific Pokemon instance
+   * while it was the partner. 0-255, see `progression/friendship-rules.ts`.
+   *
+   * Deliberately NOT XP: it never comes from raw XP amounts, only from
+   * discrete qualifying events (see `ProgressionService`'s friendship
+   * grants), and never decreases in V1. Survives evolution for free, exactly
+   * like `totalXp` - both live on the same nickname-keyed record.
+   */
+  friendship: number;
 }
 
 /** The outcome of granting XP to either track. */

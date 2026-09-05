@@ -33,6 +33,7 @@ import {
   ExplorerTrainerViewModel,
 } from '../trainer/explorer-types';
 import { readDailyChallengeState } from './daily-challenges-storage';
+import { buildFriendshipTierLabels } from './friendship-labels';
 import {
   getPokemonXpForNextLevel,
   MAX_POKEMON_LEVEL,
@@ -180,6 +181,7 @@ class PokedevState {
         progress.level >= MAX_POKEMON_LEVEL
           ? 0
           : getPokemonXpForNextLevel(progress.level),
+      friendship: progress.friendship,
     };
   }
 
@@ -227,6 +229,7 @@ class PokedevState {
             ? 0
             : getPokemonXpForNextLevel(progress.level),
         isPartner: entry.nickname === current?.nickname,
+        friendship: progress.friendship,
       };
     });
   }
@@ -323,6 +326,7 @@ export function buildExplorerLabels(): ExplorerLabels {
     expShareOnLabel: vscode.l10n.t('ON'),
     expShareOffLabel: vscode.l10n.t('OFF'),
     expShareTooltip: vscode.l10n.t('Shares 50% EXP with other party Pokémon.'),
+    friendshipTierLabels: buildFriendshipTierLabels(),
   };
 }
 

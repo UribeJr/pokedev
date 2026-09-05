@@ -1540,6 +1540,34 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.debug-add-friendship',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        // A direct Friendship grant, not an XP event: Friendship is not XP,
+        // and this bypasses the ledger entirely (same reasoning as
+        // `grantFlatTrainerXp`) so it is never rate-limited or logged as
+        // activity - it exists purely to make evolution QA practical without
+        // waiting on real coding time.
+        const granted = await progression.grantFriendshipToPartner(
+          DEBUG_FRIENDSHIP_GRANT,
+        );
+        if (!granted) {
+          void vscode.window.showWarningMessage(
+            vscode.l10n.t('No partner Pokémon to grant Friendship to.'),
+          );
+          return;
+        }
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Friendship.', DEBUG_FRIENDSHIP_GRANT),
+        );
+      },
+    ),
+  );
+
   if (vscode.window.registerWebviewPanelSerializer) {
     vscode.window.registerWebviewPanelSerializer(TrainerCardPanel.viewType, {
       async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
@@ -1594,6 +1622,11 @@ const DEBUG_XP_GRANT = 100;
 
 /** Small debug grant for manually testing in-world toasts. */
 const DEBUG_SMALL_XP_GRANT = 5;
+
+/** How much a single Friendship debug grant is worth. Friendship is slow to
+ * earn through real activity, so this is deliberately large enough to reach
+ * an evolution threshold in a couple of clicks for QA. */
+const DEBUG_FRIENDSHIP_GRANT = 50;
 
 /**
  * Debug commands are hidden from the palette by a `when` clause, but the

@@ -133,6 +133,23 @@ class ReactionHub {
     });
   }
 
+  /**
+   * A Pokémon's Friendship just crossed into a new tier.
+   *
+   * Always shown - no cooldown, mirroring `notifyLevelUp`: this fires at most
+   * once per tier crossing (`ProgressionService` only calls it when
+   * `addFriendship` reports `tierUp`), which cannot happen more than a
+   * handful of times over a Pokémon's whole lifetime.
+   */
+  public notifyFriendshipUp(pokemonId: string, now: number = Date.now()): void {
+    this._fire({
+      type: 'friendship-up',
+      source: 'friendship-tier-up',
+      pokemonId,
+      timestamp: now,
+    });
+  }
+
   private _fire(event: PokemonReactionEvent): void {
     if (!isReactionsEnabled()) {
       return;

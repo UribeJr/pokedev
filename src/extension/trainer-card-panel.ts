@@ -27,6 +27,7 @@ import {
   TrainerWebviewboundMessage,
 } from '../trainer/trainer-types';
 import { DevBadgeResolution, resolveDevBadges } from './dev-badge-service';
+import { buildFriendshipTierLabels } from './friendship-labels';
 import { resolveGithubProfile } from './trainer-github-service';
 import {
   listPartnerCandidates,
@@ -309,6 +310,7 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
     noDevBadgesLabel: vscode.l10n.t('No public DEV badges found.'),
     devBadgesStaleNotice: vscode.l10n.t('Using cached DEV badges.'),
     shinyLabel: vscode.l10n.t('Shiny'),
+    friendshipTierLabels: buildFriendshipTierLabels(),
   };
 }
 

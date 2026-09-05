@@ -8,16 +8,15 @@
  *
  * SCOPE OF THIS TABLE (V1)
  * ------------------------
- * Straightforward level-up evolutions for Generations 1-4 only.
+ * Level-up, friendship, and friendship-plus-time-of-day evolutions for
+ * Generations 1-4 only.
  *
  * Deliberately NOT encoded yet, because each needs a condition type that does
  * not exist:
  *
- *   - Evolution stones            (Vulpix, Eevee, Gloom, Poliwhirl, ...)
+ *   - Evolution stones            (Vulpix, Gloom, Poliwhirl, ...)
  *   - Trade evolutions            (Kadabra, Machoke, Graveler, Haunter, ...)
  *   - Trade-with-held-item        (Onix, Seadra, Scyther, Porygon, ...)
- *   - Friendship                  (Golbat, Pichu, Togepi, Riolu, Budew, ...)
- *   - Time-of-day                 (Eevee -> Espeon / Umbreon)
  *   - Known-move                  (Aipom, Yanma, Bonsly, Mime Jr., Piloswine)
  *   - Location-based              (Magneton, Nosepass, Leafeon, Glaceon)
  *   - Held item                   (Gligar, Sneasel, Dusclops, Electabuzz, ...)
@@ -37,14 +36,22 @@
  * by a unit test, which catches both typos and species this repo never
  * shipped.
  *
+ * A species may have MORE THAN ONE rule (Eevee -> Espeon by day, Eevee ->
+ * Umbreon by night): `evolution-service.ts` indexes rules per species as an
+ * ARRAY for exactly this reason, and picks whichever rule's condition is
+ * actually satisfied right now rather than the first/last one registered -
+ * see `getAvailableEvolution`'s doc comment there for why this matters.
+ *
  * Pure: no `vscode`, no DOM.
  */
 import { PokemonType } from '../common/types';
+import { FRIENDSHIP_EVOLUTION_THRESHOLD } from './friendship-rules';
+import { TimeOfDay } from './time-of-day';
 
-export type EvolutionCondition = {
-  type: 'level';
-  level: number;
-};
+export type EvolutionCondition =
+  | { type: 'level'; level: number }
+  | { type: 'friendship'; minFriendship: number }
+  | { type: 'friendship-time'; minFriendship: number; time: TimeOfDay };
 
 export interface EvolutionRule {
   from: PokemonType;
@@ -55,6 +62,29 @@ export interface EvolutionRule {
 /** Terse constructor - this table is long enough without repeated key names. */
 function lvl(from: string, to: string, level: number): EvolutionRule {
   return { from, to, condition: { type: 'level', level } };
+}
+
+/** Friendship-only evolution, no time-of-day restriction. */
+function friend(
+  from: string,
+  to: string,
+  minFriendship: number = FRIENDSHIP_EVOLUTION_THRESHOLD,
+): EvolutionRule {
+  return { from, to, condition: { type: 'friendship', minFriendship } };
+}
+
+/** Friendship evolution that additionally requires a specific time of day. */
+function friendTime(
+  from: string,
+  to: string,
+  time: TimeOfDay,
+  minFriendship: number = FRIENDSHIP_EVOLUTION_THRESHOLD,
+): EvolutionRule {
+  return {
+    from,
+    to,
+    condition: { type: 'friendship-time', minFriendship, time },
+  };
 }
 
 export const EVOLUTION_RULES: readonly EvolutionRule[] = [
@@ -77,6 +107,8 @@ export const EVOLUTION_RULES: readonly EvolutionRule[] = [
   lvl('nidoran_female', 'nidorina', 16),
   lvl('nidoran_male', 'nidorino', 16),
   lvl('zubat', 'golbat', 22),
+  // Golbat -> Crobat is friendship-only, no time-of-day condition.
+  friend('golbat', 'crobat'),
   lvl('oddish', 'gloom', 21),
   lvl('paras', 'parasect', 24),
   lvl('venonat', 'venomoth', 31),
@@ -109,8 +141,22 @@ export const EVOLUTION_RULES: readonly EvolutionRule[] = [
   lvl('dratini', 'dragonair', 30),
   lvl('dragonair', 'dragonite', 55),
   lvl('rhyhorn', 'rhydon', 42),
+  // Chansey -> Blissey is friendship-only (Blissey itself is a Gen 2 addition,
+  // but Chansey is Gen 1).
+  friend('chansey', 'blissey'),
+  // Eevee is the one species with two mutually exclusive friendship
+  // evolutions, split purely by time of day - see the module doc comment on
+  // why a species can have more than one rule.
+  friendTime('eevee', 'espeon', 'day'),
+  friendTime('eevee', 'umbreon', 'night'),
 
   /* ------------------------------ Generation 2 ------------------------------ */
+  // The Gen 2 "baby" Pokemon: all four are friendship-only, no time-of-day
+  // condition.
+  friend('pichu', 'pikachu'),
+  friend('cleffa', 'clefairy'),
+  friend('igglybuff', 'jigglypuff'),
+  friend('togepi', 'togetic'),
   lvl('chikorita', 'bayleef', 16),
   lvl('bayleef', 'meganium', 32),
   lvl('cyndaquil', 'quilava', 14),
@@ -144,6 +190,9 @@ export const EVOLUTION_RULES: readonly EvolutionRule[] = [
   lvl('smoochum', 'jynx', 30),
 
   /* ------------------------------ Generation 3 ------------------------------ */
+  // Friendship-only; distinct from Marill's own level-based evolution into
+  // Azumarill (Generation 2, above) - Azurill is Marill's pre-evolution.
+  friend('azurill', 'marill'),
   lvl('treecko', 'grovyle', 16),
   lvl('grovyle', 'sceptile', 36),
   lvl('torchic', 'combusken', 16),
@@ -201,6 +250,12 @@ export const EVOLUTION_RULES: readonly EvolutionRule[] = [
   lvl('metang', 'metagross', 45),
 
   /* ------------------------------ Generation 4 ------------------------------ */
+  // Friendship-only.
+  friend('buneary', 'lopunny'),
+  // Friendship plus time-of-day.
+  friendTime('budew', 'roselia', 'day'),
+  friendTime('chingling', 'chimecho', 'night'),
+  friendTime('riolu', 'lucario', 'day'),
   lvl('turtwig', 'grotle', 18),
   lvl('grotle', 'torterra', 32),
   lvl('chimchar', 'monferno', 14),

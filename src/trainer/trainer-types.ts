@@ -9,6 +9,7 @@
 import { DevBadge } from './dev-badge-parse';
 import { ExplorerPokemonEntry } from './explorer-types';
 import { TrainerGeneration } from './trainer-sprite-catalog';
+import { FriendshipTierId } from '../progression/friendship-rules';
 
 /** Webview panel view type, also used as the serializer key. */
 export const TRAINER_CARD_VIEW_TYPE = 'pokedevTrainerCard';
@@ -246,6 +247,8 @@ export interface PartnerPokemonView {
   currentXp: number;
   /** Experience required to advance from `level`; 0 at the level cap. */
   xpForNextLevel: number;
+  /** 0-255, see `progression/friendship-rules.ts`. */
+  friendship: number;
 }
 
 /**
@@ -349,6 +352,11 @@ export interface TrainerCardLabels {
   devBadgesStaleNotice: string;
   /** Tooltip on a shiny party member's star. */
   shinyLabel: string;
+  /** Localized Friendship tier names, keyed by tier id - used as the
+   * accessible label/tooltip on the partner's heart meter. Shares its five
+   * strings with the in-world tier-up toast (`friendshipTierDisplayName` in
+   * `progression-service.ts`) so the wording never drifts between them. */
+  friendshipTierLabels: Record<FriendshipTierId, string>;
 }
 
 export interface TrainerCardViewModel {

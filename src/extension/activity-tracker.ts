@@ -34,6 +34,10 @@ import {
 } from '../progression/dev-action-rules';
 import { DevActionSource } from '../progression/dev-action-types';
 import {
+  FRIENDSHIP_CODING_CHUNK_MS,
+  FRIENDSHIP_GAIN_CODING_CHUNK,
+} from '../progression/friendship-rules';
+import {
   ActivitySource,
   ProgressionMode,
 } from '../progression/progression-types';
@@ -56,6 +60,7 @@ import {
   createProgressionEvent,
   ProgressionService,
 } from './progression-service';
+import { resolvePartnerIdentity } from './trainer-partner';
 
 export class ActivityTracker implements vscode.Disposable {
   private readonly _disposables: vscode.Disposable[] = [];
@@ -93,6 +98,24 @@ export class ActivityTracker implements vscode.Disposable {
 
   /** Active coding banked toward the next chunk payout. */
   private _chunkProgressMs = 0;
+
+  /**
+   * Qualifying coding time banked toward the next partnered-coding
+   * Friendship bonus, for the CURRENT partner only.
+   *
+   * Deliberately a separate accumulator from `_chunkProgressMs` above: that
+   * one tracks "how much coding time has this session banked" (a 10-minute
+   * XP cadence that keeps accruing across a partner switch), while this one
+   * tracks "how long has the SAME Pokemon been partner while coding
+   * qualified" (a slower 30-minute Friendship cadence that must reset to
+   * zero on a partner switch - see `_friendshipCodingTick`).
+   */
+  private _friendshipChunkProgressMs = 0;
+
+  /** Partner nickname as of the last friendship-coding tick, so a switch can
+   * be detected and the accumulator above reset. `undefined` covers both "no
+   * partner" and "not yet observed". */
+  private _friendshipPartnerNickname: string | undefined;
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
@@ -304,7 +327,41 @@ export class ActivityTracker implements vscode.Disposable {
       );
     }
 
+    await this._friendshipCodingTick();
     await this._service.flush();
+  }
+
+  /**
+   * The partnered-coding-time Friendship bonus: every
+   * `FRIENDSHIP_CODING_CHUNK_MS` of qualifying coding time spent with the
+   * SAME Pokemon as partner throughout earns `FRIENDSHIP_GAIN_CODING_CHUNK`.
+   *
+   * Only ever called from a tick that already passed `shouldAccrueCodingTime`
+   * (see `_onTick`), so this never needs to re-check focus/idle itself - it
+   * only adds its own, slower cadence and its own partner-continuity rule on
+   * top of time `_onTick` already decided qualifies.
+   *
+   * A partner switch resets the accumulator to zero rather than crediting the
+   * new partner with time it was not actually there for, or the old partner
+   * with time after it stopped being partner - "based on actual tracked
+   * time," not a guess.
+   */
+  private async _friendshipCodingTick(): Promise<void> {
+    const nickname = resolvePartnerIdentity(this._context)?.nickname;
+    if (nickname !== this._friendshipPartnerNickname) {
+      this._friendshipPartnerNickname = nickname;
+      this._friendshipChunkProgressMs = 0;
+    }
+    if (nickname === undefined) {
+      return;
+    }
+
+    this._friendshipChunkProgressMs += CODING_TICK_MS;
+    if (this._friendshipChunkProgressMs < FRIENDSHIP_CODING_CHUNK_MS) {
+      return;
+    }
+    this._friendshipChunkProgressMs -= FRIENDSHIP_CODING_CHUNK_MS;
+    await this._service.grantFriendshipToPartner(FRIENDSHIP_GAIN_CODING_CHUNK);
   }
 
   /* ------------------------------- tasks ------------------------------- */

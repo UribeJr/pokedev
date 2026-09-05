@@ -38,6 +38,7 @@ import {
   PokemonCollectionArrays,
   reconcileEntryEvolutions,
 } from '../progression/evolution-service';
+import { getTimeOfDay } from '../progression/time-of-day';
 import { recordEvolution } from '../trainer/trainer-profile';
 import { TrainerProfile } from '../trainer/trainer-types';
 import { PROGRESSION_PARTNER_KEY } from '../common/storage-keys';
@@ -229,6 +230,7 @@ export async function evolvePokemonInstance(
     identity.species,
     progress.level,
     identity.shiny,
+    { friendship: progress.friendship, timeOfDay: getTimeOfDay() },
   );
   if (!availability.available || !availability.rule) {
     return undefined;
@@ -333,6 +335,7 @@ export async function promptToEvolvePartner(
     partner.species,
     progress.level,
     partner.shiny,
+    { friendship: progress.friendship, timeOfDay: getTimeOfDay() },
   );
   if (!availability.available || !availability.rule) {
     return;
@@ -439,6 +442,7 @@ export async function evolvePartnerCommand(
     partner.species,
     progress.level,
     partner.shiny,
+    { friendship: progress.friendship, timeOfDay: getTimeOfDay() },
   );
   const displayName =
     partner.nickname || getLocalizedPokemonName(partner.species);
@@ -464,6 +468,25 @@ export async function evolvePartnerCommand(
         vscode.l10n.t(
           '{0} cannot evolve yet: no shiny sprite exists for its evolved form.',
           displayName,
+        ),
+      );
+      return;
+    case 'friendship-too-low':
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          '{0} needs to grow closer to you before it can evolve.',
+          displayName,
+        ),
+      );
+      return;
+    case 'wrong-time-of-day':
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          '{0} is close enough to evolve, but only during the {1}.',
+          displayName,
+          availability.requiredTimeOfDay === 'day'
+            ? vscode.l10n.t('day')
+            : vscode.l10n.t('night'),
         ),
       );
       return;

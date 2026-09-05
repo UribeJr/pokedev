@@ -25,6 +25,7 @@ export const REACTION_SYMBOL: Record<PokemonReactionType, string> = {
   celebrate: '★',
   confused: '?',
   'level-up': '✦',
+  'friendship-up': '♥',
 };
 
 /* ------------------------------- durations -------------------------------- */
@@ -34,18 +35,22 @@ export const REACTION_DURATION_MS: Record<PokemonReactionType, number> = {
   celebrate: 2500,
   confused: 2000,
   'level-up': 3000,
+  'friendship-up': 2500,
 };
 
 /* -------------------------------- priority --------------------------------- */
 
 /**
- * Higher wins. LEVEL UP > GIT COMMIT (celebrate) > CONFUSED > SAVE NOTICE,
- * exactly the order a Pokémon should prefer when more than one reaction wants
- * to play at once.
+ * Higher wins. LEVEL UP > GIT COMMIT/FRIENDSHIP (celebrate-tier) > CONFUSED >
+ * SAVE NOTICE, exactly the order a Pokémon should prefer when more than one
+ * reaction wants to play at once. Friendship shares `celebrate`'s tier
+ * deliberately - both are "good news" moments of equal weight - rather than
+ * outranking or being outranked by a commit reaction.
  */
 export const REACTION_PRIORITY: Record<PokemonReactionType, number> = {
   'level-up': 3,
   celebrate: 2,
+  'friendship-up': 2,
   confused: 1,
   notice: 0,
 };
