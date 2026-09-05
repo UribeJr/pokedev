@@ -11,9 +11,13 @@
  * room for, and would couple a compact view to every future card change.
  */
 
+import { DailyChallengesViewModel } from '../challenges/daily-challenges-view-types';
+
 /** Explorer view ids, also used as the `when` clauses' view names. */
 export const TRAINER_EXPLORER_VIEW_TYPE = 'pokedev.trainerView';
 export const POKEMON_EXPLORER_VIEW_TYPE = 'pokedev.pokemonView';
+export const DAILY_CHALLENGES_EXPLORER_VIEW_TYPE =
+  'pokedev.dailyChallengesView';
 
 /* ------------------------------------------------------------------ *
  * Trainer HUD
@@ -42,12 +46,24 @@ export interface ExplorerTrainerViewModel {
   login: string;
   /** Empty when GitHub has never been fetched; the view falls back to a ball. */
   avatarUrl: string;
+  /**
+   * The resolved, webview-safe image for the selected Trainer Sprite - the
+   * same canonical selection the full Trainer Card uses - or `undefined`
+   * when none is chosen, in which case the view falls back to `avatarUrl`.
+   */
+  trainerSpriteUri?: string;
   trainerLevel: number;
   /** Experience within the current level. */
   trainerXp: number;
   /** Experience required to advance; 0 at the level cap. */
   xpForNextLevel: number;
   totalCodingTimeMs: number;
+  /**
+   * Dev Badges earned, out of `DEV_BADGE_SLOTS`. Read from the cached DEV
+   * badge data only - see `PokedevState.buildTrainerView` - so this compact
+   * HUD never triggers its own fetch.
+   */
+  devBadgesEarned: number;
   partner?: ExplorerPartnerView;
   labels: ExplorerLabels;
 }
@@ -91,6 +107,8 @@ export interface ExplorerLabels {
   levelLabel: string;
   xpLabel: string;
   codingTimeLabel: string;
+  /** Compact "BADGES" row label, shown as e.g. "BADGES 3/8". */
+  devBadgesLabel: string;
   partnerLabel: string;
   noPartnerLabel: string;
   noPokemonLabel: string;
@@ -128,4 +146,8 @@ export type ExplorerHostboundMessage =
 
 export type ExplorerWebviewboundMessage =
   | { command: 'explorer/trainerState'; payload: ExplorerTrainerViewModel }
-  | { command: 'explorer/pokemonState'; payload: ExplorerPokemonViewModel };
+  | { command: 'explorer/pokemonState'; payload: ExplorerPokemonViewModel }
+  | {
+      command: 'explorer/dailyChallengesState';
+      payload: DailyChallengesViewModel;
+    };

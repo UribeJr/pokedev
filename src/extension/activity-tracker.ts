@@ -25,6 +25,15 @@ import {
   shouldAwardBatch,
 } from '../progression/activity-rules';
 import {
+  buildTaskIdentity,
+  classifyTaskAsDevAction,
+} from '../progression/dev-action-classifier';
+import {
+  devActionCooldownKey,
+  shouldAcceptDevAction,
+} from '../progression/dev-action-rules';
+import { DevActionSource } from '../progression/dev-action-types';
+import {
   ActivitySource,
   ProgressionMode,
 } from '../progression/progression-types';
@@ -35,6 +44,14 @@ import {
   computeWorkBatchAward,
   TASK_COOLDOWN_MS,
 } from '../progression/xp-rules';
+import {
+  isDevActionsEnabled,
+  taskToClassifiable,
+} from './dev-action-capabilities';
+import {
+  readDevActionCooldowns,
+  rememberDevActionAccepted,
+} from './dev-action-storage';
 import {
   createProgressionEvent,
   ProgressionService,
@@ -77,7 +94,10 @@ export class ActivityTracker implements vscode.Disposable {
   /** Active coding banked toward the next chunk payout. */
   private _chunkProgressMs = 0;
 
-  constructor(private readonly _service: ProgressionService) {}
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _service: ProgressionService,
+  ) {}
 
   public start(): void {
     // Signals that the user is genuinely working. Each is tagged with what
@@ -290,31 +310,55 @@ export class ActivityTracker implements vscode.Disposable {
   /* ------------------------------- tasks ------------------------------- */
 
   /**
-   * Awards a successful build or test run, and raises the `confused`
-   * reaction for a reliably-failed one.
+   * Classifies and awards a successful task, and raises the `confused`
+   * reaction for a reliably-failed Build/Test-group one.
    *
-   * Both branches use only the task process's real exit code. There is
-   * deliberately no terminal output parsing anywhere in this system: scanning
-   * for words like "failed" would be both trivially farmable/false-positive
-   * prone and wrong for most toolchains. An `exitCode` of `undefined` (the
-   * process was killed rather than exiting) is not a reliable failure signal
-   * either way, so it is ignored.
+   * Every branch uses only the task process's real exit code plus static,
+   * already-declared task metadata (its name, its npm script, its own
+   * configured command line). There is deliberately no terminal output
+   * parsing anywhere in this system: scanning for words like "failed" would
+   * be both trivially farmable/false-positive prone and wrong for most
+   * toolchains. An `exitCode` of `undefined` (the process was killed rather
+   * than exiting) is not a reliable failure signal either way, so it is
+   * ignored.
+   *
+   * Success first tries the Dev Action classifier
+   * (`progression/dev-action-classifier.ts`), which is NOT restricted to the
+   * Build/Test groups - VS Code only auto-assigns those groups to npm scripts
+   * literally named "build"/"test", so a lint or typecheck script is
+   * ordinarily ungrouped and would otherwise never be seen at all. Exactly
+   * one action is ever emitted per completion: a classified task emits its
+   * specific type and returns; only an UNCLASSIFIED Build/Test-group task
+   * falls through to the original generic `task-success` bucket, unchanged
+   * from before Dev Actions existed.
    */
   private async _onTaskEnd(event: vscode.TaskProcessEndEvent): Promise<void> {
-    const group = event.execution.task.group;
-    if (group !== vscode.TaskGroup.Build && group !== vscode.TaskGroup.Test) {
-      return;
-    }
-
-    const name = event.execution.task.name;
+    const task = event.execution.task;
+    const group = task.group;
 
     if (event.exitCode !== 0) {
-      if (event.exitCode !== undefined) {
-        this._service.reactToTaskFailure(name);
+      // Failure reactions keep their original, narrower scope: only a
+      // Build/Test-group task failing raises `confused`. Widening this to
+      // every task would make an unrelated (and often noisier, e.g. a
+      // work-in-progress lint) failure produce a reaction nobody asked for.
+      if (
+        event.exitCode !== undefined &&
+        (group === vscode.TaskGroup.Build || group === vscode.TaskGroup.Test)
+      ) {
+        this._service.reactToTaskFailure(task.name);
       }
       return;
     }
 
+    if (await this._tryAwardDevAction(task)) {
+      return;
+    }
+
+    if (group !== vscode.TaskGroup.Build && group !== vscode.TaskGroup.Test) {
+      return;
+    }
+
+    const name = task.name;
     const now = Date.now();
     const previous = this._lastTask.get(name);
     if (previous !== undefined && now - previous < TASK_COOLDOWN_MS) {
@@ -326,6 +370,56 @@ export class ActivityTracker implements vscode.Disposable {
       createProgressionEvent('task-success', now, { task: name }),
     );
   }
+
+  /**
+   * Attempts to classify and award `task` as a Dev Action. Returns whether it
+   * was (successfully classified, whether or not the cooldown ultimately
+   * allowed a reward) - the caller uses this to decide whether the task
+   * still needs to fall through to the generic bucket.
+   */
+  private async _tryAwardDevAction(task: vscode.Task): Promise<boolean> {
+    if (!isDevActionsEnabled()) {
+      return false;
+    }
+    const classifiable = taskToClassifiable(task);
+    const devAction = classifyTaskAsDevAction(classifiable);
+    if (!devAction) {
+      return false;
+    }
+
+    const now = Date.now();
+    const identity = buildTaskIdentity(classifiable);
+    const key = devActionCooldownKey(devAction, identity);
+    const cooldowns = readDevActionCooldowns(this._context);
+    if (!shouldAcceptDevAction(cooldowns[key], now)) {
+      // Classified, but still cooling down: the task ran and this WAS a
+      // build/test/etc, so it must not also fall through to the generic
+      // bucket and earn a second, smaller reward for the same completion.
+      return true;
+    }
+    await rememberDevActionAccepted(this._context, key, now);
+
+    const source: DevActionSource = {
+      taskName: task.name,
+      taskDefinitionType: task.definition.type,
+      workspaceFolder: workspaceFolderNameOf(task),
+    };
+    await this._service.applyEvent(
+      createProgressionEvent(devAction, now, { source }),
+    );
+    return true;
+  }
+}
+
+/** Best-effort, display-only workspace folder name for the activity log -
+ * never used for balance or eligibility decisions. */
+function workspaceFolderNameOf(task: vscode.Task): string | undefined {
+  const scope = task.scope;
+  return scope !== undefined &&
+    scope !== vscode.TaskScope.Global &&
+    scope !== vscode.TaskScope.Workspace
+    ? scope.name
+    : undefined;
 }
 
 /**

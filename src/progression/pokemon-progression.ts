@@ -10,6 +10,21 @@
  */
 import { LevelUpResult, PokemonProgress } from './progression-types';
 
+/**
+ * How many Pokemon have ever earned real progression XP.
+ *
+ * The progress map only ever gains an entry through `addPokemonXp` actually
+ * changing a total (see `progression-service.ts`'s `_applyPokemonXpGrant`,
+ * the map's sole writer alongside evolution's species-only rewrites). Merely
+ * spawning a Pokemon never creates one, so the key count is exactly "Pokemon
+ * Raised" with no extra bookkeeping needed.
+ */
+export function countPokemonRaised(
+  progressMap: Readonly<Record<string, PokemonProgress>>,
+): number {
+  return Object.keys(progressMap).length;
+}
+
 export const MAX_POKEMON_LEVEL = 100;
 
 /**

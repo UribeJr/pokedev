@@ -1,4 +1,5 @@
 import { PokemonColor, PokemonType } from '../common/types';
+import { getWorldWidth } from './world-bounds';
 
 export interface IPokemonType {
   nextFrame(): void;
@@ -242,7 +243,7 @@ export class WalkRightState implements IState {
   holdTime = 60;
 
   constructor(pokemon: IPokemonType) {
-    this.leftBoundary = Math.floor(window.innerWidth * 0.95);
+    this.leftBoundary = Math.floor(getWorldWidth() * 0.95);
     this.pokemon = pokemon;
     this.idleCounter = 0;
   }

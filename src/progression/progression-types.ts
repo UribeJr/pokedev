@@ -37,6 +37,16 @@ export type ProgressionEventType =
   | 'active-coding'
   | 'git-commit'
   | 'task-success'
+  // Dev Actions: the same "a task ended" signal as `task-success`, but
+  // classified into a specific verified outcome by
+  // `progression/dev-action-classifier.ts`. `task-success` remains the
+  // fallback for a Build/Test-group task the classifier could not identify -
+  // see `activity-tracker.ts`'s `_onTaskEnd` for exactly one of the five ever
+  // being emitted per task completion.
+  | 'build-success'
+  | 'test-success'
+  | 'typecheck-success'
+  | 'lint-success'
   | 'debug-grant';
 
 export interface ProgressionEvent {

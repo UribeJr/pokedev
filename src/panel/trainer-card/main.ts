@@ -9,11 +9,20 @@
 //  2. This code never talks to GitHub. It asks the extension host and renders
 //     whatever view model comes back. The card's CSP has no `connect-src`, so
 //     that boundary is enforced by the platform, not by convention.
+import { DevBadge } from '../../trainer/dev-badge-parse';
+import { ExplorerPokemonEntry } from '../../trainer/explorer-types';
+import { resolveDisplayName } from '../../trainer/pokemon-display-name';
 import {
-  TRAINER_BADGE_SLOTS,
+  TrainerGeneration,
+  TRAINER_GENERATIONS,
+} from '../../trainer/trainer-sprite-catalog';
+import {
+  DevBadgesView,
+  PARTY_SLOTS,
   TrainerCardLabels,
   TrainerCardViewModel,
   TrainerHostboundMessage,
+  TrainerSpriteOption,
 } from '../../trainer/trainer-types';
 
 interface TrainerVscodeApi {
@@ -51,6 +60,48 @@ const MONTHS = [
 
 let api: TrainerVscodeApi | undefined;
 let root: HTMLElement | undefined;
+
+/**
+ * The last view model received from the host.
+ *
+ * Needed so a purely client-side interaction - opening the sprite picker,
+ * switching its generation tab, previewing a tile - can re-render
+ * immediately without waiting for (or triggering) a host round trip. Every
+ * `render()` call rebuilds the whole DOM from scratch, so this is the only
+ * thing that survives between renders.
+ */
+let lastModel: TrainerCardViewModel | undefined;
+
+/* --------------------------- sprite picker state -------------------------- */
+//
+// Client-side only: the host never needs to know the picker is open, which
+// tab is active, or which tile is being previewed - only the final decision
+// (`trainer/selectTrainerSprite` / `trainer/useGithubAvatar`) is ever posted.
+
+let spritePickerOpen = false;
+let spritePickerGeneration: TrainerGeneration = 1;
+/** The tile treated as "selected" while the picker is open, before it is confirmed. */
+let spritePickerPreviewId: string | undefined;
+
+function rerender(): void {
+  if (lastModel) {
+    render(lastModel);
+  }
+}
+
+function openSpritePicker(model: TrainerCardViewModel): void {
+  const currentId = model.profile.trainerSpriteId ?? undefined;
+  const current = model.trainerSpriteCatalog.find((s) => s.id === currentId);
+  spritePickerGeneration = current?.generation ?? 1;
+  spritePickerPreviewId = currentId;
+  spritePickerOpen = true;
+  rerender();
+}
+
+function closeSpritePicker(): void {
+  spritePickerOpen = false;
+  rerender();
+}
 
 function post(message: TrainerHostboundMessage): void {
   if (api) {
@@ -216,20 +267,61 @@ function renderHead(labels: TrainerCardLabels, idText?: string): HTMLElement {
 
 /* ---------------------------- card composition --------------------------- */
 
-/** Portrait + trainer identity + level plate. */
+/**
+ * The left identity column: portrait, trainer identity, and a slim stat
+ * row for Trainer Level (always) plus Coding Time (only when the
+ * `showCodingTime` setting is on - Coding Time itself keeps accruing
+ * internally either way, see `ProgressionService.addCodingTime`/`flush`).
+ *
+ * The stats block is pinned to the bottom of this column via `margin-top:
+ * auto` on a flex parent - see `.tc-hero` - so it reads as part of the
+ * identity area rather than a separate dashboard card, matching the
+ * landscape card's left-column composition.
+ */
 function renderHero(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
   const github = model.github;
   const hero = el('div', 'tc-hero');
 
-  const portrait = el('div', 'tc-portrait');
+  // A real button, not a div: the portrait doubles as a large, obvious way to
+  // open the Trainer Sprite picker (mirroring the footer's "Choose Trainer"
+  // action - same handler, same command - just a second, more discoverable
+  // entry point now that it is the card's biggest piece of artwork).
+  const portrait = el('button', 'tc-portrait');
+  portrait.type = 'button';
+  portrait.setAttribute('aria-label', labels.chooseTrainerButton);
+  portrait.title = labels.chooseTrainerButton;
+  portrait.addEventListener('click', () => {
+    openSpritePicker(model);
+  });
+
   // The frame's ::before/::after are the corner brackets, so the placeholder
   // glyph needs a real element of its own rather than a third pseudo-element.
   const markEmpty = () => {
     portrait.classList.add('tc-portrait-empty');
     portrait.appendChild(el('span', 'tc-portrait-glyph', '?'));
   };
-  if (github && github.avatarUrl) {
+  // A chosen Trainer Sprite always wins over the GitHub avatar - GitHub still
+  // supplies name/handle/class/bio/location below either way.
+  //
+  // The two modes get different FRAME treatments, not just different images:
+  // a Trainer Sprite is character art and gets `tc-portrait-sprite` - a large,
+  // flexible frame that grows to fill whatever vertical space the identity
+  // column actually has free (see `.tc-hero`/`.tc-portrait-sprite`) - while
+  // the GitHub avatar keeps the original small, fixed portrait frame. Blowing
+  // a profile photo up to the same size would look like a stretched photo,
+  // not character art.
+  if (model.trainerSpriteUri) {
+    portrait.classList.add('tc-portrait-sprite');
+    const sprite = el('img', 'tc-avatar tc-avatar-sprite');
+    sprite.setAttribute('src', model.trainerSpriteUri);
+    sprite.setAttribute('alt', '');
+    sprite.addEventListener('error', () => {
+      sprite.remove();
+      markEmpty();
+    });
+    portrait.appendChild(sprite);
+  } else if (github && github.avatarUrl) {
     const avatar = el('img', 'tc-avatar');
     avatar.setAttribute('src', github.avatarUrl);
     avatar.setAttribute('alt', '');
@@ -262,19 +354,33 @@ function renderHero(model: TrainerCardViewModel): HTMLElement {
   }
   hero.appendChild(identity);
 
+  const stats = el('div', 'tc-identity-stats');
   const level = padStart(String(model.profile.trainerLevel), 2, '0');
-  hero.appendChild(
-    appendAll(el('div', 'tc-level-plate'), [
-      el('span', 'tc-level-word', labels.trainerWord),
-      el('span', 'tc-level-value', `${labels.levelLabel} ${level}`),
+  stats.appendChild(
+    appendAll(el('div', 'tc-identity-stat-row'), [
+      el('span', 'tc-identity-stat-label', labels.trainerWord),
+      el('span', 'tc-identity-stat-value', `${labels.levelLabel} ${level}`),
     ]),
   );
+  if (model.showCodingTime) {
+    stats.appendChild(
+      appendAll(el('div', 'tc-identity-stat-row'), [
+        el('span', 'tc-identity-stat-label', labels.codingTimeLabel),
+        el(
+          'span',
+          'tc-identity-stat-value',
+          formatDuration(model.profile.totalCodingTimeMs),
+        ),
+      ]),
+    );
+  }
+  hero.appendChild(stats);
 
   return hero;
 }
 
-/** DEV RECORD: the GitHub-derived stats plus SPECIALTIES. */
-function renderDevRecord(model: TrainerCardViewModel): HTMLElement {
+/** DEV RECORD content: the GitHub-derived stats plus SPECIALTIES. */
+function renderDevRecordContent(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
   const github = model.github;
   const unknown = labels.unknownValue;
@@ -328,139 +434,211 @@ function renderDevRecord(model: TrainerCardViewModel): HTMLElement {
   return section;
 }
 
-/** TRAINER RECORD: the game-side counters, all zero in V1. */
-function renderTrainerRecord(model: TrainerCardViewModel): HTMLElement {
-  const labels = model.labels;
-  const profile = model.profile;
+/**
+ * DEV RECORD: a secondary panel below the physical Trainer Card, shown only
+ * while `showCodingTime`'s sibling setting `showDevRecord` is on.
+ *
+ * Deliberately NOT part of `.tc-card` - the landscape card stays a fixed,
+ * compact shape whether this is open or closed; toggling it only reveals or
+ * hides this separate block underneath, never resizing the card itself.
+ */
+function renderDevRecordPanel(model: TrainerCardViewModel): HTMLElement {
+  const panel = el('div', 'tc-devrecord-panel');
+  panel.appendChild(renderDevRecordContent(model));
+  return panel;
+}
 
-  const section = el('section', 'tc-section tc-section-trainer');
-  section.appendChild(sectionTitle(labels.trainerRecordLabel));
+/**
+ * PARTY: the current team, up to `PARTY_SLOTS`, in a classic grid.
+ *
+ * The compact overview companion to the larger PARTNER panel below - the
+ * exact same instances (`TrainerCardViewModel.party`, built from the same
+ * collection enumeration the Explorer Pokemon view uses). Clicking an
+ * occupied, non-partner slot posts 'trainer/selectPartner', which goes
+ * straight to the same `setPartnerNickname` setter every other partner
+ * switch in the extension uses - there is no second partner state.
+ */
+function renderPartySlot(
+  entry: ExplorerPokemonEntry,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  const button = el(
+    'button',
+    entry.isPartner ? 'tc-party-slot tc-party-slot-partner' : 'tc-party-slot',
+  );
+  button.type = 'button';
+  button.setAttribute('aria-pressed', String(entry.isPartner));
 
-  const earned = profile.badges.length;
-  const grid = el('div', 'tc-record-grid tc-record-grid-3');
-  grid.appendChild(
-    recordCell(
-      labels.pokedexLabel,
-      String(profile.pokemonCaught),
-      `${profile.pokemonCaught} ${labels.caughtSuffix}`,
+  const sprite = el('img', 'tc-party-sprite');
+  sprite.setAttribute('src', entry.spriteUri);
+  sprite.setAttribute('alt', '');
+  sprite.addEventListener('error', () => sprite.remove());
+  button.appendChild(sprite);
+
+  const displayName = resolveDisplayName(entry.nickname, entry.species);
+
+  const nameLine = el('span', 'tc-party-name');
+  nameLine.appendChild(document.createTextNode(displayName));
+  if (entry.shiny) {
+    const star = el('span', 'tc-party-shiny', '★');
+    star.title = labels.shinyLabel;
+    nameLine.appendChild(star);
+  }
+  button.appendChild(nameLine);
+
+  button.appendChild(
+    el(
+      'span',
+      'tc-party-level',
+      `${labels.levelLabel} ${padStart(String(entry.level), 2, '0')}`,
     ),
   );
-  grid.appendChild(
-    recordCell(labels.badgesLabel, `${earned} / ${TRAINER_BADGE_SLOTS}`),
-  );
-  grid.appendChild(
-    recordCell(labels.shiniesLabel, String(profile.shinyPokemonCaught)),
-  );
-  section.appendChild(grid);
 
-  // Badge slots are decorative: the accessible value is the "N / 8" cell above.
-  const slots = el('div', 'tc-badge-slots');
-  slots.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < TRAINER_BADGE_SLOTS; i++) {
-    slots.appendChild(
-      pokeball(i < earned ? 'tc-badge tc-badge-earned' : 'tc-badge'),
+  if (entry.isPartner) {
+    button.appendChild(
+      el('span', 'tc-party-partner-badge', labels.partnerLabel),
+    );
+    // Already the partner: nothing for a click to do.
+    button.disabled = true;
+    button.setAttribute(
+      'aria-label',
+      `${displayName} — ${labels.partnerLabel}`,
+    );
+  } else {
+    button.title = labels.makePartnerHint;
+    button.setAttribute(
+      'aria-label',
+      `${labels.makePartnerHint}: ${displayName}`,
+    );
+    button.addEventListener('click', () => {
+      post({ command: 'trainer/selectPartner', nickname: entry.nickname });
+    });
+  }
+
+  return button;
+}
+
+function renderEmptyPartySlot(label: string): HTMLElement {
+  const slot = el('div', 'tc-party-slot tc-party-slot-empty');
+  slot.appendChild(el('span', 'tc-party-empty-label', label));
+  return slot;
+}
+
+function renderParty(model: TrainerCardViewModel): HTMLElement {
+  const labels = model.labels;
+
+  const section = el('section', 'tc-section tc-section-party');
+  section.appendChild(sectionTitle(labels.partySectionLabel));
+
+  const grid = el('div', 'tc-party-grid');
+  for (let i = 0; i < PARTY_SLOTS; i++) {
+    const entry = model.party[i];
+    grid.appendChild(
+      entry
+        ? renderPartySlot(entry, labels)
+        : renderEmptyPartySlot(labels.emptyPartySlotLabel),
     );
   }
-  section.appendChild(slots);
-
-  section.appendChild(
-    appendAll(el('div', 'tc-timerow'), [
-      el('span', 'tc-record-label', labels.codingTimeLabel),
-      el('span', 'tc-timerow-value', formatDuration(profile.totalCodingTimeMs)),
-    ]),
-  );
+  section.appendChild(grid);
 
   return section;
 }
 
 /**
- * PARTNER: the first usable Pokemon in the persisted collection.
+ * PARTNER: a compact detail block attached to the Trainer XP footer.
  *
- * There is deliberately no level, HP or stat line — the Pokemon domain model
- * has no such concept anywhere in this extension, so inventing one here would
- * be fiction. Species, nickname and shininess are all that actually exist.
+ * The highlighted PARTY slot already communicates WHO the partner is; this
+ * box exists so Partner progression (level, XP) stays visible somewhere on
+ * the card without a second full-size panel duplicating the party grid's
+ * job. Same `model.partner` data as the old standalone panel - only the
+ * presentation shrank, per the "reduce duplicate UI, not delete data" brief.
+ *
+ * There is deliberately no HP or move/stat line — the Pokemon domain model
+ * has no such concept anywhere in this extension, so inventing one here
+ * would be fiction. Species/nickname, shininess and level/XP are all that
+ * actually exist.
  */
-function renderPartner(model: TrainerCardViewModel): HTMLElement {
+function renderPartnerBox(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
   const partner = model.partner;
 
-  const section = el('section', 'tc-section tc-section-partner');
-  section.appendChild(sectionTitle(labels.partnerLabel));
+  const box = el('div', 'tc-partner-box');
+  box.appendChild(sectionTitle(labels.partnerLabel));
+
+  if (!partner) {
+    box.appendChild(el('p', 'tc-partner-empty', labels.noPartnerLabel));
+    return box;
+  }
+
+  const row = el('div', 'tc-partner-box-row');
 
   const frame = el('div', 'tc-partner-frame');
-  if (partner) {
-    const sprite = el('img', 'tc-partner-sprite');
-    sprite.setAttribute('src', partner.spriteUri);
-    sprite.setAttribute('alt', '');
-    sprite.addEventListener('error', () => {
-      sprite.remove();
-      frame.appendChild(pokeball('tc-partner-ball tc-ball-faded'));
-    });
-    frame.appendChild(sprite);
-  } else {
-    frame.classList.add('tc-partner-frame-empty');
+  const sprite = el('img', 'tc-partner-sprite');
+  sprite.setAttribute('src', partner.spriteUri);
+  sprite.setAttribute('alt', '');
+  sprite.addEventListener('error', () => {
+    sprite.remove();
     frame.appendChild(pokeball('tc-partner-ball tc-ball-faded'));
+  });
+  frame.appendChild(sprite);
+  row.appendChild(frame);
+
+  const meta = el('div', 'tc-partner-meta');
+
+  const naming = el('div', 'tc-partner-name');
+  naming.appendChild(
+    el(
+      'span',
+      'tc-partner-species',
+      resolveDisplayName(partner.nickname, partner.species),
+    ),
+  );
+  if (partner.shiny) {
+    const star = el('span', 'tc-partner-shiny', '★');
+    star.title = labels.shinyLabel;
+    naming.appendChild(star);
   }
-  section.appendChild(frame);
+  meta.appendChild(naming);
 
-  if (partner) {
-    const naming = el('div', 'tc-partner-name');
-    naming.appendChild(el('span', 'tc-partner-species', partner.species));
-    // Spawning defaults a Pokemon's name to its species, so most collections
-    // yield nickname === species. Rendering both gives CACTURNE "Cacturne";
-    // only show the nickname when it actually says something different.
-    const nickname = partner.nickname.trim();
-    if (
-      nickname.length > 0 &&
-      nickname.toLowerCase() !== partner.species.trim().toLowerCase()
-    ) {
-      naming.appendChild(el('span', 'tc-partner-nick', `“${nickname}”`));
-    }
-    if (partner.shiny) {
-      naming.appendChild(el('span', 'tc-partner-shiny', '★'));
-    }
-    section.appendChild(naming);
+  meta.appendChild(
+    el(
+      'span',
+      'tc-partner-level',
+      `${labels.partnerLevelLabel} ${padStart(String(partner.level), 2, '0')}`,
+    ),
+  );
 
-    section.appendChild(
-      el(
-        'span',
-        'tc-partner-level',
-        `${labels.partnerLevelLabel} ${padStart(String(partner.level), 2, '0')}`,
-      ),
+  // A capped partner has no next level to fill toward, so the bar would be
+  // permanently full and meaningless; the level line says it all.
+  if (partner.xpForNextLevel > 0) {
+    const needed = partner.xpForNextLevel;
+    const pct = Math.max(
+      0,
+      Math.min(100, Math.round((partner.currentXp / needed) * 100)),
     );
 
-    // A capped partner has no next level to fill toward, so the bar would be
-    // permanently full and meaningless; the level plate says it all.
-    if (partner.xpForNextLevel > 0) {
-      const needed = partner.xpForNextLevel;
-      const pct = Math.max(
-        0,
-        Math.min(100, Math.round((partner.currentXp / needed) * 100)),
-      );
+    const fill = el('div', 'tc-partner-xp-fill');
+    fill.style.width = `${pct}%`;
 
-      const fill = el('div', 'tc-partner-xp-fill');
-      fill.style.width = `${pct}%`;
+    const track = el('div', 'tc-partner-xp-track');
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', String(needed));
+    track.setAttribute('aria-valuenow', String(partner.currentXp));
+    track.setAttribute('aria-label', labels.partnerXpLabel);
+    track.appendChild(fill);
 
-      const track = el('div', 'tc-partner-xp-track');
-      track.setAttribute('role', 'progressbar');
-      track.setAttribute('aria-valuemin', '0');
-      track.setAttribute('aria-valuemax', String(needed));
-      track.setAttribute('aria-valuenow', String(partner.currentXp));
-      track.setAttribute('aria-label', labels.partnerXpLabel);
-      track.appendChild(fill);
-
-      section.appendChild(
-        appendAll(el('div', 'tc-partner-xp'), [
-          track,
-          el('span', 'tc-partner-xp-value', `${partner.currentXp}/${needed}`),
-        ]),
-      );
-    }
-  } else {
-    section.appendChild(el('p', 'tc-partner-empty', labels.noPartnerLabel));
+    meta.appendChild(
+      appendAll(el('div', 'tc-partner-xp'), [
+        track,
+        el('span', 'tc-partner-xp-value', `${partner.currentXp}/${needed}`),
+      ]),
+    );
   }
 
-  return section;
+  row.appendChild(meta);
+  box.appendChild(row);
+  return box;
 }
 
 /** TRAINER XP progress panel. */
@@ -499,8 +677,364 @@ function renderXpPanel(model: TrainerCardViewModel): HTMLElement {
   return panel;
 }
 
+/**
+ * BADGES: the earned Dev Badge artwork, shown large - the visual focus of
+ * this section rather than a count or a locked-slot grid. There is no fixed
+ * number of slots and nothing pads out to 8; every badge DEV actually reports
+ * gets a tile, wrapping cleanly at any card width.
+ *
+ * This is the ONE badge UI on the card — Dev Badges are PokéDev's canonical
+ * badge system, and there is no separate "Trainer Badges" progression or
+ * standalone duplicate section elsewhere.
+ */
+
+function staleDevBadgesText(
+  dev: DevBadgesView,
+  labels: TrainerCardLabels,
+): string {
+  return dev.error
+    ? `${labels.devBadgesStaleNotice} ${dev.error.message}`
+    : labels.devBadgesStaleNotice;
+}
+
+function renderBadgeTile(badge: DevBadge, unknown: string): HTMLElement {
+  const tile = el('div', 'tc-badge-tile');
+  tile.tabIndex = 0;
+  tile.setAttribute('role', 'img');
+
+  const name = badge.name || unknown;
+  const accessibleLabel = badge.description
+    ? `${name}. ${badge.description}`
+    : name;
+  tile.setAttribute('aria-label', accessibleLabel);
+  // Native title tooltip: badge name, plus description when DEV's page had
+  // one. Set as a plain attribute, never markup — badge text is third-party.
+  tile.title = badge.description ? `${name}\n${badge.description}` : name;
+
+  // Not `image-rendering: pixelated` - unlike this extension's own Pokemon
+  // sprites, DEV badge art is an arbitrary third-party raster icon, so smooth
+  // scaling is what keeps it looking sharp rather than blocky.
+  const img = el('img', 'tc-badge-tile-img');
+  img.setAttribute('src', badge.imageUrl);
+  img.setAttribute('alt', '');
+  img.setAttribute('loading', 'lazy');
+  img.addEventListener('error', () => {
+    img.remove();
+    tile.classList.add('tc-badge-tile-broken');
+  });
+  tile.appendChild(img);
+
+  return tile;
+}
+
+function renderDevBadgesConnectPrompt(labels: TrainerCardLabels): HTMLElement {
+  const wrap = el('div', 'tc-devbadges-connect');
+  const button = el('button', 'tc-devbadges-link');
+  button.type = 'button';
+  button.textContent = labels.connectDevButton;
+  button.title = labels.connectDevHint;
+  button.addEventListener('click', () => {
+    post({ command: 'trainer/connectDev' });
+  });
+  wrap.appendChild(button);
+  return wrap;
+}
+
+/** Only reached when there is no cached fallback to show instead. */
+function renderDevBadgesError(
+  dev: DevBadgesView,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  const wrap = el('div', 'tc-devbadges-connect');
+  wrap.appendChild(
+    el(
+      'p',
+      'tc-devbadges-hint',
+      dev.error ? dev.error.message : labels.unknownValue,
+    ),
+  );
+  if (dev.error && dev.error.retryable) {
+    const retry = el('button', 'tc-devbadges-link');
+    retry.type = 'button';
+    retry.textContent = labels.retryButton;
+    retry.addEventListener('click', () => {
+      retry.disabled = true;
+      post({ command: 'trainer/refreshDev' });
+    });
+    wrap.appendChild(retry);
+  }
+  return wrap;
+}
+
+function renderDevBadgesActions(labels: TrainerCardLabels): HTMLElement {
+  const actions = el('div', 'tc-devbadges-actions');
+
+  const refresh = el('button', 'tc-devbadges-link');
+  refresh.type = 'button';
+  refresh.textContent = `↻ ${labels.refreshDevBadgesShort}`;
+  refresh.setAttribute('aria-label', labels.refreshDevBadgesButton);
+  refresh.title = labels.refreshDevBadgesButton;
+  refresh.addEventListener('click', () => {
+    refresh.disabled = true;
+    post({ command: 'trainer/refreshDev' });
+  });
+  actions.appendChild(refresh);
+
+  const disconnect = el('button', 'tc-devbadges-link');
+  disconnect.type = 'button';
+  disconnect.textContent = labels.disconnectDevButton;
+  disconnect.addEventListener('click', () => {
+    disconnect.disabled = true;
+    post({ command: 'trainer/disconnectDev' });
+  });
+  actions.appendChild(disconnect);
+
+  return actions;
+}
+
+function renderBadgesGrid(
+  dev: DevBadgesView,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  if (dev.badges.length === 0) {
+    return el('p', 'tc-devbadges-empty', labels.noDevBadgesLabel);
+  }
+  const grid = el('div', 'tc-badges-grid');
+  for (const badge of dev.badges) {
+    grid.appendChild(renderBadgeTile(badge, labels.unknownDevBadgeLabel));
+  }
+  return grid;
+}
+
+function renderBadgesLoading(): HTMLElement {
+  const grid = el('div', 'tc-badges-grid');
+  for (let i = 0; i < 4; i++) {
+    grid.appendChild(el('div', 'tc-shimmer tc-badge-tile'));
+  }
+  return grid;
+}
+
+/** BADGES: heading plus the earned artwork - see doc comment above. */
+function renderBadges(model: TrainerCardViewModel): HTMLElement {
+  const labels = model.labels;
+  const dev = model.devBadges;
+
+  const section = el('section', 'tc-section tc-section-badges');
+  section.appendChild(sectionTitle(labels.badgesSectionLabel));
+
+  if (dev.stale) {
+    section.appendChild(
+      el('p', 'tc-notice tc-notice-warn', staleDevBadgesText(dev, labels)),
+    );
+  }
+
+  switch (dev.status) {
+    case 'disconnected':
+      section.appendChild(renderDevBadgesConnectPrompt(labels));
+      break;
+    case 'loading':
+      section.appendChild(renderBadgesLoading());
+      break;
+    case 'error':
+      section.appendChild(renderDevBadgesError(dev, labels));
+      break;
+    default:
+      section.appendChild(renderBadgesGrid(dev, labels));
+      if (dev.status === 'connected') {
+        section.appendChild(renderDevBadgesActions(labels));
+      }
+      break;
+  }
+
+  return section;
+}
+
+/* ---------------------------- trainer sprite picker ----------------------- */
+
+/**
+ * CHOOSE TRAINER: a lightweight modal overlay for picking a Trainer Sprite,
+ * grouped by Generation I-IV tabs (see `TRAINER_GENERATIONS`, the single
+ * place that mapping is defined).
+ *
+ * Clicking a tile only previews it (`spritePickerPreviewId`); "Use This
+ * Trainer" is what actually posts `trainer/selectTrainerSprite`. Nothing
+ * here mutates persisted state until that confirm.
+ */
+function renderPickerTabs(): HTMLElement {
+  const tabs = el('div', 'tc-picker-tabs');
+  tabs.setAttribute('role', 'tablist');
+  for (const info of TRAINER_GENERATIONS) {
+    const tab = el('button', 'tc-picker-tab', info.label);
+    tab.type = 'button';
+    tab.setAttribute('role', 'tab');
+    const active = info.generation === spritePickerGeneration;
+    tab.setAttribute('aria-selected', String(active));
+    tab.addEventListener('click', () => {
+      if (spritePickerGeneration === info.generation) {
+        return;
+      }
+      spritePickerGeneration = info.generation;
+      rerender();
+    });
+    tabs.appendChild(tab);
+  }
+  return tabs;
+}
+
+function renderPickerTile(
+  option: TrainerSpriteOption,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  const selected = option.id === spritePickerPreviewId;
+  const tile = el(
+    'button',
+    selected ? 'tc-picker-tile tc-picker-tile-selected' : 'tc-picker-tile',
+  );
+  tile.type = 'button';
+  tile.setAttribute('aria-pressed', String(selected));
+  tile.setAttribute('aria-label', `${option.name} (${option.game})`);
+
+  const sprite = el('img', 'tc-picker-tile-sprite');
+  sprite.setAttribute('src', option.spriteUri);
+  sprite.setAttribute('alt', '');
+  tile.appendChild(sprite);
+
+  tile.appendChild(el('span', 'tc-picker-tile-name', option.name));
+  tile.appendChild(el('span', 'tc-picker-tile-game', option.game));
+
+  if (selected) {
+    tile.appendChild(
+      el('span', 'tc-picker-tile-badge', labels.selectedTrainerLabel),
+    );
+  }
+
+  tile.addEventListener('click', () => {
+    spritePickerPreviewId = option.id;
+    rerender();
+  });
+
+  return tile;
+}
+
+function renderPickerGrid(
+  model: TrainerCardViewModel,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  const options = model.trainerSpriteCatalog.filter(
+    (option) => option.generation === spritePickerGeneration,
+  );
+  if (options.length === 0) {
+    const empty = el('p', 'tc-picker-empty', labels.unknownValue);
+    return empty;
+  }
+  const grid = el('div', 'tc-picker-grid');
+  grid.setAttribute('role', 'tabpanel');
+  for (const option of options) {
+    grid.appendChild(renderPickerTile(option, labels));
+  }
+  return grid;
+}
+
+function renderPickerActions(
+  model: TrainerCardViewModel,
+  labels: TrainerCardLabels,
+): HTMLElement {
+  const actions = el('div', 'tc-picker-actions');
+
+  // Only worth offering when a sprite is actually selected right now -
+  // otherwise there is nothing to reset.
+  if (model.profile.trainerSpriteId) {
+    const useGithub = el('button', 'tc-devbadges-link tc-picker-actions-hint');
+    useGithub.type = 'button';
+    useGithub.textContent = labels.useGithubAvatarButton;
+    useGithub.addEventListener('click', () => {
+      post({ command: 'trainer/useGithubAvatar' });
+      closeSpritePicker();
+    });
+    actions.appendChild(useGithub);
+  }
+
+  const cancel = el('button', 'tc-button');
+  cancel.type = 'button';
+  cancel.textContent = labels.cancelButton;
+  cancel.addEventListener('click', () => {
+    closeSpritePicker();
+  });
+  actions.appendChild(cancel);
+
+  const confirm = el('button', 'tc-button tc-button-primary');
+  confirm.type = 'button';
+  confirm.textContent = labels.useThisTrainerButton;
+  confirm.disabled = !spritePickerPreviewId;
+  confirm.addEventListener('click', () => {
+    if (!spritePickerPreviewId) {
+      return;
+    }
+    post({
+      command: 'trainer/selectTrainerSprite',
+      spriteId: spritePickerPreviewId,
+    });
+    closeSpritePicker();
+  });
+  actions.appendChild(confirm);
+
+  return actions;
+}
+
+function renderTrainerSpritePicker(model: TrainerCardViewModel): HTMLElement {
+  const labels = model.labels;
+
+  const backdrop = el('div', 'tc-picker-backdrop');
+  // Clicking the dimmed backdrop cancels, same as the explicit Cancel button;
+  // a click inside the panel itself must not bubble up and trigger this.
+  backdrop.addEventListener('click', () => {
+    closeSpritePicker();
+  });
+
+  const panel = el('div', 'tc-picker-panel');
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-label', labels.trainerSpriteSelectorHeading);
+  panel.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  const head = el('div', 'tc-picker-head');
+  head.appendChild(
+    el('h2', 'tc-picker-heading', labels.trainerSpriteSelectorHeading),
+  );
+  const close = el('button', 'tc-picker-close', '✕');
+  close.type = 'button';
+  close.setAttribute('aria-label', labels.cancelButton);
+  close.title = labels.cancelButton;
+  close.addEventListener('click', () => {
+    closeSpritePicker();
+  });
+  head.appendChild(close);
+  panel.appendChild(head);
+
+  panel.appendChild(renderPickerTabs());
+  panel.appendChild(renderPickerGrid(model, labels));
+  panel.appendChild(renderPickerActions(model, labels));
+
+  backdrop.appendChild(panel);
+  setTimeout(() => close.focus(), 0);
+  return backdrop;
+}
+
 /* --------------------------------- states -------------------------------- */
 
+/**
+ * The physical landscape card: a compact CSS Grid of four regions -
+ * identity (left, spanning both rows), BADGES and PARTY (right column,
+ * stacked), and a footer row spanning both columns with TRAINER XP and the
+ * compact PARTNER box. See `.tc-card-body` for the grid-template-areas this
+ * relies on.
+ *
+ * DEV RECORD is deliberately NOT part of this grid - see
+ * `renderDevRecordPanel`, rendered as a separate element below the physical
+ * card so toggling it never resizes or distorts the compact card itself.
+ */
 function renderCard(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
   const github = model.github;
@@ -515,20 +1049,14 @@ function renderCard(model: TrainerCardViewModel): HTMLElement {
 
   const body = el('div', 'tc-card-body');
   body.appendChild(renderHero(model));
-  body.appendChild(el('div', 'tc-rule'));
-  // Hidden by preference, not by absence of data - the GitHub block is still
-  // fetched and cached, it just is not drawn.
-  if (model.showDevRecord) {
-    body.appendChild(renderDevRecord(model));
-  }
-  body.appendChild(el('div', 'tc-rule'));
+  body.appendChild(renderBadges(model));
+  body.appendChild(renderParty(model));
 
-  const lower = el('div', 'tc-lower');
-  lower.appendChild(renderTrainerRecord(model));
-  lower.appendChild(renderPartner(model));
-  body.appendChild(lower);
+  const footerRow = el('div', 'tc-footer-row');
+  footerRow.appendChild(renderXpPanel(model));
+  footerRow.appendChild(renderPartnerBox(model));
+  body.appendChild(footerRow);
 
-  body.appendChild(renderXpPanel(model));
   card.appendChild(body);
 
   const notices: HTMLElement[] = [];
@@ -708,8 +1236,10 @@ function renderFooter(model: TrainerCardViewModel): HTMLElement {
     });
     footer.appendChild(change);
 
-    // Only offered when there is actually a collection to choose from.
-    if (model.partner) {
+    // Only offered when the PARTY grid cannot already reach every Pokemon:
+    // once every candidate fits in (and is clickable within) the party grid,
+    // this button would do nothing the grid does not already do better.
+    if (model.partner && model.totalPartnerCandidates > model.party.length) {
       const partner = el('button', 'tc-button');
       partner.type = 'button';
       partner.textContent = labels.changePartnerShort;
@@ -720,6 +1250,16 @@ function renderFooter(model: TrainerCardViewModel): HTMLElement {
       });
       footer.appendChild(partner);
     }
+
+    const chooseTrainer = el('button', 'tc-button');
+    chooseTrainer.type = 'button';
+    chooseTrainer.textContent = labels.chooseTrainerShort;
+    chooseTrainer.setAttribute('aria-label', labels.chooseTrainerButton);
+    chooseTrainer.title = labels.chooseTrainerButton;
+    chooseTrainer.addEventListener('click', () => {
+      openSpritePicker(model);
+    });
+    footer.appendChild(chooseTrainer);
 
     // Labelled for what clicking it does, not for the current state.
     const devRecord = el('button', 'tc-button');
@@ -768,10 +1308,23 @@ function render(model: TrainerCardViewModel): void {
       break;
     default:
       shell.appendChild(renderCard(model));
+      // Hidden by preference, not by absence of data - the GitHub block is
+      // still fetched and cached, it just is not drawn. Kept OUTSIDE the
+      // physical card so opening it never resizes the compact landscape
+      // card itself - see `renderDevRecordPanel`.
+      if (model.showDevRecord) {
+        shell.appendChild(renderDevRecordPanel(model));
+      }
       break;
   }
   shell.appendChild(renderFooter(model));
   root.appendChild(shell);
+
+  // Same gate as the footer's "Choose Trainer" button: unreachable only from
+  // onboarding, where there is no trainer profile to attach a sprite to yet.
+  if (spritePickerOpen && model.status !== 'onboarding') {
+    root.appendChild(renderTrainerSpritePicker(model));
+  }
 }
 
 export function trainerCardApp(): void {
@@ -784,7 +1337,14 @@ export function trainerCardApp(): void {
     if (!message || message.command !== 'trainer/state') {
       return;
     }
-    render(message.payload as TrainerCardViewModel);
+    lastModel = message.payload as TrainerCardViewModel;
+    render(lastModel);
+  });
+
+  window.addEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && spritePickerOpen) {
+      closeSpritePicker();
+    }
   });
 
   post({ command: 'trainer/ready' });

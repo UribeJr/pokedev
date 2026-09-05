@@ -11,3 +11,10 @@ media/main-bundle.js
 media/trainer-card-bundle.js
 .DS_Store
 
+# Real GBC overlay PNGs vendored locally from mugwomp93/muOS_Customization for
+# development/testing only - the repo declares no license and two of these
+# files render Nintendo's "GAME BOY COLOR" trademark, so they must never be
+# committed/published until redistribution rights are explicitly cleared.
+# See the provenance/licensing note at the top of src/common/display-skins.ts.
+media/borders/*.png
+

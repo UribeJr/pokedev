@@ -31,6 +31,7 @@ import {
 } from '../progression/reaction-types';
 import { IPokemonCollection } from './pokemon-collection';
 import { IPokemonType } from './states';
+import { getWorldWidth } from './world-bounds';
 
 interface IncomingReactionMessage {
   command: string;
@@ -210,7 +211,7 @@ class ReactionController {
   private _reposition(symbolEl: HTMLDivElement, pokemon: IPokemonType): void {
     const centerLeft = pokemon.left + pokemon.width / 2;
     const maxLeft = Math.max(
-      window.innerWidth - SYMBOL_HALF_WIDTH_PX,
+      getWorldWidth() - SYMBOL_HALF_WIDTH_PX,
       SYMBOL_HALF_WIDTH_PX,
     );
     symbolEl.style.left = `${clamp(centerLeft, SYMBOL_HALF_WIDTH_PX, maxLeft)}px`;

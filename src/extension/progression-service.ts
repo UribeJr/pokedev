@@ -17,7 +17,10 @@ import {
   addPokemonXp,
   getPokemonXpForNextLevel,
 } from '../progression/pokemon-progression';
-import { ProgressionEvent } from '../progression/progression-types';
+import {
+  LevelUpResult,
+  ProgressionEvent,
+} from '../progression/progression-types';
 import { appendToLog, XpLedger } from '../progression/xp-ledger';
 import { XP_RULES } from '../progression/xp-rules';
 import {
@@ -46,6 +49,38 @@ import { readTrainerProfile, writeTrainerProfile } from './trainer-storage';
 /** How long a level-up message lingers in the status bar. */
 const STATUS_MESSAGE_MS = 6000;
 
+/** One Pokemon's share of a single applied event, for `onDidApplyProgression`
+ * subscribers - currently only Daily Challenges - that need to know more than
+ * "some XP was granted somewhere". */
+export interface PokemonXpOutcome {
+  nickname: string;
+  species: string;
+  isPartner: boolean;
+  /** The actual amount written, which can be less than the event's base
+   * award near the level cap. */
+  xpGranted: number;
+  /** This Pokemon's level immediately before this grant. */
+  levelBefore: number;
+  /** Present only when this grant crossed a level. */
+  levelUp?: LevelUpResult;
+}
+
+/**
+ * What one call to `applyEvent` actually did, for subscribers that need more
+ * detail than `pokedevState`'s "something changed" broadcast.
+ *
+ * This is a read-only account of a decision `ProgressionService` already
+ * made - not a second opinion. Nothing outside this file decides how much XP
+ * an event is worth or who receives it; a subscriber only ever reacts to what
+ * already happened.
+ */
+export interface ProgressionOutcome {
+  event: ProgressionEvent;
+  /** Trainer XP actually written; 0 if the grant was capped away to nothing. */
+  trainerXpGranted: number;
+  pokemonGrants: PokemonXpOutcome[];
+}
+
 /**
  * Builds an event from the rule table.
  *
@@ -69,6 +104,20 @@ export function createProgressionEvent(
 
 export class ProgressionService {
   private readonly _ledger = new XpLedger();
+
+  private readonly _progressionEmitter =
+    new vscode.EventEmitter<ProgressionOutcome>();
+
+  /**
+   * Fires once per `applyEvent` call that actually paid something out.
+   *
+   * Added for Daily Challenges, but deliberately generic: it is a plain
+   * record of what this service just did, so any future consumer (an
+   * achievement, an activity feed) can subscribe without this file needing to
+   * know it exists, exactly like `pokedevState.onDidChange`.
+   */
+  public readonly onDidApplyProgression: vscode.Event<ProgressionOutcome> =
+    this._progressionEmitter.event;
 
   /**
    * Active coding time observed but not yet written to disk.
@@ -140,22 +189,25 @@ export class ProgressionService {
       return false;
     }
 
-    await this._grantTrainerXp(event);
-    await this._grantPokemonXp(event);
+    const trainerXpGranted = await this._grantTrainerXp(event);
+    const pokemonGrants = await this._grantPokemonXp(event);
     await this._log(event);
     this._notifyCard();
+    this._progressionEmitter.fire({ event, trainerXpGranted, pokemonGrants });
     return true;
   }
 
-  private async _grantTrainerXp(event: ProgressionEvent): Promise<void> {
+  /** Returns the amount actually written (0 if capped away to nothing). */
+  private async _grantTrainerXp(event: ProgressionEvent): Promise<number> {
     if (event.trainerXp <= 0) {
-      return;
+      return 0;
     }
     const now = Date.now();
     const before = readTrainerProfile(this._context, now);
     const after = addTrainerXp(before, event.trainerXp);
-    if (after.totalTrainerXp === before.totalTrainerXp) {
-      return;
+    const granted = after.totalTrainerXp - before.totalTrainerXp;
+    if (granted <= 0) {
+      return 0;
     }
     await writeTrainerProfile(this._context, after);
 
@@ -165,6 +217,38 @@ export class ProgressionService {
         vscode.l10n.t('Trainer reached Lv. {0}!', after.trainerLevel),
       );
     }
+    return granted;
+  }
+
+  /**
+   * Grants a flat amount of Trainer XP outside the normal activity-event
+   * path - Daily Challenge rewards are the only current caller.
+   *
+   * Bypasses the ledger deliberately: the anti-farming limits in
+   * `xp-ledger.ts` exist to catch runaway ACTIVITY (a misbehaving listener
+   * firing hundreds of save events), and a Daily Challenge reward is neither
+   * activity nor repeatable - `daily-challenges-service.ts` already
+   * guarantees each one is granted at most once. Still goes through
+   * `addTrainerXp`/`writeTrainerProfile`, so this remains the only code path
+   * that ever touches the Trainer profile.
+   */
+  public async grantFlatTrainerXp(amount: number): Promise<void> {
+    if (!ProgressionService.isEnabled() || !isFinite(amount) || amount <= 0) {
+      return;
+    }
+    const now = Date.now();
+    const before = readTrainerProfile(this._context, now);
+    const after = addTrainerXp(before, amount);
+    if (after.totalTrainerXp === before.totalTrainerXp) {
+      return;
+    }
+    await writeTrainerProfile(this._context, after);
+    if (after.trainerLevel > before.trainerLevel) {
+      showStatusMessage(
+        vscode.l10n.t('Trainer reached Lv. {0}!', after.trainerLevel),
+      );
+    }
+    this._notifyCard();
   }
 
   /**
@@ -178,13 +262,15 @@ export class ProgressionService {
    * nickname, so it survives an evolution - which changes species but never
    * the name - without any migration.
    */
-  private async _grantPokemonXp(event: ProgressionEvent): Promise<void> {
+  private async _grantPokemonXp(
+    event: ProgressionEvent,
+  ): Promise<PokemonXpOutcome[]> {
     if (event.pokemonXp <= 0) {
-      return;
+      return [];
     }
     const partner = resolvePartnerIdentity(this._context);
     if (!partner) {
-      return;
+      return [];
     }
 
     // Reacting is about the coding event happening, not about whether any
@@ -202,6 +288,7 @@ export class ProgressionService {
 
     const now = Date.now();
     let sharedAmountGranted = 0;
+    const outcomes: PokemonXpOutcome[] = [];
 
     for (const grant of grants) {
       const identity = grant.isPartner
@@ -210,14 +297,17 @@ export class ProgressionService {
       if (!identity) {
         continue;
       }
-      const applied = await this._applyPokemonXpGrant(
+      const outcome = await this._applyPokemonXpGrant(
         identity,
         grant,
         event,
         now,
       );
-      if (applied && !grant.isPartner) {
-        sharedAmountGranted = grant.amount;
+      if (outcome) {
+        outcomes.push(outcome);
+        if (!grant.isPartner) {
+          sharedAmountGranted = grant.amount;
+        }
       }
     }
 
@@ -232,6 +322,8 @@ export class ProgressionService {
         now,
       );
     }
+
+    return outcomes;
   }
 
   /**
@@ -247,7 +339,7 @@ export class ProgressionService {
     grant: PokemonXpGrant,
     event: ProgressionEvent,
     now: number,
-  ): Promise<boolean> {
+  ): Promise<PokemonXpOutcome | undefined> {
     const before = readPokemonProgress(
       this._context,
       identity.nickname,
@@ -256,7 +348,7 @@ export class ProgressionService {
     );
     const { progress, result } = addPokemonXp(before, grant.amount);
     if (progress.totalXp === before.totalXp) {
-      return false;
+      return undefined;
     }
 
     // Keep the recorded species current; the collection stays authoritative.
@@ -279,13 +371,29 @@ export class ProgressionService {
         identity.nickname,
         displayName,
         actualXp,
-        event.type === 'git-commit' ? 'large' : 'normal',
+        // A build/test pass gets the same emphasis as a commit - both are a
+        // verified outcome, not incremental progress. typecheck/lint stay
+        // 'normal', matching the subtler reaction they get.
+        event.type === 'git-commit' ||
+          event.type === 'build-success' ||
+          event.type === 'test-success'
+          ? 'large'
+          : 'normal',
         now,
       );
     }
 
+    const outcome: PokemonXpOutcome = {
+      nickname: identity.nickname,
+      species: identity.species,
+      isPartner: grant.isPartner,
+      xpGranted: actualXp,
+      levelBefore: before.level,
+      levelUp: result.levelledUp ? result : undefined,
+    };
+
     if (!result.levelledUp) {
-      return true;
+      return outcome;
     }
 
     // A level-up is significant enough to get its full existing feedback
@@ -303,7 +411,7 @@ export class ProgressionService {
       await this._maybeOfferEvolution(identity.nickname, result.toLevel);
     }
 
-    return true;
+    return outcome;
   }
 
   /**
@@ -320,6 +428,16 @@ export class ProgressionService {
       reactionHub.notifySave(pokemonId);
     } else if (event.type === 'git-commit') {
       reactionHub.notifyCommit(pokemonId);
+    } else if (
+      event.type === 'build-success' ||
+      event.type === 'test-success'
+    ) {
+      reactionHub.notifyDevAction(pokemonId, false);
+    } else if (
+      event.type === 'typecheck-success' ||
+      event.type === 'lint-success'
+    ) {
+      reactionHub.notifyDevAction(pokemonId, true);
     }
   }
 
@@ -409,6 +527,10 @@ export class ProgressionService {
   /** Test/debug seam: forget the in-memory rate-limit windows. */
   public resetLedger(): void {
     this._ledger.reset();
+  }
+
+  public dispose(): void {
+    this._progressionEmitter.dispose();
   }
 
   /** Experience the partner needs for its next level; 0 when capped. */

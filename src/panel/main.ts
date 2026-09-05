@@ -21,6 +21,11 @@ import { PokemonElementState, PokemonPanelState } from './states';
 import { getRandomPokemonConfig } from '../common/pokemon-data';
 import { reactionController } from './reaction-controller';
 import { toastController } from './toast-controller';
+import {
+  getDisplaySkinById,
+  PokedevDisplaySkin,
+} from '../common/display-skins';
+import { getWorldHeight, getWorldWidth } from './world-bounds';
 
 /* This is how the VS Code API can be invoked from the panel */
 declare global {
@@ -497,7 +502,7 @@ function recoverState(
 }
 
 function randomStartPosition(): number {
-  return Math.floor(Math.random() * (window.innerWidth * 0.7));
+  return Math.floor(Math.random() * (getWorldWidth() * 0.7));
 }
 
 let canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D;
@@ -513,8 +518,79 @@ function initCanvas() {
     console.log('Canvas context not ready');
     return;
   }
-  ctx.canvas.width = window.innerWidth;
-  ctx.canvas.height = window.innerHeight;
+  ctx.canvas.width = getWorldWidth();
+  ctx.canvas.height = getWorldHeight();
+}
+
+/**
+ * The currently applied display skin. Defaults to `none` (full-viewport
+ * screen, no overlay) until `applyDisplaySkin` runs during bootstrap.
+ */
+let currentDisplaySkin: PokedevDisplaySkin = getDisplaySkinById(undefined);
+
+/**
+ * Letterboxes `.pokedev-display` to the current skin's aspect ratio inside
+ * whatever size the Explorer sidebar currently is, then re-sizes the ball
+ * canvas to match. For the `none` skin the ratio is always set to the
+ * viewport's own ratio, so the computed size is exactly the viewport - pixel
+ * identical to this view's appearance before display skins existed.
+ */
+function layoutDisplay(): void {
+  const displayEl = document.getElementById('pokedevDisplay');
+  if (!displayEl) {
+    return;
+  }
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const ratio = currentDisplaySkin.imageFile
+    ? currentDisplaySkin.sourceWidth / currentDisplaySkin.sourceHeight
+    : viewportWidth / Math.max(viewportHeight, 1);
+
+  let width = viewportWidth;
+  let height = width / ratio;
+  if (height > viewportHeight) {
+    height = viewportHeight;
+    width = height * ratio;
+  }
+
+  displayEl.style.width = `${Math.round(width)}px`;
+  displayEl.style.height = `${Math.round(height)}px`;
+
+  initCanvas();
+}
+
+/**
+ * Applies a display skin by id: shows/hides the bezel overlay image, insets
+ * `.pokedev-screen` to the skin's normalized screen rectangle, and
+ * re-letterboxes. Never touches `allPokemon`/webview state - purely
+ * presentational, safe to call any number of times.
+ */
+function applyDisplaySkin(basePokemonUri: string, skinId: string): void {
+  const skin = getDisplaySkinById(skinId);
+  currentDisplaySkin = skin;
+
+  const overlayEl = document.getElementById(
+    'pokedevOverlay',
+  ) as HTMLImageElement | null;
+  if (overlayEl) {
+    if (skin.imageFile) {
+      overlayEl.src = `${basePokemonUri}/${skin.imageFile}`;
+      overlayEl.style.display = 'block';
+    } else {
+      overlayEl.removeAttribute('src');
+      overlayEl.style.display = 'none';
+    }
+  }
+
+  const screenEl = document.getElementById('pokedevScreen');
+  if (screenEl) {
+    screenEl.style.left = `${skin.screen.x * 100}%`;
+    screenEl.style.top = `${skin.screen.y * 100}%`;
+    screenEl.style.width = `${skin.screen.width * 100}%`;
+    screenEl.style.height = `${skin.screen.height * 100}%`;
+  }
+
+  layoutDisplay();
 }
 
 // It cannot access the main VS Code APIs directly.
@@ -528,12 +604,20 @@ export function pokemonPanelApp(
   throwBallWithMouse: boolean,
   gen: string,
   originalSpriteSize: number,
+  displaySkinId?: string,
   stateApi?: VscodeStateApi,
 ) {
   var floor = 0;
   if (!stateApi) {
     stateApi = acquireVsCodeApi();
   }
+
+  // Sizes `.pokedev-display`/`.pokedev-screen` before anything below reads
+  // `getWorldWidth()`/`getWorldHeight()` (recovered/spawned Pokemon states
+  // included), so the very first frame already respects the selected skin's
+  // screen opening instead of the full viewport.
+  applyDisplaySkin(basePokemonUri, displaySkinId ?? 'none');
+
   // Apply Theme backgrounds
   const foregroundEl = document.getElementById('foreground');
   if (theme !== Theme.none) {
@@ -587,7 +671,20 @@ export function pokemonPanelApp(
     saveState(stateApi);
   }
 
-  initCanvas();
+  // This webview's OWN persisted state (separate from the extension's saved
+  // Pokemon collection - see `saveState`) is not the same thing as the
+  // user's real collection, and can drift behind it: an extension update or
+  // a cleared webview state resets the former but never the latter, and a
+  // Pokemon spawned or evolved while a DIFFERENT window's copy of this same
+  // view was the open one never reaches this one at all, since this state is
+  // per-webview, not shared. Sent unconditionally, whether or not there was
+  // anything to recover above, carrying whatever this webview currently has
+  // so the host only ever fills in what is actually missing rather than
+  // risking a visual duplicate of a Pokemon already restored.
+  stateApi?.postMessage({
+    command: 'request-canonical-collection',
+    text: allPokemon.pokemonCollection.map((p) => p.pokemon.name).join('\n'),
+  });
 
   // Handle messages sent from the extension to the webview
   window.addEventListener('message', (event): void => {
@@ -687,9 +784,12 @@ export function pokemonPanelApp(
         pokemonCounter = 1;
         saveState(stateApi);
         break;
+      case 'set-display-skin':
+        applyDisplaySkin(basePokemonUri, message.text);
+        break;
     }
   });
 }
 window.addEventListener('resize', function () {
-  initCanvas();
+  layoutDisplay();
 });

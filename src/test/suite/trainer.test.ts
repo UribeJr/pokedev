@@ -19,8 +19,24 @@ import {
   getXpForNextTrainerLevel,
   MAX_TRAINER_LEVEL,
   normalizeTrainerProfile,
+  recordEvolution,
+  withTrainerSprite,
 } from '../../trainer/trainer-profile';
-import { GithubProfileCache, LanguageCount } from '../../trainer/trainer-types';
+import {
+  hasDistinctNickname,
+  resolveDisplayName,
+} from '../../trainer/pokemon-display-name';
+import {
+  getTrainerSprite,
+  getTrainerSpritesByGeneration,
+  TRAINER_GENERATIONS,
+  TRAINER_SPRITES,
+} from '../../trainer/trainer-sprite-catalog';
+import {
+  GithubProfileCache,
+  LanguageCount,
+  PARTY_SLOTS,
+} from '../../trainer/trainer-types';
 
 const NOW = 1_700_000_000_000;
 const TTL = 45 * 60 * 1000;
@@ -40,6 +56,7 @@ suite('TrainerProfile defaults', () => {
     assert.strictEqual(profile.shinyPokemonCaught, 0);
     assert.deepStrictEqual(profile.badges, []);
     assert.deepStrictEqual(profile.achievements, []);
+    assert.strictEqual(profile.totalEvolutions, 0);
     assert.strictEqual(profile.totalCodingTimeMs, 0);
     assert.strictEqual(profile.createdAt, NOW);
   });
@@ -142,6 +159,242 @@ suite('normalizeTrainerProfile', () => {
       'new',
     );
     assert.strictEqual(profile.githubUsername, 'new');
+  });
+
+  test('a profile written before totalEvolutions existed defaults to 0', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 1, trainerLevel: 10 },
+      NOW,
+    );
+    assert.strictEqual(profile.totalEvolutions, 0);
+  });
+
+  test('a stored evolution count is carried over', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 2, totalEvolutions: 3 },
+      NOW,
+    );
+    assert.strictEqual(profile.totalEvolutions, 3);
+  });
+
+  test('a corrupt evolution count is coerced to 0', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 2, totalEvolutions: -4 },
+      NOW,
+    );
+    assert.strictEqual(profile.totalEvolutions, 0);
+  });
+});
+
+suite('Evolution count', () => {
+  test('recordEvolution increments the lifetime total', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    const once = recordEvolution(profile);
+    assert.strictEqual(once.totalEvolutions, 1);
+    const twice = recordEvolution(once);
+    assert.strictEqual(twice.totalEvolutions, 2);
+  });
+
+  test('recordEvolution does not mutate its input', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    recordEvolution(profile);
+    assert.strictEqual(profile.totalEvolutions, 0);
+  });
+
+  test('recordEvolution leaves the rest of the profile untouched', () => {
+    const profile = addTrainerXp(createDefaultTrainerProfile(NOW, 'ash'), 130);
+    const after = recordEvolution(profile);
+    assert.strictEqual(after.trainerLevel, profile.trainerLevel);
+    assert.strictEqual(after.trainerXp, profile.trainerXp);
+    assert.strictEqual(after.githubUsername, 'ash');
+  });
+});
+
+suite('Party display name', () => {
+  test('a nickname identical to the species is not distinct', () => {
+    assert.strictEqual(hasDistinctNickname('Pikachu', 'Pikachu'), false);
+  });
+
+  test('comparison is case- and whitespace-insensitive', () => {
+    assert.strictEqual(hasDistinctNickname('  pikachu ', 'Pikachu'), false);
+  });
+
+  test('an empty nickname is never distinct', () => {
+    assert.strictEqual(hasDistinctNickname('', 'Pikachu'), false);
+    assert.strictEqual(hasDistinctNickname('   ', 'Pikachu'), false);
+  });
+
+  test('a real nickname is distinct', () => {
+    assert.strictEqual(hasDistinctNickname('Sparky', 'Pikachu'), true);
+  });
+
+  test('resolveDisplayName prefers a distinct nickname', () => {
+    assert.strictEqual(resolveDisplayName('Sparky', 'Pikachu'), 'Sparky');
+  });
+
+  test('resolveDisplayName falls back to species otherwise', () => {
+    assert.strictEqual(resolveDisplayName('Pikachu', 'Pikachu'), 'Pikachu');
+    assert.strictEqual(resolveDisplayName('', 'Pikachu'), 'Pikachu');
+  });
+});
+
+suite('Party slots', () => {
+  test('the Trainer Card party holds a classic 6 Pokemon', () => {
+    assert.strictEqual(PARTY_SLOTS, 6);
+  });
+});
+
+suite('Trainer sprite catalog', () => {
+  test('exactly Generations I-IV are defined, in order', () => {
+    assert.deepStrictEqual(
+      TRAINER_GENERATIONS.map((info) => info.generation),
+      [1, 2, 3, 4],
+    );
+  });
+
+  test('every generation has a label', () => {
+    for (const info of TRAINER_GENERATIONS) {
+      assert.ok(info.label.length > 0, `generation ${info.generation}`);
+    }
+  });
+
+  test('every sprite id is unique', () => {
+    const ids = TRAINER_SPRITES.map((sprite) => sprite.id);
+    assert.strictEqual(new Set(ids).size, ids.length);
+  });
+
+  test('every sprite belongs to one of Generations I-IV', () => {
+    for (const sprite of TRAINER_SPRITES) {
+      assert.ok(
+        [1, 2, 3, 4].includes(sprite.generation),
+        `${sprite.id} has generation ${sprite.generation}`,
+      );
+    }
+  });
+
+  test('every sprite has a non-empty name, game and asset path', () => {
+    for (const sprite of TRAINER_SPRITES) {
+      assert.ok(sprite.name.length > 0, `${sprite.id} name`);
+      assert.ok(sprite.game.length > 0, `${sprite.id} game`);
+      assert.ok(sprite.assetPath.length > 0, `${sprite.id} assetPath`);
+    }
+  });
+
+  test('Generation I includes Red and Blue', () => {
+    const ids = getTrainerSpritesByGeneration(1).map((s) => s.id);
+    assert.deepStrictEqual(ids.sort(), ['gen1-blue', 'gen1-red']);
+  });
+
+  test('Generation II includes Ethan and Kris', () => {
+    const ids = getTrainerSpritesByGeneration(2).map((s) => s.id);
+    assert.deepStrictEqual(ids.sort(), ['gen2-ethan', 'gen2-kris']);
+  });
+
+  test('Generation III includes Brendan, May and Leaf', () => {
+    const ids = getTrainerSpritesByGeneration(3).map((s) => s.id);
+    assert.deepStrictEqual(ids.sort(), [
+      'gen3-brendan',
+      'gen3-leaf',
+      'gen3-may',
+    ]);
+  });
+
+  test('Generation IV includes Lucas, Dawn and Lyra', () => {
+    const ids = getTrainerSpritesByGeneration(4).map((s) => s.id);
+    assert.deepStrictEqual(ids.sort(), [
+      'gen4-dawn',
+      'gen4-lucas',
+      'gen4-lyra',
+    ]);
+  });
+
+  test('getTrainerSprite resolves a known id', () => {
+    const sprite = getTrainerSprite('gen1-red');
+    assert.ok(sprite);
+    assert.strictEqual(sprite.name, 'Red');
+    assert.strictEqual(sprite.generation, 1);
+  });
+
+  test('getTrainerSprite is undefined for an unknown, null or missing id', () => {
+    assert.strictEqual(getTrainerSprite('not-a-real-sprite'), undefined);
+    assert.strictEqual(getTrainerSprite(null), undefined);
+    assert.strictEqual(getTrainerSprite(undefined), undefined);
+  });
+});
+
+suite('Trainer sprite selection', () => {
+  test('a fresh profile has no sprite selected, so the GitHub avatar is used', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    assert.strictEqual(profile.trainerSpriteId, null);
+  });
+
+  test('withTrainerSprite persists a known sprite id', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    const after = withTrainerSprite(profile, 'gen3-may');
+    assert.strictEqual(after.trainerSpriteId, 'gen3-may');
+  });
+
+  test('withTrainerSprite(profile, null) resets to the GitHub avatar', () => {
+    const profile = withTrainerSprite(
+      createDefaultTrainerProfile(NOW),
+      'gen4-dawn',
+    );
+    const reset = withTrainerSprite(profile, null);
+    assert.strictEqual(reset.trainerSpriteId, null);
+  });
+
+  test('withTrainerSprite rejects an unknown id, falling back to null', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    const after = withTrainerSprite(profile, 'not-a-real-sprite');
+    assert.strictEqual(after.trainerSpriteId, null);
+  });
+
+  test('withTrainerSprite does not mutate its input', () => {
+    const profile = createDefaultTrainerProfile(NOW);
+    withTrainerSprite(profile, 'gen1-blue');
+    assert.strictEqual(profile.trainerSpriteId, null);
+  });
+
+  test('withTrainerSprite leaves the rest of the profile untouched', () => {
+    const profile = addTrainerXp(createDefaultTrainerProfile(NOW, 'ash'), 130);
+    const after = withTrainerSprite(profile, 'gen2-kris');
+    assert.strictEqual(after.trainerLevel, profile.trainerLevel);
+    assert.strictEqual(after.trainerXp, profile.trainerXp);
+    assert.strictEqual(after.githubUsername, 'ash');
+  });
+
+  test('a profile written before trainerSpriteId existed defaults to null', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 1, trainerLevel: 10 },
+      NOW,
+    );
+    assert.strictEqual(profile.trainerSpriteId, null);
+  });
+
+  test('a stored, still-valid sprite id survives normalization', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 2, trainerSpriteId: 'gen4-lucas' },
+      NOW,
+    );
+    assert.strictEqual(profile.trainerSpriteId, 'gen4-lucas');
+  });
+
+  test('a stored sprite id no longer in the catalog normalizes to null', () => {
+    const profile = normalizeTrainerProfile(
+      { version: 2, trainerSpriteId: 'gen1-does-not-exist' },
+      NOW,
+    );
+    assert.strictEqual(profile.trainerSpriteId, null);
+  });
+
+  test('a corrupt (non-string) trainerSpriteId normalizes to null', () => {
+    for (const raw of [42, {}, [], true]) {
+      const profile = normalizeTrainerProfile(
+        { version: 2, trainerSpriteId: raw },
+        NOW,
+      );
+      assert.strictEqual(profile.trainerSpriteId, null);
+    }
   });
 });
 

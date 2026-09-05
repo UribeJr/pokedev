@@ -444,6 +444,19 @@ Extracting and creating .gif files involves quite a bit of tedious manual work, 
   in-game Trainer Card, drawn with CSS and the sprite assets already in this
   repository; all underlying designs and trademarks belong to their owners
 
+### Trainer Sprites
+- Trainer Sprites (the selectable Gen I-IV Trainer Card portraits): sprites
+  from Pokémon Red/Blue/Green, Gold/Silver/Crystal, Ruby/Sapphire/Emerald/
+  FireRed/LeafGreen, and Diamond/Pearl/Platinum/HeartGold/SoulSilver
+- © Nintendo / Creatures Inc. / GAME FREAK inc., used for non-commercial,
+  fan project purposes only
+- Curated from [jonbarrow/trainercards.studio](https://github.com/jonbarrow/trainercards.studio),
+  which credits [Bulbagarden Archives](https://archives.bulbagarden.net/wiki/Category:Trainer_sprites)
+  and [pokengine.org](https://pokengine.org) as the original sources
+  (see that project's [ATTRIBUTIONS.md](https://github.com/jonbarrow/trainercards.studio/blob/master/content/ATTRIBUTIONS.md))
+- Only a small, curated selection is bundled here (one or two sprites per
+  source game) — not that project's full multi-thousand-sprite archive
+
 ### Fonts
 - Silkscreen by Jason Kottke, licensed under the SIL Open Font License 1.1
   (see [media/Silkscreen-LICENSE.txt](media/Silkscreen-LICENSE.txt))

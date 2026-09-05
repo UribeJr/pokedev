@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import {
+  DEV_USERNAME_PATTERN,
+  isValidDevUsername,
+} from '../trainer/dev-badge-parse';
+import {
   GITHUB_USERNAME_PATTERN,
   isValidGithubUsername,
 } from '../trainer/github-parse';
@@ -7,8 +11,11 @@ import { computeTrainerClass } from '../trainer/trainer-class';
 import {
   getTrainerCardTier,
   getXpForNextTrainerLevel,
+  withTrainerSprite,
 } from '../trainer/trainer-profile';
 import {
+  DevBadgesView,
+  PARTY_SLOTS,
   TRAINER_CARD_VIEW_TYPE,
   TrainerCardLabels,
   TrainerCardStatus,
@@ -19,14 +26,29 @@ import {
   TrainerProfile,
   TrainerWebviewboundMessage,
 } from '../trainer/trainer-types';
+import { DevBadgeResolution, resolveDevBadges } from './dev-badge-service';
 import { resolveGithubProfile } from './trainer-github-service';
-import { resolvePartnerPokemon } from './trainer-partner';
-import { readTrainerProfile, syncTrainerProfile } from './trainer-storage';
+import {
+  listPartnerCandidates,
+  resolvePartnerPokemon,
+  setPartnerNickname,
+} from './trainer-partner';
+import {
+  buildTrainerSpriteCatalog,
+  resolveTrainerSpriteUri,
+} from './trainer-sprite-service';
+import {
+  clearDevCache,
+  readTrainerProfile,
+  syncTrainerProfile,
+  writeTrainerProfile,
+} from './trainer-storage';
 import { getNonce } from './webview-util';
 import { pickPartnerPokemon } from './partner-picker';
 import { pokedevState } from './pokedev-state';
 
 const GITHUB_USERNAME_SETTING = 'githubUsername';
+const DEV_USERNAME_SETTING = 'devUsername';
 const CONFIG_SECTION = 'pokedev';
 
 /**
@@ -39,6 +61,7 @@ const CONFIG_SECTION = 'pokedev';
 const PROGRESSION_PUSH_THROTTLE_MS = 2000;
 
 const DEV_RECORD_SETTING = 'trainerCard.showDevRecord';
+const CODING_TIME_SETTING = 'trainerCard.showCodingTime';
 
 /** Whether the card shows the GitHub-derived DEV RECORD block. */
 export function isDevRecordVisible(): boolean {
@@ -63,9 +86,32 @@ async function toggleDevRecordVisible(): Promise<void> {
     );
 }
 
+/**
+ * Whether the Trainer Record shows Coding Time.
+ *
+ * Off by default (see `pokedev.trainerCard.showCodingTime` in package.json):
+ * Coding Time keeps accruing either way through
+ * `ProgressionService.addCodingTime`/`flush` - this setting only governs
+ * whether the card renders it.
+ */
+export function isCodingTimeVisible(): boolean {
+  return vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<boolean>(CODING_TIME_SETTING, false);
+}
+
 /** Only GitHub's avatar CDN is allowed as an image source. */
 const AVATAR_HOSTS =
   'https://avatars.githubusercontent.com https://*.githubusercontent.com';
+
+/**
+ * DEV badge art is served from DEV's own media proxy, on a rotating set of
+ * numbered subdomains (media0.dev.to, media1.dev.to, ...). A wildcard is the
+ * only practical way to allow that without hard-coding a subdomain count that
+ * DEV could change; it still restricts img loads to DEV's own domain rather
+ * than opening img-src to the web.
+ */
+const DEV_BADGE_HOSTS = 'https://*.dev.to';
 
 export function getConfiguredGithubUsername(): string {
   const value = vscode.workspace
@@ -116,6 +162,53 @@ export async function promptForGithubUsername(): Promise<string | undefined> {
   return value === undefined ? undefined : value.trim();
 }
 
+export function getConfiguredDevUsername(): string {
+  const value = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<string>(DEV_USERNAME_SETTING, '');
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * The setting is declared with `"scope": "application"`, mirroring
+ * `pokedev.githubUsername` — see `setConfiguredGithubUsername`.
+ */
+export async function setConfiguredDevUsername(
+  username: string,
+): Promise<void> {
+  await vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .update(DEV_USERNAME_SETTING, username, vscode.ConfigurationTarget.Global);
+}
+
+/**
+ * Prompts for a DEV username. Returns undefined when cancelled.
+ *
+ * An empty submission is accepted as valid input (mirroring
+ * `promptForGithubUsername`) and is treated as a disconnect by the caller.
+ */
+export async function promptForDevUsername(): Promise<string | undefined> {
+  const value = await vscode.window.showInputBox({
+    title: vscode.l10n.t('Connect your DEV Community profile'),
+    prompt: vscode.l10n.t(
+      'Only your public DEV badges are read. No authentication is used.',
+    ),
+    placeHolder: vscode.l10n.t('DEV username'),
+    value: getConfiguredDevUsername(),
+    ignoreFocusOut: true,
+    validateInput: (input) => {
+      const trimmed = input.trim();
+      if (trimmed.length === 0) {
+        return undefined;
+      }
+      return DEV_USERNAME_PATTERN.test(trimmed)
+        ? undefined
+        : vscode.l10n.t('That is not a valid DEV username.');
+    },
+  });
+  return value === undefined ? undefined : value.trim();
+}
+
 function getTrainerWebviewOptions(
   extensionUri: vscode.Uri,
 ): vscode.WebviewOptions & vscode.WebviewPanelOptions {
@@ -157,6 +250,13 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
     changePartnerShort: vscode.l10n.t('Change Partner'),
     hideDevRecordButton: vscode.l10n.t('Hide Dev Record'),
     showDevRecordButton: vscode.l10n.t('Show Dev Record'),
+    chooseTrainerButton: vscode.l10n.t('Choose Trainer Sprite'),
+    chooseTrainerShort: vscode.l10n.t('Choose Trainer'),
+    trainerSpriteSelectorHeading: vscode.l10n.t('Choose Trainer'),
+    useThisTrainerButton: vscode.l10n.t('Use This Trainer'),
+    cancelButton: vscode.l10n.t('Cancel'),
+    useGithubAvatarButton: vscode.l10n.t('Use GitHub Avatar'),
+    selectedTrainerLabel: vscode.l10n.t('Selected'),
     devRecordLabel: vscode.l10n.t('Dev Record'),
     reposLabel: vscode.l10n.t('Repos'),
     followersLabel: vscode.l10n.t('Followers'),
@@ -164,13 +264,11 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
     starsLabel: vscode.l10n.t('Stars'),
     sinceLabel: vscode.l10n.t('Since'),
     specialtiesLabel: vscode.l10n.t('Specialties'),
-    trainerRecordLabel: vscode.l10n.t('Trainer Record'),
-    pokedexLabel: vscode.l10n.t('Pokédex'),
-    caughtSuffix: vscode.l10n.t('caught'),
-    shiniesLabel: vscode.l10n.t('Shinies'),
-    badgesLabel: vscode.l10n.t('Badges'),
     codingTimeLabel: vscode.l10n.t('Coding time'),
     xpLabel: vscode.l10n.t('Trainer XP'),
+    partySectionLabel: vscode.l10n.t('Party'),
+    emptyPartySlotLabel: vscode.l10n.t('Empty'),
+    makePartnerHint: vscode.l10n.t('Make this your partner'),
     partnerLabel: vscode.l10n.t('Partner'),
     noPartnerLabel: vscode.l10n.t('No partner selected'),
     trainerClass: localizeTrainerClass(trainerClassId),
@@ -198,6 +296,19 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
       "Counted from each repository's primary language as reported by GitHub, excluding forks.",
     ),
     unknownValue: '—',
+
+    badgesSectionLabel: vscode.l10n.t('Badges'),
+    connectDevHint: vscode.l10n.t(
+      'Connect your DEV profile to display earned badges.',
+    ),
+    connectDevButton: vscode.l10n.t('Connect DEV'),
+    refreshDevBadgesShort: vscode.l10n.t('Refresh'),
+    refreshDevBadgesButton: vscode.l10n.t('Refresh DEV Badges'),
+    disconnectDevButton: vscode.l10n.t('Disconnect DEV'),
+    unknownDevBadgeLabel: vscode.l10n.t('Dev badge'),
+    noDevBadgesLabel: vscode.l10n.t('No public DEV badges found.'),
+    devBadgesStaleNotice: vscode.l10n.t('Using cached DEV badges.'),
+    shinyLabel: vscode.l10n.t('Shiny'),
   };
 }
 
@@ -239,6 +350,17 @@ export class TrainerCardPanel {
     stale?: boolean;
     fetchedAt?: number;
   } = {};
+
+  /**
+   * DEV badges are resolved independently of GitHub's status above (see
+   * `_buildViewModel`), so they get their own "what produced the last render"
+   * slot rather than living inside `_lastExtras`.
+   */
+  private _lastDevBadges: DevBadgesView = {
+    status: 'disconnected',
+    username: '',
+    badges: [],
+  };
 
   /** Coalesces bursts of XP events into one re-render. */
   private _pushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -332,6 +454,21 @@ export class TrainerCardPanel {
     await this._load({ forceRefresh: true });
   }
 
+  /** Re-fetches DEV badges, bypassing the cache. Public for the command palette entry. */
+  public async refreshDevBadges(): Promise<void> {
+    await this._refreshDev();
+  }
+
+  /**
+   * Clears the configured DEV username and cached badges. Public for the
+   * command palette entry — routed through here rather than done directly in
+   * extension.ts so the panel's in-memory `_lastDevBadges` (which storage
+   * alone cannot update) clears too.
+   */
+  public async disconnectDev(): Promise<void> {
+    await this._disconnectDev();
+  }
+
   /**
    * Re-renders the card with current progression, without touching GitHub.
    *
@@ -402,6 +539,21 @@ export class TrainerCardPanel {
         return;
       }
 
+      case 'trainer/selectPartner': {
+        const nickname =
+          typeof message.nickname === 'string' ? message.nickname : '';
+        if (nickname.length === 0) {
+          return;
+        }
+        // Goes straight to the same setter/notify pair `pickPartnerPokemon`
+        // and the Explorer's own 'explorer/selectPartner' use - the card
+        // already knows which nickname was clicked, so there is no picker to
+        // show.
+        await setPartnerNickname(this._context, nickname);
+        pokedevState.notify('partner');
+        return;
+      }
+
       case 'trainer/toggleDevRecord':
         await toggleDevRecordVisible();
         // The configuration listener in extension.ts also refreshes on this
@@ -410,8 +562,39 @@ export class TrainerCardPanel {
         this.notifyProgressionChanged();
         return;
 
+      case 'trainer/selectTrainerSprite': {
+        const spriteId =
+          typeof message.spriteId === 'string' ? message.spriteId : '';
+        if (spriteId.length === 0) {
+          return;
+        }
+        await this._setTrainerSprite(spriteId);
+        return;
+      }
+
+      case 'trainer/useGithubAvatar':
+        await this._setTrainerSprite(null);
+        return;
+
       case 'trainer/close':
         this.dispose();
+        return;
+
+      case 'trainer/connectDev': {
+        const next = await promptForDevUsername();
+        if (next === undefined) {
+          return;
+        }
+        await this._connectDev(next);
+        return;
+      }
+
+      case 'trainer/refreshDev':
+        await this._refreshDev();
+        return;
+
+      case 'trainer/disconnectDev':
+        await this._disconnectDev();
         return;
     }
   }
@@ -497,6 +680,18 @@ export class TrainerCardPanel {
     );
 
     const status: TrainerCardStatus = resolution.data ? 'connected' : 'error';
+
+    // DEV badges live in the full card body, which only renders for
+    // 'connected'. Cache-preferring (forceRefresh: false), so opening the
+    // card does not re-fetch DEV every time - see resolveDevBadges/DEV_CACHE_TTL_MS.
+    const devBadges =
+      status === 'connected'
+        ? await this._resolveDevBadgesView(false)
+        : undefined;
+    if (this._disposed) {
+      return;
+    }
+
     this._post({
       command: 'trainer/state',
       payload: this._buildViewModel(status, {
@@ -505,8 +700,147 @@ export class TrainerCardPanel {
         error: resolution.error,
         stale: resolution.stale,
         fetchedAt: resolution.fetchedAt,
+        devBadges,
       }),
     });
+  }
+
+  /** Resolves the DEV badges view for whatever username is currently configured. */
+  private async _resolveDevBadgesView(
+    forceRefresh: boolean,
+  ): Promise<DevBadgesView> {
+    const username = getConfiguredDevUsername();
+    if (username.length === 0) {
+      return { status: 'disconnected', username: '', badges: [] };
+    }
+    const resolution = await resolveDevBadges(this._context, username, {
+      forceRefresh,
+    });
+    return this._toDevBadgesView(username, resolution);
+  }
+
+  private _toDevBadgesView(
+    username: string,
+    resolution: DevBadgeResolution,
+  ): DevBadgesView {
+    if (resolution.badges) {
+      return {
+        status: 'connected',
+        username,
+        badges: resolution.badges,
+        error: resolution.error,
+        stale: resolution.stale,
+        fetchedAt: resolution.fetchedAt,
+      };
+    }
+    return { status: 'error', username, badges: [], error: resolution.error };
+  }
+
+  /** Pushes a DEV-badges-only update, reusing whatever GitHub state was last rendered. */
+  private _pushDevBadges(devBadges: DevBadgesView): void {
+    if (this._disposed) {
+      return;
+    }
+    this._post({
+      command: 'trainer/state',
+      payload: this._buildViewModel(this._lastStatus, {
+        ...this._lastExtras,
+        devBadges,
+      }),
+    });
+  }
+
+  private async _connectDev(username: string): Promise<void> {
+    if (username.length === 0) {
+      // An empty submission clears the field rather than erroring — treat it
+      // the same as the explicit Disconnect action.
+      await this._disconnectDev();
+      return;
+    }
+    if (!isValidDevUsername(username)) {
+      this._pushDevBadges({
+        status: 'error',
+        username,
+        badges: [],
+        error: {
+          kind: 'invalid-username',
+          message: vscode.l10n.t('That is not a valid DEV username.'),
+          retryable: false,
+        },
+      });
+      return;
+    }
+
+    this._pushDevBadges({ status: 'loading', username, badges: [] });
+
+    const resolution = await resolveDevBadges(this._context, username, {
+      forceRefresh: true,
+    });
+    if (this._disposed) {
+      return;
+    }
+
+    // A username DEV does not recognise is a typo, not a broken connection:
+    // do not persist it, mirroring `_connect`'s handling of GitHub 404s.
+    if (
+      resolution.error &&
+      !resolution.badges &&
+      (resolution.error.kind === 'not-found' ||
+        resolution.error.kind === 'invalid-username')
+    ) {
+      this._pushDevBadges({
+        status: 'error',
+        username,
+        badges: [],
+        error: resolution.error,
+      });
+      return;
+    }
+
+    await setConfiguredDevUsername(username);
+    this._pushDevBadges(this._toDevBadgesView(username, resolution));
+  }
+
+  /** Re-fetches DEV badges, bypassing the cache. */
+  private async _refreshDev(): Promise<void> {
+    const username = getConfiguredDevUsername();
+    if (username.length === 0) {
+      return;
+    }
+    this._pushDevBadges({ status: 'loading', username, badges: [] });
+    const resolution = await resolveDevBadges(this._context, username, {
+      forceRefresh: true,
+    });
+    if (this._disposed) {
+      return;
+    }
+    this._pushDevBadges(this._toDevBadgesView(username, resolution));
+  }
+
+  private async _disconnectDev(): Promise<void> {
+    await setConfiguredDevUsername('');
+    await clearDevCache(this._context);
+    this._pushDevBadges({ status: 'disconnected', username: '', badges: [] });
+  }
+
+  /**
+   * Persists the chosen Trainer Sprite (or `null` to fall back to the
+   * GitHub avatar) and notifies every surface - the full card and the
+   * Explorer Trainer HUD both read the same `profile.trainerSpriteId`, so
+   * one canonical selection is all that ever needs writing.
+   */
+  private async _setTrainerSprite(spriteId: string | null): Promise<void> {
+    const now = Date.now();
+    const profile = readTrainerProfile(
+      this._context,
+      now,
+      getConfiguredGithubUsername(),
+    );
+    await writeTrainerProfile(
+      this._context,
+      withTrainerSprite(profile, spriteId),
+    );
+    pokedevState.notify('github');
   }
 
   private _buildViewModel(
@@ -517,12 +851,17 @@ export class TrainerCardPanel {
       error?: TrainerError;
       stale?: boolean;
       fetchedAt?: number;
+      devBadges?: DevBadgesView;
     } = {},
   ): TrainerCardViewModel {
     const now = Date.now();
     const profile =
       extras.profile ??
       readTrainerProfile(this._context, now, getConfiguredGithubUsername());
+
+    if (extras.devBadges) {
+      this._lastDevBadges = extras.devBadges;
+    }
 
     // Remember what produced this render so a later progression-only push can
     // reproduce everything except the numbers that changed.
@@ -544,6 +883,26 @@ export class TrainerCardPanel {
       tier: getTrainerCardTier(profile.trainerLevel),
       xpForNextLevel: getXpForNextTrainerLevel(profile.trainerLevel),
       showDevRecord: isDevRecordVisible(),
+      showCodingTime: isCodingTimeVisible(),
+      party:
+        status === 'connected'
+          ? pokedevState
+              .buildPartyEntries(this._context, this._panel.webview)
+              .slice(0, PARTY_SLOTS)
+          : [],
+      totalPartnerCandidates:
+        status === 'connected'
+          ? listPartnerCandidates(this._context).length
+          : 0,
+      trainerSpriteUri: resolveTrainerSpriteUri(
+        this._panel.webview,
+        this._context.extensionUri,
+        profile.trainerSpriteId,
+      ),
+      trainerSpriteCatalog: buildTrainerSpriteCatalog(
+        this._panel.webview,
+        this._context.extensionUri,
+      ),
       github: extras.github,
       partner:
         status === 'connected'
@@ -556,6 +915,7 @@ export class TrainerCardPanel {
       error: extras.error,
       stale: extras.stale,
       fetchedAt: extras.fetchedAt,
+      devBadges: this._lastDevBadges,
     };
   }
 
@@ -586,7 +946,7 @@ export class TrainerCardPanel {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} ${AVATAR_HOSTS}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} ${AVATAR_HOSTS} ${DEV_BADGE_HOSTS}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${resetUri}" rel="stylesheet" nonce="${nonce}">
     <link href="${tokensUri}" rel="stylesheet" nonce="${nonce}">

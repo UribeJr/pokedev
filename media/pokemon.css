@@ -111,8 +111,63 @@ textarea::placeholder {
 	color: var(--vscode-input-placeholderForeground);
 }
 
+/* ------------------------------ display skin ------------------------------ */
+
+/*
+ * `.pokedev-display` is sized in JS (see `layoutDisplay()` in
+ * src/panel/main.ts) to letterbox the selected skin's aspect ratio inside
+ * whatever size the Explorer sidebar happens to be. With the `none` skin its
+ * size is always set to exactly fill the viewport, so this block is a no-op
+ * for anyone who has never picked a border - the world renders identically
+ * to before this feature existed.
+ */
+html,
+body {
+	height: 100%;
+}
+
+body {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.pokedev-display {
+	position: relative;
+	overflow: hidden;
+}
+
+/*
+ * The playable area. Becomes the containing block for every absolutely
+ * positioned world element (Pokemon sprites, collision boxes, speech
+ * bubbles, reactions, particles, toasts, the pokeball animation and the
+ * theme foreground layer), so "left: 0" / "bottom: 0" etc. on those already
+ * mean "the edge of the screen opening" with no changes needed anywhere
+ * else. Its own position/size is set in JS from the selected skin's
+ * normalized `screen` rectangle.
+ */
+.pokedev-screen {
+	position: absolute;
+	overflow: hidden;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.pokedev-display-overlay {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 10;
+	pointer-events: none;
+	image-rendering: pixelated;
+	display: none;
+}
+
 #pokemonCanvas {
-	position: fixed;
+	position: absolute;
 	bottom: 0;
 	left: 0;
 	z-index: 3;

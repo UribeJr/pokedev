@@ -1,7 +1,96 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ({
+
+/***/ "./src/trainer/pokemon-display-name.ts":
+/*!*********************************************!*\
+  !*** ./src/trainer/pokemon-display-name.ts ***!
+  \*********************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+/**
+ * Whether a Pokemon's nickname is worth showing.
+ *
+ * Pure: no `vscode`, no DOM. Shared by every surface that lists individual
+ * Pokemon by name - the Trainer Card's PARTY grid and PARTNER panel, and the
+ * Explorer team list - so the rule can only ever say one thing.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.resolveDisplayName = exports.hasDistinctNickname = void 0;
+/**
+ * Spawning defaults a Pokemon's name to its species, so most collections
+ * yield `nickname === species`. Showing both then would render, for example,
+ * CATERPIE "Caterpie" for no reason - only worth showing when the nickname
+ * actually says something the species does not.
+ */
+function hasDistinctNickname(nickname, species) {
+    const trimmed = nickname.trim();
+    return (trimmed.length > 0 && trimmed.toLowerCase() !== species.trim().toLowerCase());
+}
+exports.hasDistinctNickname = hasDistinctNickname;
+/** The name to actually display: the nickname when distinct, else the species. */
+function resolveDisplayName(nickname, species) {
+    return hasDistinctNickname(nickname, species) ? nickname : species;
+}
+exports.resolveDisplayName = resolveDisplayName;
+
+
+/***/ }),
+
+/***/ "./src/trainer/trainer-types.ts":
+/*!**************************************!*\
+  !*** ./src/trainer/trainer-types.ts ***!
+  \**************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PARTY_SLOTS = exports.DEV_BADGE_SLOTS = exports.TRAINER_CARD_VIEW_TYPE = void 0;
+/** Webview panel view type, also used as the serializer key. */
+exports.TRAINER_CARD_VIEW_TYPE = 'pokedevTrainerCard';
+/**
+ * Denominator for the compact Explorer HUD's "BADGES n / 8" row. Mirrors the
+ * eight-gym-badge convention; Dev Badges are PokéDev's equivalent. The full
+ * Trainer Card's BADGES section shows every earned badge with no such cap or
+ * count — see `renderBadges` in `panel/trainer-card/main.ts`.
+ */
+exports.DEV_BADGE_SLOTS = 8;
+/** Party slots on the Trainer Card, in classic Pokémon-party fashion. */
+exports.PARTY_SLOTS = 6;
+
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
 var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it uses a non-standard name for the exports (exports).
+// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
 var exports = __webpack_exports__;
 /*!************************************!*\
@@ -9,7 +98,9 @@ var exports = __webpack_exports__;
   \************************************/
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.pokemonView = exports.trainerView = void 0;
+exports.dailyChallengesView = exports.pokemonView = exports.trainerView = void 0;
+const pokemon_display_name_1 = __webpack_require__(/*! ../../trainer/pokemon-display-name */ "./src/trainer/pokemon-display-name.ts");
+const trainer_types_1 = __webpack_require__(/*! ../../trainer/trainer-types */ "./src/trainer/trainer-types.ts");
 let vscodeApi;
 function post(message) {
     if (!vscodeApi) {
@@ -125,7 +216,16 @@ function renderTrainer(model) {
        via CSS, not via a second layout here. */
     const identity = el('div', 'pd-identity');
     const portrait = el('div', 'pd-portrait');
-    if (model.avatarUrl) {
+    if (model.trainerSpriteUri) {
+        const sprite = el('img', 'pd-avatar pd-avatar-sprite');
+        sprite.setAttribute('src', model.trainerSpriteUri);
+        sprite.setAttribute('alt', '');
+        sprite.addEventListener('error', () => {
+            sprite.replaceWith(el('div', 'pd-avatar pd-avatar-empty'));
+        });
+        portrait.appendChild(sprite);
+    }
+    else if (model.avatarUrl) {
         const avatar = el('img', 'pd-avatar');
         avatar.setAttribute('src', model.avatarUrl);
         avatar.setAttribute('alt', '');
@@ -159,6 +259,11 @@ function renderTrainer(model) {
     timeRow.appendChild(el('span', 'pd-label', labels.codingTimeLabel));
     timeRow.appendChild(el('span', 'pd-value', formatDuration(model.totalCodingTimeMs)));
     card.appendChild(timeRow);
+    /* Dev Badges: the same canonical badge count the full Trainer Card shows. */
+    const badgesRow = el('div', 'pd-row-head pd-row-spaced');
+    badgesRow.appendChild(el('span', 'pd-label', labels.devBadgesLabel));
+    badgesRow.appendChild(el('span', 'pd-value', `${model.devBadgesEarned} / ${trainer_types_1.DEV_BADGE_SLOTS}`));
+    card.appendChild(badgesRow);
     /* Partner summary. */
     card.appendChild(el('span', 'pd-label pd-label-section', labels.partnerLabel));
     if (model.partner) {
@@ -242,8 +347,7 @@ function renderPokemonRow(entry, labels) {
     const nameLine = el('div', 'pd-item-name');
     // Spawning defaults a Pokemon's name to its species, so only show the
     // nickname when it says something the species does not.
-    const named = entry.nickname.trim().length > 0 &&
-        entry.nickname.trim().toLowerCase() !== entry.species.trim().toLowerCase();
+    const named = (0, pokemon_display_name_1.hasDistinctNickname)(entry.nickname, entry.species);
     nameLine.appendChild(el('span', 'pd-item-species', named ? entry.nickname : entry.species));
     if (entry.shiny) {
         const star = el('span', 'pd-shiny', '★');
@@ -280,6 +384,49 @@ function renderPokemonRow(entry, labels) {
     item.appendChild(button);
     return item;
 }
+/* --------------------------- daily challenges ---------------------------- */
+function renderDailyChallenges(model) {
+    const labels = model.labels;
+    const host = root();
+    host.textContent = '';
+    if (model.status === 'loading') {
+        host.appendChild(el('p', 'pd-empty', labels.loadingLabel));
+        return;
+    }
+    if (model.status === 'error' || model.challenges.length === 0) {
+        host.appendChild(el('p', 'pd-empty', labels.errorLabel));
+        return;
+    }
+    const head = el('div', 'pd-row-head');
+    head.appendChild(el('span', 'pd-label', labels.todayLabel));
+    head.appendChild(el('span', 'pd-value', `${model.completedCount} / ${model.totalCount}`));
+    host.appendChild(head);
+    const list = el('ul', 'pd-challenge-list');
+    for (const challenge of model.challenges) {
+        list.appendChild(renderChallengeRow(challenge, labels));
+    }
+    host.appendChild(list);
+    host.appendChild(el('p', 'pd-challenge-footer', labels.resetLabel));
+}
+function renderChallengeRow(challenge, labels) {
+    const item = el('li', challenge.completed ? 'pd-challenge pd-challenge-complete' : 'pd-challenge');
+    const titleRow = el('div', 'pd-challenge-row');
+    const title = challenge.completed
+        ? `✓ ${challenge.title.toUpperCase()}`
+        : challenge.title.toUpperCase();
+    titleRow.appendChild(el('span', 'pd-challenge-title', title));
+    titleRow.appendChild(el('span', 'pd-challenge-count', `${challenge.progress} / ${challenge.target}`));
+    item.appendChild(titleRow);
+    item.appendChild(el('div', 'pd-challenge-desc', challenge.description));
+    if (challenge.completed) {
+        item.appendChild(el('div', 'pd-challenge-reward', `${labels.completeLabel} · +${challenge.rewardTrainerXp} ${labels.xpLabel}`));
+    }
+    else {
+        item.appendChild(xpBar(challenge.progress, challenge.target, `${challenge.title}: ${challenge.progress} / ${challenge.target}`, 'pd-mini'));
+        item.appendChild(el('div', 'pd-challenge-reward', `+${challenge.rewardTrainerXp} ${labels.xpLabel}`));
+    }
+    return item;
+}
 /* --------------------------------- wiring -------------------------------- */
 /**
  * Wires one view.
@@ -306,6 +453,10 @@ function pokemonView() {
     start('explorer/pokemonState', renderPokemon);
 }
 exports.pokemonView = pokemonView;
+function dailyChallengesView() {
+    start('explorer/dailyChallengesState', renderDailyChallenges);
+}
+exports.dailyChallengesView = dailyChallengesView;
 
 })();
 

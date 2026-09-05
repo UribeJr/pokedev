@@ -55,6 +55,14 @@ export class GitActivityTracker implements vscode.Disposable {
    */
   private readonly _lastHead = new Map<string, string>();
 
+  /**
+   * Every repository seen so far, kept only so `hasRepositories()` can answer
+   * Daily Challenges' "is a Git challenge even completable here" question
+   * without a second call into the Git extension - see
+   * `daily-challenges-service.ts`.
+   */
+  private readonly _repositories: GitRepository[] = [];
+
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _service: ProgressionService,
@@ -72,6 +80,18 @@ export class GitActivityTracker implements vscode.Disposable {
     this._disposables.push(
       api.onDidOpenRepository((repo) => this._watch(repo)),
     );
+  }
+
+  /**
+   * Whether any Git repository is currently open in this workspace.
+   *
+   * Reads state this tracker already maintains for commit detection, rather
+   * than asking the Git extension a second time - the one existing detector
+   * is the single source of truth for "is Git usable here" as well as for
+   * "did a commit just happen".
+   */
+  public hasRepositories(): boolean {
+    return this._repositories.length > 0;
   }
 
   public dispose(): void {
@@ -101,6 +121,7 @@ export class GitActivityTracker implements vscode.Disposable {
 
   private _watch(repo: GitRepository): void {
     const key = repo.rootUri.toString();
+    this._repositories.push(repo);
 
     // Seed with the current HEAD so opening a workspace does not immediately
     // pay out for whatever commit happens to be checked out.

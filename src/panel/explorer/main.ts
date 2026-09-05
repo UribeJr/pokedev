@@ -10,12 +10,19 @@
  * landing in a privileged webview, and the nicknames come from user input.
  */
 import {
+  DailyChallengeRowView,
+  DailyChallengesLabels,
+  DailyChallengesViewModel,
+} from '../../challenges/daily-challenges-view-types';
+import {
   ExplorerHostboundMessage,
   ExplorerLabels,
   ExplorerPokemonEntry,
   ExplorerPokemonViewModel,
   ExplorerTrainerViewModel,
 } from '../../trainer/explorer-types';
+import { hasDistinctNickname } from '../../trainer/pokemon-display-name';
+import { DEV_BADGE_SLOTS } from '../../trainer/trainer-types';
 
 interface VscodeApi {
   postMessage(message: ExplorerHostboundMessage): void;
@@ -175,7 +182,15 @@ function renderTrainer(model: ExplorerTrainerViewModel): void {
   const identity = el('div', 'pd-identity');
 
   const portrait = el('div', 'pd-portrait');
-  if (model.avatarUrl) {
+  if (model.trainerSpriteUri) {
+    const sprite = el('img', 'pd-avatar pd-avatar-sprite');
+    sprite.setAttribute('src', model.trainerSpriteUri);
+    sprite.setAttribute('alt', '');
+    sprite.addEventListener('error', () => {
+      sprite.replaceWith(el('div', 'pd-avatar pd-avatar-empty'));
+    });
+    portrait.appendChild(sprite);
+  } else if (model.avatarUrl) {
     const avatar = el('img', 'pd-avatar');
     avatar.setAttribute('src', model.avatarUrl);
     avatar.setAttribute('alt', '');
@@ -231,6 +246,14 @@ function renderTrainer(model: ExplorerTrainerViewModel): void {
     el('span', 'pd-value', formatDuration(model.totalCodingTimeMs)),
   );
   card.appendChild(timeRow);
+
+  /* Dev Badges: the same canonical badge count the full Trainer Card shows. */
+  const badgesRow = el('div', 'pd-row-head pd-row-spaced');
+  badgesRow.appendChild(el('span', 'pd-label', labels.devBadgesLabel));
+  badgesRow.appendChild(
+    el('span', 'pd-value', `${model.devBadgesEarned} / ${DEV_BADGE_SLOTS}`),
+  );
+  card.appendChild(badgesRow);
 
   /* Partner summary. */
   card.appendChild(
@@ -369,9 +392,7 @@ function renderPokemonRow(
   const nameLine = el('div', 'pd-item-name');
   // Spawning defaults a Pokemon's name to its species, so only show the
   // nickname when it says something the species does not.
-  const named =
-    entry.nickname.trim().length > 0 &&
-    entry.nickname.trim().toLowerCase() !== entry.species.trim().toLowerCase();
+  const named = hasDistinctNickname(entry.nickname, entry.species);
   nameLine.appendChild(
     el('span', 'pd-item-species', named ? entry.nickname : entry.species),
   );
@@ -424,6 +445,92 @@ function renderPokemonRow(
   return item;
 }
 
+/* --------------------------- daily challenges ---------------------------- */
+
+function renderDailyChallenges(model: DailyChallengesViewModel): void {
+  const labels = model.labels;
+  const host = root();
+  host.textContent = '';
+
+  if (model.status === 'loading') {
+    host.appendChild(el('p', 'pd-empty', labels.loadingLabel));
+    return;
+  }
+  if (model.status === 'error' || model.challenges.length === 0) {
+    host.appendChild(el('p', 'pd-empty', labels.errorLabel));
+    return;
+  }
+
+  const head = el('div', 'pd-row-head');
+  head.appendChild(el('span', 'pd-label', labels.todayLabel));
+  head.appendChild(
+    el('span', 'pd-value', `${model.completedCount} / ${model.totalCount}`),
+  );
+  host.appendChild(head);
+
+  const list = el('ul', 'pd-challenge-list');
+  for (const challenge of model.challenges) {
+    list.appendChild(renderChallengeRow(challenge, labels));
+  }
+  host.appendChild(list);
+
+  host.appendChild(el('p', 'pd-challenge-footer', labels.resetLabel));
+}
+
+function renderChallengeRow(
+  challenge: DailyChallengeRowView,
+  labels: DailyChallengesLabels,
+): HTMLElement {
+  const item = el(
+    'li',
+    challenge.completed ? 'pd-challenge pd-challenge-complete' : 'pd-challenge',
+  );
+
+  const titleRow = el('div', 'pd-challenge-row');
+  const title = challenge.completed
+    ? `✓ ${challenge.title.toUpperCase()}`
+    : challenge.title.toUpperCase();
+  titleRow.appendChild(el('span', 'pd-challenge-title', title));
+  titleRow.appendChild(
+    el(
+      'span',
+      'pd-challenge-count',
+      `${challenge.progress} / ${challenge.target}`,
+    ),
+  );
+  item.appendChild(titleRow);
+
+  item.appendChild(el('div', 'pd-challenge-desc', challenge.description));
+
+  if (challenge.completed) {
+    item.appendChild(
+      el(
+        'div',
+        'pd-challenge-reward',
+        `${labels.completeLabel} · +${challenge.rewardTrainerXp} ${labels.xpLabel}`,
+      ),
+    );
+  } else {
+    item.appendChild(
+      xpBar(
+        challenge.progress,
+        challenge.target,
+        `${challenge.title}: ${challenge.progress} / ${challenge.target}`,
+        'pd-mini',
+      ),
+    );
+    item.appendChild(
+      el(
+        'div',
+        'pd-challenge-reward',
+        `+${challenge.rewardTrainerXp} ${labels.xpLabel}`,
+      ),
+    );
+  }
+
+  return item;
+}
+
 /* --------------------------------- wiring -------------------------------- */
 
 /**
@@ -450,4 +557,11 @@ export function trainerView(): void {
 
 export function pokemonView(): void {
   start<ExplorerPokemonViewModel>('explorer/pokemonState', renderPokemon);
+}
+
+export function dailyChallengesView(): void {
+  start<DailyChallengesViewModel>(
+    'explorer/dailyChallengesState',
+    renderDailyChallenges,
+  );
 }

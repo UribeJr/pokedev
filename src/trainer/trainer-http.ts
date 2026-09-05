@@ -26,6 +26,14 @@ export interface HttpResponse {
   json(): Promise<unknown>;
 }
 
+/** Same shape as `HttpResponse`, but for callers that want raw text (HTML) rather than JSON. */
+export interface HttpTextResponse {
+  ok: boolean;
+  status: number;
+  header(name: string): string | null;
+  text(): Promise<string>;
+}
+
 /** No fetch in this runtime (Node < 18, i.e. VS Code older than ~1.82). */
 export class HttpUnavailableError extends Error {
   constructor() {
@@ -47,6 +55,7 @@ interface FetchLikeResponse {
   status: number;
   headers: { get(name: string): string | null };
   json(): Promise<unknown>;
+  text(): Promise<string>;
 }
 
 type FetchLike = (
@@ -84,11 +93,12 @@ export function isHttpAvailable(): boolean {
   return resolveFetch() !== undefined;
 }
 
-export async function httpGetJson(
+/** Shared by `httpGetJson` and `httpGetText`: everything except how the body is read. */
+async function doGet(
   url: string,
   headers: Record<string, string>,
   timeoutMs: number,
-): Promise<HttpResponse> {
+): Promise<FetchLikeResponse> {
   const doFetch = resolveFetch();
   if (!doFetch) {
     throw new HttpUnavailableError();
@@ -105,19 +115,13 @@ export async function httpGetJson(
   }
 
   try {
-    const res = await doFetch(url, {
+    return await doFetch(url, {
       method: 'GET',
       headers,
       // GitHub 301-redirects renamed accounts, and we want to follow those.
       redirect: 'follow',
       signal: controller ? controller.signal : undefined,
     });
-    return {
-      ok: res.ok,
-      status: res.status,
-      header: (name: string) => res.headers.get(name),
-      json: () => res.json(),
-    };
   } catch (e) {
     throw new HttpNetworkError(e);
   } finally {
@@ -125,4 +129,33 @@ export async function httpGetJson(
       clearTimeout(timer);
     }
   }
+}
+
+export async function httpGetJson(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<HttpResponse> {
+  const res = await doGet(url, headers, timeoutMs);
+  return {
+    ok: res.ok,
+    status: res.status,
+    header: (name: string) => res.headers.get(name),
+    json: () => res.json(),
+  };
+}
+
+/** Same as `httpGetJson`, for callers (the DEV badge client) that want the raw response body as text. */
+export async function httpGetText(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<HttpTextResponse> {
+  const res = await doGet(url, headers, timeoutMs);
+  return {
+    ok: res.ok,
+    status: res.status,
+    header: (name: string) => res.headers.get(name),
+    text: () => res.text(),
+  };
 }

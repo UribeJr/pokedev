@@ -15,6 +15,7 @@
  */
 import * as vscode from 'vscode';
 import {
+  DAILY_CHALLENGES_EXPLORER_VIEW_TYPE,
   ExplorerHostboundMessage,
   ExplorerWebviewboundMessage,
   POKEMON_EXPLORER_VIEW_TYPE,
@@ -276,6 +277,31 @@ export class PokemonExplorerViewProvider extends PokedevExplorerViewProvider {
     return {
       command: 'explorer/pokemonState',
       payload: pokedevState.buildPokemonView(this._context, webview),
+    };
+  }
+}
+
+/**
+ * Today's three Daily Challenges, read-only.
+ *
+ * Purely a display surface: it has no host-bound messages of its own beyond
+ * the generic `explorer/ready` every view already sends on load, because
+ * there is nothing for a person to click here - no refresh-as-reroll, no
+ * interaction that could change what today's set is. Regeneration and
+ * progress both live entirely in `DailyChallengesService`; this class only
+ * asks `pokedevState` what it last persisted.
+ */
+export class DailyChallengesExplorerViewProvider extends PokedevExplorerViewProvider {
+  public static readonly viewType = DAILY_CHALLENGES_EXPLORER_VIEW_TYPE;
+
+  protected get bootstrap(): string {
+    return 'pokedevExplorer.dailyChallengesView();';
+  }
+  protected buildMessage(webview: vscode.Webview): ExplorerWebviewboundMessage {
+    void webview;
+    return {
+      command: 'explorer/dailyChallengesState',
+      payload: pokedevState.buildDailyChallengesView(this._context),
     };
   }
 }

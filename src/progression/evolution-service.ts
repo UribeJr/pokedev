@@ -10,7 +10,29 @@
  */
 import { POKEMON_DATA } from '../common/pokemon-data';
 import { PokemonColor, PokemonType } from '../common/types';
-import { EVOLUTION_RULES, EvolutionRule } from './evolution-data';
+import { hasDistinctNickname } from '../trainer/pokemon-display-name';
+import {
+  EVOLUTION_RULES,
+  EvolutionCondition,
+  EvolutionRule,
+} from './evolution-data';
+
+/**
+ * Whether a rule's condition is one stale-save reconciliation is allowed to
+ * apply on its own, with nobody around to confirm it.
+ *
+ * Only `'level'` today, because that is the only condition
+ * `evolution-data.ts` encodes - but written as an explicit check (not
+ * "assume everything is level-based") specifically so that adding an item,
+ * friendship, trade or any other future condition type automatically
+ * excludes it from `reconcileEntryEvolutions` without that function's own
+ * logic needing to change.
+ */
+export function isReconcilableEvolutionCondition(
+  condition: EvolutionCondition,
+): boolean {
+  return condition.type === 'level';
+}
 
 /** Why a species with a matching rule still cannot evolve right now. */
 export type EvolutionBlockedReason =
@@ -96,4 +118,155 @@ export function getEvolutionLevel(species: PokemonType): number | undefined {
     return undefined;
   }
   return rule.condition.level;
+}
+
+/* ------------------------------------------------------------------ *
+ * Collection-entry mutation
+ *
+ * Everything below operates on a persistent Pokemon by its STABLE INSTANCE
+ * IDENTITY - this extension's `nickname` (see `progression-types.ts`'s doc
+ * comment on `PokemonProgress`) plus its current array position - never by
+ * species. Evolution changes species; it never changes which entry a caller
+ * is talking about.
+ * ------------------------------------------------------------------ */
+
+/** The three parallel collection arrays, referenced by their shared index -
+ * see `common/storage-keys.ts`. Kept as plain arrays here (not the
+ * `PokemonSpecification` class) so this stays free of `vscode`. */
+export interface PokemonCollectionArrays {
+  types: readonly string[];
+  colors: readonly string[];
+  names: readonly string[];
+}
+
+export interface EvolveCollectionEntryResult {
+  types: string[];
+  colors: string[];
+  names: string[];
+  fromSpecies: PokemonType;
+  toSpecies: PokemonType;
+}
+
+/**
+ * Evolves the entry at `index` to `toSpecies`/`toColor`, in place.
+ *
+ * Pure and total: returns new arrays (never mutates `collection`), preserving
+ * every other index untouched. The name at `index` is left completely alone
+ * UNLESS it was never actually customized - i.e. it still equals the
+ * pre-evolution species, `hasDistinctNickname`'s own definition of "nothing
+ * worth showing" - in which case it is carried forward to the new species so
+ * an un-nicknamed Pokemon does not silently grow a fake nickname that just
+ * happens to read as its old species name. A genuine custom nickname
+ * ("Bubbles") is never touched, evolution or not.
+ *
+ * Returns `undefined` for an out-of-range index rather than throwing - a
+ * caller resolving a stale index (the collection shrank since it looked) gets
+ * a clear "nothing happened" instead of a crash.
+ */
+export function evolveCollectionEntry(
+  collection: PokemonCollectionArrays,
+  index: number,
+  toSpecies: PokemonType,
+  toColor: PokemonColor,
+): EvolveCollectionEntryResult | undefined {
+  if (index < 0 || index >= collection.types.length) {
+    return undefined;
+  }
+  const fromSpecies = collection.types[index] as PokemonType;
+
+  const types = collection.types.slice();
+  const colors = collection.colors.slice();
+  const names = collection.names.slice();
+
+  types[index] = toSpecies;
+  colors[index] = toColor;
+
+  const currentName = typeof names[index] === 'string' ? names[index] : '';
+  if (!hasDistinctNickname(currentName, fromSpecies)) {
+    names[index] = toSpecies;
+  }
+
+  return { types, colors, names, fromSpecies, toSpecies };
+}
+
+/** What `reconcileEntryEvolutions` needs to know about one collection entry
+ * to decide whether it is stale. */
+export interface ReconcilableEntry {
+  species: PokemonType;
+  shiny: boolean;
+  level: number;
+  /** Mirrors `PokemonProgress.declinedEvolutionAtLevel` - a standing refusal
+   * recorded through the normal "Evolve? Not now" prompt must be respected
+   * here exactly as it already is in the live level-up flow, so
+   * reconciliation can never override a deliberate choice. */
+  declinedEvolutionAtLevel?: number;
+}
+
+/** One step a stale entry needed to catch up on. */
+export interface ReconciledEvolutionStep {
+  fromSpecies: PokemonType;
+  toSpecies: PokemonType;
+}
+
+/**
+ * Walks one entry forward through every evolution its CURRENT level already
+ * satisfies - almost always zero or one step, occasionally more for a save
+ * that sat stale across two thresholds at once (e.g. a Squirtle whose XP
+ * already covers both Wartortle and Blastoise).
+ *
+ * Deliberately conservative:
+ *
+ *   - stops at the first rule whose condition is not `'level'` - item,
+ *     friendship, trade and every other future condition type are left
+ *     completely alone, never guessed at;
+ *   - stops if a standing decline (`declinedEvolutionAtLevel === level`) was
+ *     recorded for the CURRENT species at the CURRENT level - reconciliation
+ *     must never override a choice the user already made through the prompt;
+ *   - stops if the target has no shiny sprite and this entry is shiny, the
+ *     same guard `getAvailableEvolution` already applies live.
+ *
+ * A decline is only ever checked against the entry's ORIGINAL species: once
+ * reconciliation has taken even one step, the Pokemon is no longer the
+ * species the decline was recorded against, so later hops in the same chain
+ * are never suppressed by it.
+ *
+ * Pure and bounded (`maxSteps`) so a corrupt or cyclic table could never loop
+ * forever - the real table cannot cycle (every rule's `to` is a different
+ * species), but nothing here should depend on that being true forever.
+ */
+export function reconcileEntryEvolutions(
+  entry: ReconcilableEntry,
+  maxSteps: number = 5,
+): ReconciledEvolutionStep[] {
+  const steps: ReconciledEvolutionStep[] = [];
+  let species = entry.species;
+
+  for (let i = 0; i < maxSteps; i++) {
+    const rule = RULES_BY_SPECIES[species];
+    if (!rule || !isReconcilableEvolutionCondition(rule.condition)) {
+      break;
+    }
+    if (
+      steps.length === 0 &&
+      entry.declinedEvolutionAtLevel !== undefined &&
+      entry.declinedEvolutionAtLevel === entry.level
+    ) {
+      break;
+    }
+
+    const availability = getAvailableEvolution(
+      species,
+      entry.level,
+      entry.shiny,
+    );
+    if (!availability.available || !availability.rule) {
+      break;
+    }
+
+    const target = availability.rule.to;
+    steps.push({ fromSpecies: species, toSpecies: target });
+    species = target;
+  }
+
+  return steps;
 }

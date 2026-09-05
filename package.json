@@ -54,6 +54,7 @@
         "onView:pokedevView",
         "onView:pokedev.pokemonView",
         "onView:pokedev.trainerView",
+        "onView:pokedev.dailyChallengesView",
         "onStartupFinished",
         "onCommand:pokedev.focus-trainer-view",
         "onCommand:pokedev.focus-pokemon-view"
@@ -77,8 +78,13 @@
                 },
                 {
                     "type": "webview",
+                    "id": "pokedev.dailyChallengesView",
+                    "name": "Daily Challenges"
+                },
+                {
+                    "type": "webview",
                     "id": "pokedev.pokemonView",
-                    "name": "Pokémon"
+                    "name": "Party"
                 }
             ]
         },
@@ -105,9 +111,14 @@
                     "group": "navigation@4"
                 },
                 {
+                    "command": "pokedev.change-display-border",
+                    "when": "view == pokedevView",
+                    "group": "navigation@5"
+                },
+                {
                     "command": "pokedev.debug-grant-5-exp",
                     "when": "view == pokedevView && config.pokedev.enableDebugCommands",
-                    "group": "navigation@5"
+                    "group": "navigation@6"
                 },
                 {
                     "command": "pokedev.openTrainerCard",
@@ -218,6 +229,12 @@
                 "category": "PokéDev"
             },
             {
+                "command": "pokedev.change-display-border",
+                "title": "Change Display Border",
+                "category": "PokéDev",
+                "icon": "$(device-desktop)"
+            },
+            {
                 "command": "pokedev.openTrainerCard",
                 "title": "Open Trainer Card",
                 "category": "PokéDev",
@@ -239,6 +256,21 @@
             {
                 "command": "pokedev.toggle-dev-record",
                 "title": "Toggle Dev Record on Trainer Card",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.connect-dev-profile",
+                "title": "Connect DEV Profile",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.refresh-dev-badges",
+                "title": "Refresh DEV Badges",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.disconnect-dev-profile",
+                "title": "Disconnect DEV Profile",
                 "category": "PokéDev"
             },
             {
@@ -338,6 +370,19 @@
                         "default": "none",
                         "description": "Background theme assets for your pokemon"
                     },
+                    "pokedev.displaySkin": {
+                        "type": "string",
+                        "enum": [
+                            "none",
+                            "gbc-classic",
+                            "gbc-power",
+                            "gbc-minimal",
+                            "gbc-no-light"
+                        ],
+                        "default": "none",
+                        "scope": "application",
+                        "description": "Retro handheld display border around the PokéDev world"
+                    },
                     "pokedev.defaultPokemon": {
                         "type": "array",
                         "items": {
@@ -396,10 +441,23 @@
                         "patternErrorMessage": "Not a valid GitHub username.",
                         "markdownDescription": "Your GitHub username, shown on the Trainer Card (**Pokemon Coding: Open Trainer Card**). Only public profile data is read; no authentication is used and no data leaves your machine except the request to GitHub."
                     },
+                    "pokedev.devUsername": {
+                        "type": "string",
+                        "default": "",
+                        "scope": "application",
+                        "pattern": "^$|^[A-Za-z0-9_-]{1,32}$",
+                        "patternErrorMessage": "Not a valid DEV username.",
+                        "markdownDescription": "Your public DEV Community (dev.to) username, shown as **DEV BADGES** on the Trainer Card. Independent of your GitHub username. Only public badge data is read; no authentication is used and no data leaves your machine except the request to dev.to."
+                    },
                     "pokedev.trainerCard.showDevRecord": {
                         "type": "boolean",
                         "default": true,
                         "markdownDescription": "Show the **DEV RECORD** section on the Trainer Card: your public GitHub repositories, stars, followers, join year and top languages. Turn this off to keep the card to your in-editor progression only. GitHub data is still fetched and cached either way."
+                    },
+                    "pokedev.trainerCard.showCodingTime": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Show total coding time on the PokéDev Trainer Card. Coding time is always tracked internally regardless of this setting."
                     },
                     "pokedev.progression.enabled": {
                         "type": "boolean",
@@ -440,6 +498,11 @@
                         "type": "boolean",
                         "default": true,
                         "description": "Show tiny in-world activity messages when Pokémon gain experience or level up."
+                    },
+                    "pokedev.devActions.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "markdownDescription": "Earn modest Trainer and partner Pokémon experience for verified successful development outcomes: builds, test runs, typechecks and lint runs. Detected only from VS Code task results (real exit codes and declared task metadata) - never from terminal text, command history, or output."
                     }
                 }
             }
@@ -465,7 +528,7 @@
         "test:web": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
         "test:gifs": "node ./out/test/gifs.js",
         "prepare": "husky",
-        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js"
+        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/dev-badges.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js out/test/suite/daily-challenges.test.js out/test/suite/dev-actions.test.js out/test/suite/evolution-persistence.test.js out/test/suite/display-skins.test.js"
     },
     "devDependencies": {
         "@rbarilani/remove-source-map-url-webpack-plugin": "^1.1.0",

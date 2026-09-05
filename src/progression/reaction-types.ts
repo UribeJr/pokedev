@@ -23,7 +23,8 @@ export type PokemonReactionSource =
   | 'meaningful-save'
   | 'git-commit'
   | 'task-failure'
-  | 'pokemon-level-up';
+  | 'pokemon-level-up'
+  | 'dev-action';
 
 export interface PokemonReactionEvent {
   type: PokemonReactionType;

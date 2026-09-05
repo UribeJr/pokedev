@@ -12,7 +12,7 @@
 
 :root {
 	/* Geometry */
-	--tc-shell-max: 760px;
+	--tc-shell-max: 1040px;
 	--tc-gap: 12px;
 	--tc-radius: 10px;
 	--tc-ball: url('pokeball_sprite_sheet.png');

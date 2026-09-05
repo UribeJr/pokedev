@@ -50,3 +50,36 @@ export const PROGRESSION_COMMITS_KEY = 'vscode-pokemon.progression.commits';
  * choosing was possible, so existing users see no change.
  */
 export const PROGRESSION_PARTNER_KEY = 'vscode-pokemon.progression.partner';
+
+/**
+ * Daily Challenges.
+ *
+ * A genuinely new feature added long after the `vscode-pokemon.` -> `pokedev.`
+ * rename, so - unlike everything above - it uses the current prefix: there is
+ * no legacy install anywhere to orphan by doing so.
+ *
+ * Both live in `globalState`, matching every other progression key: today's
+ * challenges are a property of the Trainer, not of whichever workspace
+ * happens to be open (the Git challenge's own eligibility already accounts
+ * for "no repository here" - see `daily-challenges-service.ts` - so the
+ * feature does not need workspace scoping to behave correctly per project).
+ */
+export const DAILY_CHALLENGES_STATE_KEY = 'pokedev.dailyChallenges.state';
+/** Lifetime count of completed Daily Challenges. Purely informational today -
+ * nothing reads it back yet - kept for a future achievement without needing
+ * a schema change when that lands. */
+export const DAILY_CHALLENGES_TOTAL_COMPLETED_KEY =
+  'pokedev.dailyChallenges.totalCompleted';
+
+/**
+ * Dev Actions cooldown state - the last-accepted timestamp per (action type,
+ * task identity) pair, used only to stop reload farming (run a successful
+ * build, reload Cursor, immediately run it again for a second reward).
+ *
+ * `workspaceState`, mirroring `PROGRESSION_COMMITS_KEY`: a build/test/lint/
+ * typecheck task belongs to the workspace whose tasks.json (or auto-detected
+ * npm scripts) defined it, not to the user globally. Never stores a command
+ * string, terminal output, or anything beyond the bounded key -> timestamp
+ * map itself - see `dev-action-rules.ts`.
+ */
+export const DEV_ACTION_COOLDOWNS_KEY = 'pokedev.devActions.cooldowns';

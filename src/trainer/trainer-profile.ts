@@ -14,6 +14,7 @@
  * XP is granted by `src/extension/progression-service.ts`, which is the only
  * writer. Nothing else should call `addTrainerXp`.
  */
+import { getTrainerSprite } from './trainer-sprite-catalog';
 import {
   TrainerAchievement,
   TrainerBadge,
@@ -115,7 +116,9 @@ export function createDefaultTrainerProfile(
     shinyPokemonCaught: 0,
     badges: [],
     achievements: [],
+    totalEvolutions: 0,
     totalCodingTimeMs: 0,
+    trainerSpriteId: null,
     createdAt: now,
   };
 }
@@ -168,12 +171,19 @@ export function normalizeTrainerProfile(
     ),
     badges: normalizeBadges(raw['badges']),
     achievements: normalizeAchievements(raw['achievements']),
+    totalEvolutions: clampInt(
+      raw['totalEvolutions'],
+      0,
+      Number.MAX_SAFE_INTEGER,
+      0,
+    ),
     totalCodingTimeMs: clampInt(
       raw['totalCodingTimeMs'],
       0,
       Number.MAX_SAFE_INTEGER,
       0,
     ),
+    trainerSpriteId: normalizeTrainerSpriteId(raw['trainerSpriteId']),
     createdAt: clampInt(raw['createdAt'], 1, Number.MAX_SAFE_INTEGER, now),
   };
 }
@@ -213,6 +223,50 @@ export function addTrainerXp(
         ? 0
         : totalTrainerXp - getCumulativeTrainerXp(level),
   };
+}
+
+/**
+ * Records one successful evolution against the lifetime count shown on the
+ * Trainer Record.
+ *
+ * Pure and additive only, mirroring `addTrainerXp`: the caller
+ * (`evolution-flow.ts`'s `applyEvolution`) has already confirmed the
+ * evolution happened, so this never needs to validate or roll anything back.
+ */
+export function recordEvolution(profile: TrainerProfile): TrainerProfile {
+  return {
+    ...profile,
+    totalEvolutions: profile.totalEvolutions + 1,
+  };
+}
+
+/**
+ * Sets (or clears) the chosen Trainer Sprite.
+ *
+ * Pure, mirroring `recordEvolution`. Validates against the catalog itself
+ * rather than trusting the caller, so a stale/removed id from an older
+ * catalog can never get re-persisted by a round trip through this setter -
+ * it simply falls back to `null` (the GitHub avatar), exactly like a profile
+ * that never chose a sprite at all.
+ */
+export function withTrainerSprite(
+  profile: TrainerProfile,
+  spriteId: string | null,
+): TrainerProfile {
+  return {
+    ...profile,
+    trainerSpriteId: normalizeTrainerSpriteId(spriteId),
+  };
+}
+
+/**
+ * A sprite id is only ever trusted when it still resolves in the catalog -
+ * see `getTrainerSprite`. Anything else (never chosen, corrupt, or a sprite
+ * removed in a later release) normalizes to `null`, which the card already
+ * treats as "fall back to the GitHub avatar".
+ */
+function normalizeTrainerSpriteId(value: unknown): string | null {
+  return typeof value === 'string' && getTrainerSprite(value) ? value : null;
 }
 
 /**

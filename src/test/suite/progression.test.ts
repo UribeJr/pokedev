@@ -20,6 +20,7 @@ import {
 } from '../../progression/evolution-service';
 import {
   addPokemonXp,
+  countPokemonRaised,
   createDefaultPokemonProgress,
   DEFAULT_POKEMON_LEVEL,
   getCumulativePokemonXp,
@@ -324,6 +325,33 @@ suite('Pokemon XP grants', () => {
     const declined = { ...fresh(), declinedEvolutionAtLevel: 5 };
     const { progress } = addPokemonXp(declined, 10);
     assert.strictEqual(progress.declinedEvolutionAtLevel, 5);
+  });
+});
+
+suite('Pokemon Raised', () => {
+  test('an empty progress map means nothing has been raised yet', () => {
+    assert.strictEqual(countPokemonRaised({}), 0);
+  });
+
+  test('counts one entry per Pokemon that has ever earned real XP', () => {
+    const map = {
+      pikachu: createDefaultPokemonProgress('pikachu', NOW),
+      eevee: createDefaultPokemonProgress('eevee', NOW),
+    };
+    assert.strictEqual(countPokemonRaised(map), 2);
+  });
+
+  test('an evolution rewrites its existing entry rather than adding one', () => {
+    // Evolving only ever changes the `species` field of an already-present
+    // record (see `evolution-flow.ts`'s `applyEvolution`); it must not be
+    // able to inflate the count.
+    const before = {
+      charmander: createDefaultPokemonProgress('charmander', NOW),
+    };
+    const after = {
+      charmander: { ...before.charmander, species: 'charmeleon' },
+    };
+    assert.strictEqual(countPokemonRaised(before), countPokemonRaised(after));
   });
 });
 
@@ -788,6 +816,10 @@ suite('XP rules table', () => {
       'active-coding',
       'git-commit',
       'task-success',
+      'build-success',
+      'test-success',
+      'typecheck-success',
+      'lint-success',
       'debug-grant',
     ] as const) {
       assert.ok(XP_RULES[type], type);
@@ -801,6 +833,10 @@ suite('XP rules table', () => {
       'work-batch',
       'active-coding',
       'task-success',
+      'build-success',
+      'test-success',
+      'typecheck-success',
+      'lint-success',
     ] as const) {
       assert.ok(
         XP_RULES['git-commit'].trainerXp > XP_RULES[type].trainerXp,
@@ -815,6 +851,10 @@ suite('XP rules table', () => {
       'active-coding',
       'git-commit',
       'task-success',
+      'build-success',
+      'test-success',
+      'typecheck-success',
+      'lint-success',
     ] as const) {
       assert.ok(XP_RULES[type].pokemonXp > XP_RULES[type].trainerXp, type);
     }

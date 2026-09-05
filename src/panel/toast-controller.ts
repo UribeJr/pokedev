@@ -16,6 +16,7 @@ import {
 } from '../progression/toast-types';
 import { IPokemonCollection } from './pokemon-collection';
 import { IPokemonType } from './states';
+import { getWorldWidth } from './world-bounds';
 
 interface IncomingToastMessage extends WorldToastEvent {
   command: string;
@@ -205,7 +206,7 @@ class ToastController {
   private _reposition(toastEl: HTMLDivElement, pokemon: IPokemonType): void {
     const centerLeft = pokemon.left + pokemon.width / 2;
     const maxLeft = Math.max(
-      window.innerWidth - TOAST_HALF_WIDTH_PX,
+      getWorldWidth() - TOAST_HALF_WIDTH_PX,
       TOAST_HALF_WIDTH_PX,
     );
     toastEl.style.left = `${clamp(centerLeft, TOAST_HALF_WIDTH_PX, maxLeft)}px`;

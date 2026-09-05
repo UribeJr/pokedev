@@ -30,16 +30,21 @@ import {
 } from '../common/storage-keys';
 import {
   isDevRecordVisible,
+  promptForDevUsername,
   promptForGithubUsername,
+  setConfiguredDevUsername,
   setConfiguredGithubUsername,
   TrainerCardPanel,
 } from './trainer-card-panel';
+import { clearDevCache } from './trainer-storage';
 import { getNonce } from './webview-util';
 import { ActivityTracker } from './activity-tracker';
 import {
+  DailyChallengesExplorerViewProvider,
   PokemonExplorerViewProvider,
   TrainerExplorerViewProvider,
 } from './explorer-views';
+import { DailyChallengesService } from './daily-challenges-service';
 import { pokedevState } from './pokedev-state';
 import { pickPartnerPokemon } from './partner-picker';
 import { GitActivityTracker } from './git-activity';
@@ -47,6 +52,8 @@ import { reactionHub } from './reaction-service';
 import { toastHub } from './toast-service';
 import {
   evolvePartnerCommand,
+  reconcileStaleEvolutions,
+  relinkOrphanedProgression,
   setEvolutionPanelNotifier,
 } from './evolution-flow';
 import {
@@ -55,6 +62,11 @@ import {
   showStatusMessage,
 } from './progression-service';
 import { resolvePartnerIdentity } from './trainer-partner';
+import {
+  DEFAULT_DISPLAY_SKIN_ID,
+  DISPLAY_SKINS,
+  isValidDisplaySkinId,
+} from '../common/display-skins';
 
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
@@ -107,6 +119,13 @@ function getConfiguredTheme(): Theme {
 
 function getConfiguredThemeKind(): ColorThemeKind {
   return vscode.window.activeColorTheme.kind;
+}
+
+function getConfiguredDisplaySkin(): string {
+  const skinId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('displaySkin', DEFAULT_DISPLAY_SKIN_ID);
+  return isValidDisplaySkinId(skinId) ? skinId : DEFAULT_DISPLAY_SKIN_ID;
 }
 
 function getConfigurationPosition() {
@@ -494,6 +513,21 @@ export function activate(context: vscode.ExtensionContext) {
   // Reset the Pokemon translations cache at startup to load the correct language
   localize.resetPokemonTranslationsCache();
 
+  // Repairs any persistent Pokemon whose progression already proves an
+  // evolution should have happened, but whose persisted species never
+  // actually changed, THEN reunites any progression record that got
+  // orphaned by that same bug (or its own earlier, incomplete fix) with the
+  // collection entry it actually belongs to. Sequenced, not parallel: the
+  // second pass looks at the CURRENT species of every entry, which the first
+  // pass may have just corrected. Not awaited by the rest of activation: both
+  // only ever touch `globalState` and broadcast `pokedevState.notify` when
+  // they change anything, which every view already re-renders from.
+  void reconcileStaleEvolutions(context)
+    .then(() => relinkOrphanedProgression(context))
+    .catch((error) => {
+      console.error('PokeDev: evolution reconciliation failed', error);
+    });
+
   context.subscriptions.push(
     vscode.commands.registerCommand('pokedev.start', async () => {
       if (
@@ -577,7 +611,14 @@ export function activate(context: vscode.ExtensionContext) {
   // both untouched.
   const trainerExplorerView = new TrainerExplorerViewProvider(context);
   const pokemonExplorerView = new PokemonExplorerViewProvider(context);
-  context.subscriptions.push(trainerExplorerView, pokemonExplorerView);
+  const dailyChallengesExplorerView = new DailyChallengesExplorerViewProvider(
+    context,
+  );
+  context.subscriptions.push(
+    trainerExplorerView,
+    pokemonExplorerView,
+    dailyChallengesExplorerView,
+  );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       TrainerExplorerViewProvider.viewType,
@@ -589,6 +630,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(
       PokemonExplorerViewProvider.viewType,
       pokemonExplorerView,
+      { webviewOptions: { retainContextWhenHidden: false } },
+    ),
+    vscode.window.registerWebviewViewProvider(
+      DailyChallengesExplorerViewProvider.viewType,
+      dailyChallengesExplorerView,
       { webviewOptions: { retainContextWhenHidden: false } },
     ),
   );
@@ -624,18 +670,17 @@ export function activate(context: vscode.ExtensionContext) {
       );
       if (pokemon) {
         panel.deletePokemon(pokemon.name);
-        const collection = pokemonList
-          .filter((item) => {
-            return item.name !== pokemon.name;
-          })
-          .map<PokemonSpecification>((item) => {
-            return new PokemonSpecification(
-              item.color,
-              item.type,
-              PokemonSize.medium,
-              item.name,
-            );
-          });
+        // Rebuilt from canonical storage, NOT from `pokemonList` above: that
+        // list is only what the webview happens to have reported for the
+        // QuickPick, and persisting it verbatim would silently overwrite
+        // every OTHER Pokemon's canonical state (species included) with
+        // whatever the panel last reported for it - see the fixed bug where
+        // this let a stale client snapshot revert an evolution that had
+        // already been correctly persisted.
+        const collection = PokemonSpecification.collectionFromMemento(
+          context,
+          getConfiguredSize(),
+        ).filter((item) => item.name !== pokemon.name);
         await storeCollectionAsMemento(context, collection);
       }
     }),
@@ -799,6 +844,44 @@ export function activate(context: vscode.ExtensionContext) {
             picked.label,
           ),
         );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-display-border',
+      async () => {
+        const currentSkin = getConfiguredDisplaySkin();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          DISPLAY_SKINS.map((skin) => ({
+            label: skin.label,
+            description: skin.description,
+            detail:
+              skin.id === currentSkin ? vscode.l10n.t('Current') : undefined,
+            value: skin.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a PokéDev display border'),
+        });
+
+        if (!picked || picked.value === currentSkin) {
+          return;
+        }
+
+        // Cosmetic and user-specific, not tied to any one workspace: picking
+        // a border in one project should carry over to every other project.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'displaySkin',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `updateDisplaySkin` postMessage; nothing else to do here.
       },
     ),
   );
@@ -1181,7 +1264,14 @@ export function activate(context: vscode.ExtensionContext) {
           updatePanelThrowWithMouse();
         }
 
-        if (e.affectsConfiguration('pokedev.trainerCard.showDevRecord')) {
+        if (e.affectsConfiguration('pokedev.displaySkin')) {
+          getPokemonPanel()?.updateDisplaySkin(getConfiguredDisplaySkin());
+        }
+
+        if (
+          e.affectsConfiguration('pokedev.trainerCard.showDevRecord') ||
+          e.affectsConfiguration('pokedev.trainerCard.showCodingTime')
+        ) {
           // The card is open often enough that requiring a reopen to see a
           // visibility toggle take effect would feel broken.
           TrainerCardPanel.currentPanel?.notifyProgressionChanged();
@@ -1234,6 +1324,46 @@ export function activate(context: vscode.ExtensionContext) {
     ),
   );
 
+  /* -------------------------------- DEV badges ------------------------------- */
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.connect-dev-profile', async () => {
+      const username = await promptForDevUsername();
+      if (username === undefined) {
+        return;
+      }
+      await setConfiguredDevUsername(username);
+      TrainerCardPanel.createOrShow(context);
+      // The card may already be open on a stale username; pull the new one.
+      await TrainerCardPanel.currentPanel?.refreshDevBadges();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.refresh-dev-badges', async () => {
+      if (!TrainerCardPanel.currentPanel) {
+        TrainerCardPanel.createOrShow(context);
+        return;
+      }
+      await TrainerCardPanel.currentPanel.refreshDevBadges();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.disconnect-dev-profile',
+      async () => {
+        if (TrainerCardPanel.currentPanel) {
+          await TrainerCardPanel.currentPanel.disconnectDev();
+        } else {
+          await setConfiguredDevUsername('');
+          await clearDevCache(context);
+        }
+        showStatusMessage(vscode.l10n.t('DEV profile disconnected.'));
+      },
+    ),
+  );
+
   /* ----------------------------- progression ----------------------------- */
 
   const progression = new ProgressionService(context);
@@ -1247,17 +1377,36 @@ export function activate(context: vscode.ExtensionContext) {
     getPokemonPanel()?.evolvePokemon(payload);
   });
 
-  const tracker = new ActivityTracker(progression);
+  const tracker = new ActivityTracker(context, progression);
   tracker.start();
   activityTracker = tracker;
   context.subscriptions.push(tracker);
 
   const gitTracker = new GitActivityTracker(context, progression);
-  // Fire and forget: the Git extension may take a moment to activate, and
-  // nothing else in activation depends on commit tracking being ready.
-  void gitTracker.start();
+  // Not awaited here: the Git extension may take a moment to activate, and
+  // nothing else in activation depends on commit tracking being ready. Daily
+  // Challenges below is the one thing that DOES want to know once it
+  // resolves, so it keeps the promise rather than firing-and-forgetting it.
+  const gitReady = gitTracker.start();
   gitActivityTracker = gitTracker;
   context.subscriptions.push(gitTracker);
+
+  /* --------------------------- daily challenges --------------------------- */
+
+  // Waits for the Git tracker's own resolution before Daily Challenges'
+  // first generation of the day, so a workspace that already has a
+  // repository open is not mistakenly denied today's Git challenge by a
+  // startup race - see `DailyChallengesService.start`. This never re-detects
+  // saves, commits or coding time itself; it only listens to
+  // `progression.onDidApplyProgression`, the same events `activityTracker`
+  // and `gitTracker` already produce.
+  const dailyChallenges = new DailyChallengesService(
+    context,
+    progression,
+    gitTracker,
+  );
+  context.subscriptions.push(dailyChallenges);
+  void gitReady.then(() => dailyChallenges.start());
 
   /* ------------------------------- reactions ------------------------------ */
 
@@ -1479,6 +1628,7 @@ export function deactivate(): Thenable<void> | undefined {
   gitActivityTracker = undefined;
 
   const pending = progressionService?.flush();
+  progressionService?.dispose();
   progressionService = undefined;
   return pending;
 }
@@ -1511,6 +1661,7 @@ interface IPokemonPanel {
   updatePokemonType(newType: PokemonType): void;
   updatePokemonSize(newSize: PokemonSize): void;
   updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind): void;
+  updateDisplaySkin(skinId: string): void;
   update(): void;
   setThrowWithMouse(newThrowWithMouse: boolean): void;
   evolvePokemon(payload: {
@@ -1614,6 +1765,20 @@ class PokemonWebviewContainer implements IPokemonPanel {
     void this.getWebview().postMessage({
       command: 'throw-with-mouse',
       enabled: newThrowWithMouse,
+    });
+  }
+
+  /**
+   * Live-switches the display border with no webview reload: unlike
+   * `updateTheme`/`update()` (which re-render the whole HTML document), this
+   * is a plain `postMessage` the client applies by restyling the existing
+   * `.pokedev-display`/`.pokedev-screen` elements in place, so the Pokemon
+   * roster, positions and animation state are never touched.
+   */
+  public updateDisplaySkin(skinId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-display-skin',
+      text: skinId,
     });
   }
 
@@ -1753,9 +1918,14 @@ class PokemonWebviewContainer implements IPokemonPanel {
 				<title>VS Code Pokemon</title>
 			</head>
 			<body>
-                <canvas id="pokemonCanvas"></canvas>
-                <div id="pokemonContainer"></div>
-                <div id="foreground"></div>
+                <div class="pokedev-display" id="pokedevDisplay">
+                    <div class="pokedev-screen" id="pokedevScreen">
+                        <canvas id="pokemonCanvas"></canvas>
+                        <div id="pokemonContainer"></div>
+                        <div id="foreground"></div>
+                    </div>
+                    <img class="pokedev-display-overlay" id="pokedevOverlay" alt="">
+                </div>
                 <script nonce="${nonce}" src="${scriptUri}"></script>
                 <script nonce="${nonce}">
                     pokemonApp.pokemonPanelApp(
@@ -1768,6 +1938,7 @@ class PokemonWebviewContainer implements IPokemonPanel {
                         "${this.throwBallWithMouse()}",
                         "${this.pokemonGeneration()}",
                         "${this.pokemonOriginalSpriteSize()}",
+                        "${getConfiguredDisplaySkin()}",
                     );
                 </script>
             </body>
@@ -2011,15 +2182,105 @@ class PokemonWebviewViewProvider extends PokemonWebviewContainer {
     webviewView.webview.options = getWebviewOptions(this._extensionUri);
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
+    // No immediate seed call here: doing that unconditionally on every
+    // resolve raced the client's own `recoverState()` and could spawn a
+    // visual duplicate of every Pokemon the client was about to restore from
+    // its own webview state. Instead, the client always reports what it
+    // already has via `request-canonical-collection` (see the doc comment
+    // on `_reconcileWithCanonicalCollection`), and this only ever spawns
+    // whatever that report is missing.
     webviewView.webview.onDidReceiveMessage(
-      handleWebviewMessage,
+      (message: WebviewMessage) => {
+        if (message.command === 'request-canonical-collection') {
+          void this._reconcileWithCanonicalCollection(message.text);
+          return;
+        }
+        handleWebviewMessage(message);
+      },
       null,
       this._disposables,
     );
+  }
 
-    const collection = getDefaultPokemonForFreshSession(this._context);
-    if (shouldSpawnInitialCollection(collection)) {
-      await spawnAndPersistCollection(this._context, this, collection);
+  /**
+   * Brings this webview's rendering up to date with the user's REAL, saved
+   * Pokemon collection.
+   *
+   * This webview's own persisted state (`vscode.getState()`/`setState()` in
+   * `panel/main.ts`) is a separate thing from that collection, and can drift
+   * behind it in ways that have nothing to do with the user doing anything
+   * wrong: an extension update or a cleared webview state resets the
+   * former but never the latter, and this state is per-webview - a Pokemon
+   * spawned, evolved, or removed while a DIFFERENT window's copy of this
+   * view was the one open never reaches this one on its own. Without this,
+   * such a webview quietly keeps rendering whatever it last had, forever,
+   * even after the user's real collection has moved on.
+   *
+   * `existingNamesText` is newline-joined Pokemon names the CLIENT reports
+   * already having, sent unconditionally on every load - so this only ever
+   * fills in what is actually missing, never re-spawning (and therefore
+   * never visually duplicating) something the client already restored
+   * itself.
+   */
+  private async _reconcileWithCanonicalCollection(
+    existingNamesText: string,
+  ): Promise<void> {
+    let canonicalCollection: PokemonSpecification[];
+    try {
+      canonicalCollection = PokemonSpecification.collectionFromMemento(
+        this._context,
+        getConfiguredSize(),
+      );
+    } catch (error) {
+      // A single malformed entry must not leave a webview permanently
+      // empty - `listPartnerCandidates` (the Explorer/Trainer Card path)
+      // already tolerates this defensively; this path historically has not.
+      console.error(
+        'PokeDev: could not read the saved Pokemon collection',
+        error,
+      );
+      return;
+    }
+
+    if (canonicalCollection.length === 0) {
+      // Nothing saved yet anywhere - a genuinely fresh install. Seed from
+      // the configured defaults, exactly as a brand-new session always has,
+      // and persist them so they become the real collection from now on.
+      const defaults = getConfiguredDefaultPokemon();
+      if (defaults.length > 0) {
+        await spawnAndPersistCollection(this._context, this, defaults);
+      }
+      return;
+    }
+
+    // The real collection already exists and is already correct - only
+    // this webview's rendering of it can be behind, so canonical storage is
+    // never rewritten here.
+    const existingNames = existingNamesText
+      .split('\n')
+      .filter((name) => name.length > 0);
+    const canonicalNames = new Set(
+      canonicalCollection.map((item) => item.name),
+    );
+
+    for (const item of canonicalCollection) {
+      if (existingNames.indexOf(item.name) === -1) {
+        this.spawnPokemon(item);
+      }
+    }
+
+    // The reverse gap: a Pokemon this webview is still rendering that is no
+    // longer in canonical storage at all - a ghost left over from before
+    // this reconciliation existed (deleted from one window's copy of this
+    // view while a different window's copy, with its own separate webview
+    // state, never heard about it). Removing it here is safe specifically
+    // because canonical storage, not this webview, is authoritative: a name
+    // absent from it is never a real Pokemon this session simply has not
+    // learned about yet.
+    for (const name of existingNames) {
+      if (!canonicalNames.has(name)) {
+        this.deletePokemon(name);
+      }
     }
   }
 

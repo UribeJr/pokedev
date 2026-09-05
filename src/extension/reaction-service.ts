@@ -101,6 +101,28 @@ class ReactionHub {
     });
   }
 
+  /**
+   * A Dev Action (build/test/typecheck/lint) succeeded.
+   *
+   * No cooldown here either, for the same reason as `notifyCommit`: the
+   * 5-minute Dev Action cooldown in `activity-tracker.ts` already keeps a
+   * repeat from reaching this call at all. `subtle` chooses `notice` (a small
+   * `!`) for typecheck/lint over the fuller `celebrate` a build or test pass
+   * gets - the same distinction the toast variant makes.
+   */
+  public notifyDevAction(
+    pokemonId: string,
+    subtle: boolean,
+    now: number = Date.now(),
+  ): void {
+    this._fire({
+      type: subtle ? 'notice' : 'celebrate',
+      source: 'dev-action',
+      pokemonId,
+      timestamp: now,
+    });
+  }
+
   /** A Pokémon just levelled up. Always shown - no cooldown. */
   public notifyLevelUp(pokemonId: string, now: number = Date.now()): void {
     this._fire({

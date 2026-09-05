@@ -21,11 +21,18 @@ import * as vscode from 'vscode';
 import { getLocalizedPokemonName } from '../common/localize';
 import { POKEMON_DATA } from '../common/pokemon-data';
 import {
+  buildLoadingViewModel,
+  DailyChallengesLabels,
+  DailyChallengesViewModel,
+  toDailyChallengesViewModel,
+} from '../challenges/daily-challenges-view-types';
+import {
   ExplorerLabels,
   ExplorerPokemonEntry,
   ExplorerPokemonViewModel,
   ExplorerTrainerViewModel,
 } from '../trainer/explorer-types';
+import { readDailyChallengeState } from './daily-challenges-storage';
 import {
   getPokemonXpForNextLevel,
   MAX_POKEMON_LEVEL,
@@ -35,8 +42,16 @@ import {
   MAX_TRAINER_LEVEL,
 } from '../trainer/trainer-profile';
 import { readPokemonProgress } from './progression-storage';
-import { getConfiguredGithubUsername } from './trainer-card-panel';
-import { readGithubCache, readTrainerProfile } from './trainer-storage';
+import {
+  getConfiguredDevUsername,
+  getConfiguredGithubUsername,
+} from './trainer-card-panel';
+import { resolveTrainerSpriteUri } from './trainer-sprite-service';
+import {
+  readDevCache,
+  readGithubCache,
+  readTrainerProfile,
+} from './trainer-storage';
 import {
   isExpShareEnabled,
   listPartnerCandidates,
@@ -54,7 +69,8 @@ export type PokedevChangeKind =
   | 'progression'
   | 'partner'
   | 'github'
-  | 'collection';
+  | 'collection'
+  | 'challenges';
 
 class PokedevState {
   private readonly _emitter = new vscode.EventEmitter<PokedevChangeKind>();
@@ -100,6 +116,11 @@ class PokedevState {
       displayName: github?.displayName || username,
       login: github?.login || username,
       avatarUrl: github?.avatarUrl ?? '',
+      trainerSpriteUri: resolveTrainerSpriteUri(
+        webview,
+        context.extensionUri,
+        profile.trainerSpriteId,
+      ),
       trainerLevel: profile.trainerLevel,
       trainerXp: profile.trainerXp,
       xpForNextLevel:
@@ -107,9 +128,25 @@ class PokedevState {
           ? 0
           : getXpForNextTrainerLevel(profile.trainerLevel),
       totalCodingTimeMs: profile.totalCodingTimeMs,
+      devBadgesEarned: this._readDevBadgesEarned(context),
       partner: this._buildPartner(context, webview, now),
       labels: buildExplorerLabels(),
     };
+  }
+
+  /**
+   * Cache-only, mirroring the GitHub read directly above: this HUD renders on
+   * every XP event, so it must never itself trigger a DEV fetch.
+   */
+  private _readDevBadgesEarned(context: vscode.ExtensionContext): number {
+    const username = getConfiguredDevUsername();
+    if (username.length === 0) {
+      return 0;
+    }
+    const cached = readDevCache(context);
+    return cached && cached.username === username.toLowerCase()
+      ? cached.badges.length
+      : 0;
   }
 
   private _buildPartner(
@@ -149,52 +186,83 @@ class PokedevState {
   /* ---------------------------- team list ---------------------------- */
 
   /**
-   * The team list, in the collection's own stored order.
+   * Every collection entry as a compact view row, in the collection's own
+   * stored order.
    *
    * Uses `listPartnerCandidates`, the same enumeration the partner picker
-   * reads, so the sidebar can never disagree with the picker about what you
-   * own or which one is current.
+   * reads, so no surface can ever disagree about what you own or which one is
+   * current. Shared by the Explorer Pokemon view (the full list) and the
+   * Trainer Card's PARTY section (the first `PARTY_SLOTS` of this same list)
+   * so both render literally the same instances rather than two derivations
+   * that could drift apart.
    */
+  public buildPartyEntries(
+    context: vscode.ExtensionContext,
+    webview: vscode.Webview,
+  ): ExplorerPokemonEntry[] {
+    const now = Date.now();
+    const current = resolvePartnerIdentity(context);
+    return listPartnerCandidates(context).map((entry) => {
+      const progress = readPokemonProgress(
+        context,
+        entry.nickname,
+        entry.species,
+        now,
+      );
+      const species = getLocalizedPokemonName(entry.species);
+      return {
+        nickname: entry.nickname,
+        species,
+        spriteUri: spriteUriFor(
+          webview,
+          context.extensionUri,
+          entry.species,
+          entry.shiny,
+        ),
+        shiny: entry.shiny,
+        level: progress.level,
+        currentXp: progress.currentXp,
+        xpForNextLevel:
+          progress.level >= MAX_POKEMON_LEVEL
+            ? 0
+            : getPokemonXpForNextLevel(progress.level),
+        isPartner: entry.nickname === current?.nickname,
+      };
+    });
+  }
+
   public buildPokemonView(
     context: vscode.ExtensionContext,
     webview: vscode.Webview,
   ): ExplorerPokemonViewModel {
-    const now = Date.now();
-    const current = resolvePartnerIdentity(context);
-    const pokemon: ExplorerPokemonEntry[] = listPartnerCandidates(context).map(
-      (entry) => {
-        const progress = readPokemonProgress(
-          context,
-          entry.nickname,
-          entry.species,
-          now,
-        );
-        const species = getLocalizedPokemonName(entry.species);
-        return {
-          nickname: entry.nickname,
-          species,
-          spriteUri: spriteUriFor(
-            webview,
-            context.extensionUri,
-            entry.species,
-            entry.shiny,
-          ),
-          shiny: entry.shiny,
-          level: progress.level,
-          currentXp: progress.currentXp,
-          xpForNextLevel:
-            progress.level >= MAX_POKEMON_LEVEL
-              ? 0
-              : getPokemonXpForNextLevel(progress.level),
-          isPartner: entry.nickname === current?.nickname,
-        };
-      },
-    );
     return {
-      pokemon,
+      pokemon: this.buildPartyEntries(context, webview),
       expShareEnabled: isExpShareEnabled(),
       labels: buildExplorerLabels(),
     };
+  }
+
+  /* ------------------------- daily challenges ------------------------- */
+
+  /**
+   * Read-only: reports whatever `DailyChallengesService` last persisted.
+   * Regeneration is entirely that service's responsibility (see its own doc
+   * comment) - this never decides a day has rolled over on its own, so
+   * opening or reopening this view can never itself trigger a reroll.
+   */
+  public buildDailyChallengesView(
+    context: vscode.ExtensionContext,
+  ): DailyChallengesViewModel {
+    const labels = buildDailyChallengesLabels();
+    const state = readDailyChallengeState(context);
+    if (!state) {
+      // Either a fresh install whose first generation has not finished yet,
+      // or a genuinely corrupt record `normalizeDailyChallengeState` could
+      // not salvage - both render the same graceful placeholder rather than
+      // guessing which one it was.
+      return buildLoadingViewModel(labels);
+    }
+    return toDailyChallengesViewModel(state, labels);
   }
 }
 
@@ -237,6 +305,7 @@ export function buildExplorerLabels(): ExplorerLabels {
     levelLabel: vscode.l10n.t('Lv.'),
     xpLabel: vscode.l10n.t('XP'),
     codingTimeLabel: vscode.l10n.t('Coding time'),
+    devBadgesLabel: vscode.l10n.t('Badges'),
     partnerLabel: vscode.l10n.t('Partner'),
     noPartnerLabel: vscode.l10n.t('No partner selected'),
     noPokemonLabel: vscode.l10n.t('No Pokemon yet'),
@@ -254,5 +323,18 @@ export function buildExplorerLabels(): ExplorerLabels {
     expShareOnLabel: vscode.l10n.t('ON'),
     expShareOffLabel: vscode.l10n.t('OFF'),
     expShareTooltip: vscode.l10n.t('Shares 50% EXP with other party Pokémon.'),
+  };
+}
+
+/** Localized on the host, mirroring `buildExplorerLabels` above - the
+ * webview has no `vscode.l10n` of its own. */
+export function buildDailyChallengesLabels(): DailyChallengesLabels {
+  return {
+    todayLabel: vscode.l10n.t('Today'),
+    completeLabel: vscode.l10n.t('Complete'),
+    xpLabel: vscode.l10n.t('XP'),
+    resetLabel: vscode.l10n.t('New challenges tomorrow'),
+    loadingLabel: vscode.l10n.t('Preparing today’s challenges…'),
+    errorLabel: vscode.l10n.t('Could not load today’s challenges.'),
   };
 }

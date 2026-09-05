@@ -159,12 +159,24 @@ body {
 	flex: none;
 }
 
+/*
+ * The landscape composition: identity spans both right-column rows, BADGES
+ * and PARTY stack in the right column, and the footer row (Trainer XP +
+ * compact Partner box) spans the full width underneath. This is the whole
+ * reason the card reads as ONE physical object instead of a stack of
+ * full-width sections.
+ */
 .tc-card-body {
 	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: var(--tc-gap);
-	padding: 14px;
+	display: grid;
+	grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+	grid-template-areas:
+		'identity badges'
+		'identity party'
+		'footer footer';
+	column-gap: 16px;
+	row-gap: 10px;
+	padding: 12px 14px;
 }
 
 /* ------------------------------ pokeball art ----------------------------- */
@@ -188,8 +200,7 @@ body {
  */
 .tc-ball,
 .tc-onboard-ball,
-.tc-partner-ball,
-.tc-badge {
+.tc-partner-ball {
 	--tc-ball-crop: 16;
 	--tc-ball-inset: 24;
 	display: inline-block;
@@ -226,18 +237,45 @@ body {
 
 /* --------------------------------- hero ---------------------------------- */
 
+/*
+ * The identity column: portrait, then identity text, then a slim stats row -
+ * see `grid-area: identity` in `.tc-card-body`, which stretches this column
+ * to match the combined height of the BADGES + PARTY rows beside it.
+ *
+ * In Trainer Sprite mode, `.tc-portrait-sprite` is a FLEXIBLE child
+ * (`flex: 1 1 auto`) rather than a fixed size: it grows to consume whatever
+ * height is actually left over in the column after the fixed-size identity
+ * text and stats row, which is exactly the "dead space" this treatment
+ * exists to use. Identity text and the stats row stay `flex: none` (sized to
+ * their own content), so they naturally end up pushed to the bottom of the
+ * column - no separate anchoring needed.
+ */
 .tc-hero {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr) auto;
-	gap: 14px;
-	align-items: start;
+	grid-area: identity;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	min-height: 0;
 }
 
+/*
+ * The GitHub-avatar / empty-state frame: small and fixed, a traditional
+ * portrait treatment. `.tc-portrait-sprite` below overrides this into a
+ * large flexible frame for Trainer Sprite mode - the two are deliberately
+ * different container sizes, not just different images in the same box, so
+ * a GitHub photo is never stretched into oversized "character art".
+ *
+ * A real `<button>` (see `renderHero`), so this resets the usual button
+ * chrome away in favour of the existing framed-portrait look.
+ */
 .tc-portrait {
 	position: relative;
-	width: 96px;
-	height: 96px;
+	width: 76px;
+	height: 76px;
 	flex: none;
+	margin: 0;
+	padding: 0;
 	border: 2px solid var(--tc-face-edge);
 	border-radius: 6px;
 	background-color: var(--tc-slot);
@@ -263,6 +301,35 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.tc-portrait:hover {
+	box-shadow:
+		inset 0 0 0 1px var(--tc-edge-light),
+		0 0 0 2px var(--tc-accent);
+}
+
+.tc-portrait:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 2px;
+}
+
+/*
+ * The large character-art frame. Bounded rather than fixed: it fills the
+ * identity column's leftover height (roughly 1.6-2.4x the old fixed 76px
+ * portrait, depending on how much BADGES/PARTY content there is beside it),
+ * capped so it can never force the column - and therefore the whole card -
+ * taller than the right side already is.
+ */
+.tc-portrait-sprite {
+	width: 100%;
+	height: auto;
+	flex: 1 1 auto;
+	min-height: 120px;
+	max-height: 184px;
 }
 
 /*
@@ -315,26 +382,43 @@ body {
 
 /* reset.css sets img { max-width: 100%; height: auto } — override for the frame. */
 .tc-avatar {
-	width: 96px;
-	height: 96px;
+	width: 76px;
+	height: 76px;
 	max-width: none;
 	display: block;
 	object-fit: cover;
 	image-rendering: auto;
 }
 
+/*
+ * A Trainer Sprite is pixel art, and generations ship at different native
+ * resolutions (56-80px source, all roughly square). Rather than a fixed
+ * size per generation, this fills whatever box `.tc-portrait-sprite` ends up
+ * being and lets `object-fit: contain` do the normalizing: the full sprite
+ * is always shown, uncropped and undistorted, at whatever size the taller
+ * dimension of the frame allows - `pixelated` keeps it crisp at any scale
+ * rather than smoothed like the GitHub avatar's cover-fit photo treatment.
+ */
+.tc-avatar-sprite {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	image-rendering: pixelated;
+	padding: 10px;
+	box-sizing: border-box;
+}
+
 .tc-identity {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 3px;
 	min-width: 0;
-	padding-top: 2px;
 }
 
 .tc-trainer-name {
-	font-size: 21px;
+	font-size: 16px;
 	font-weight: 700;
-	line-height: 1.1;
+	line-height: 1.15;
 	letter-spacing: 0.2px;
 	color: var(--tc-ink);
 	overflow: hidden;
@@ -393,37 +477,55 @@ body {
 	color: var(--tc-accent);
 }
 
-/* Level plate — a gameplay stat, not a form row. */
-.tc-level-plate {
+/*
+ * Trainer Level (+ optional Coding Time) as slim rows within the identity
+ * column, rather than an isolated square "dashboard" plate. Pinned to the
+ * bottom of `.tc-hero` via `margin-top: auto` so it reads as the identity
+ * area's closing stat line.
+ */
+.tc-identity-stats {
+	/*
+	 * `margin-top: auto` still anchors this to the bottom of the column in
+	 * GitHub-avatar/empty mode (a fixed-size portrait leaves real free space
+	 * behind). It becomes a no-op in Trainer Sprite mode: flexible-length
+	 * resolution for `.tc-portrait-sprite`'s `flex-grow` already consumes all
+	 * the free space before auto-margin alignment runs, so the two modes need
+	 * no separate rule here - the sprite frame growing IS what keeps this row
+	 * pinned to the bottom in that mode.
+	 */
 	flex: none;
+	margin-top: auto;
+	padding-top: 6px;
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	gap: 1px;
-	min-width: 84px;
-	padding: 8px 12px 9px;
-	border: 2px solid var(--tc-face-edge);
-	border-radius: 6px;
-	background: var(--tc-surface);
-	box-shadow:
-		inset 0 0 0 1px var(--tc-edge-light),
-		inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+	gap: 2px;
+	border-top: 1px dashed var(--tc-rule);
 }
 
-.tc-level-word {
+.tc-identity-stat-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.tc-identity-stat-label {
 	font-family: 'silkscreen', var(--vscode-font-family);
 	font-size: 8px;
-	letter-spacing: 1.4px;
+	letter-spacing: 1.1px;
 	text-transform: uppercase;
 	color: var(--tc-ink-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.tc-level-value {
+.tc-identity-stat-value {
 	font-family: 'silkscreen', var(--vscode-font-family);
-	font-size: 20px;
-	line-height: 1.15;
+	font-size: 12px;
 	color: var(--tc-accent);
 	white-space: nowrap;
+	flex: none;
 }
 
 /* -------------------------------- sections ------------------------------- */
@@ -482,10 +584,6 @@ body {
 
 .tc-record-grid-4 {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.tc-record-grid-3 {
-	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .tc-record-cell {
@@ -578,91 +676,263 @@ body {
 	text-align: right;
 }
 
-/* --------------------------- lower: record + partner --------------------- */
-
-.tc-lower {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 214px);
-	gap: var(--tc-gap);
-	align-items: start;
+/*
+ * DEV RECORD lives OUTSIDE the physical card (see `renderDevRecordPanel`) so
+ * the compact landscape card never resizes when it opens - its own smaller
+ * bordered face instead, echoing the card's palette without competing with
+ * it (no scanlines, no bevel).
+ */
+.tc-devrecord-panel {
+	max-width: var(--tc-shell-max);
+	margin: 0 auto;
+	padding: 12px 14px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: var(--tc-radius);
+	background: var(--tc-face-bottom);
+	color: var(--tc-ink);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
 }
 
-.tc-section-trainer {
-	gap: 9px;
+/* -------------------------------- badges --------------------------------- */
+
+.tc-section-badges {
+	grid-area: badges;
+	min-height: 0;
 }
 
-.tc-badge-slots {
+/*
+ * Large, so the artwork itself is the focus rather than a count or a slot
+ * grid. `auto-fill` wraps cleanly at any card width without ever forcing
+ * horizontal scroll; `minmax`'s upper bound keeps a two- or three-badge
+ * collection from stretching into oversized tiles on a wide card.
+ */
+.tc-badges-grid {
 	display: grid;
-	grid-template-columns: repeat(8, auto);
+	grid-template-columns: repeat(auto-fill, minmax(56px, 72px));
+	gap: 10px;
+}
+
+.tc-badge-tile {
+	position: relative;
+	aspect-ratio: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 7px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 8px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-badge-tile:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 2px;
+}
+
+.tc-badge-tile-img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+/* A broken/expired badge image leaves an intact, still-earned-looking tile. */
+.tc-badge-tile-broken {
+	opacity: 0.55;
+}
+
+.tc-badge-tile-broken::after {
+	content: '?';
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 20px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-devbadges-empty {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------------- party ---------------------------------- */
+
+.tc-section-party {
+	grid-area: party;
+	min-height: 0;
+}
+
+/*
+ * Classic 3x2 party grid. Bounded rather than `1fr` columns: the right
+ * column of the landscape card is much wider than a single party card needs
+ * to be, and `1fr` would stretch each slot into an oversized, sparse-looking
+ * box. `justify-content: start` keeps the whole grid left-aligned instead of
+ * spreading out to fill any leftover width.
+ */
+.tc-party-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(76px, 118px));
 	justify-content: start;
-	gap: 5px;
+	gap: 6px;
 }
 
-.tc-badge {
-	--tc-ball-size: 21px;
-	/* Wider window than the head/partner balls, so the art sits inside the ring. */
-	--tc-ball-crop: 26;
-	--tc-ball-inset: 19;
-	border-radius: 50%;
-	background-color: var(--tc-slot);
-	box-shadow:
-		inset 0 0 0 1px var(--tc-rule),
-		0 1px 0 rgba(0, 0, 0, 0.2);
-	filter: grayscale(1) brightness(0.8);
-	opacity: 0.7;
+.tc-party-slot {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	min-width: 0;
+	min-height: 74px;
+	padding: 6px 4px 5px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 7px;
+	background: var(--tc-surface);
+	font-family: inherit;
+	text-align: center;
+	cursor: pointer;
 }
 
-.tc-badge-earned {
-	background-color: rgba(255, 215, 95, 0.16);
-	box-shadow:
-		inset 0 0 0 1px var(--tc-accent),
-		0 0 6px rgba(255, 215, 95, 0.35);
-	filter: none;
-	opacity: 1;
+button.tc-party-slot {
+	color: inherit;
 }
 
-.tc-timerow {
+.tc-party-slot:disabled {
+	cursor: default;
+}
+
+.tc-party-slot:hover:not(:disabled) {
+	border-color: var(--tc-accent);
+}
+
+.tc-party-slot:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+/* The one tasteful partner indicator: a highlighted border and glow, echoing
+ * the earned-badge treatment so the two "you have this" states read as one
+ * visual language across the card. */
+.tc-party-slot-partner {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.14);
+	box-shadow: 0 0 8px rgba(255, 215, 95, 0.3);
+}
+
+.tc-party-slot-empty {
+	border-style: dashed;
+	opacity: 0.45;
+	background: transparent;
+}
+
+.tc-party-sprite {
+	width: 34px;
+	height: 34px;
+	max-width: none;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+.tc-party-name {
 	display: flex;
 	align-items: baseline;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 7px 9px;
-	border: 1px solid var(--tc-face-edge);
-	border-radius: 5px;
-	background: var(--tc-surface);
-}
-
-.tc-timerow .tc-record-label {
-	text-align: left;
-}
-
-.tc-timerow-value {
+	justify-content: center;
+	gap: 3px;
+	max-width: 100%;
 	font-family: 'silkscreen', var(--vscode-font-family);
-	font-size: 13px;
+	font-size: 9px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
 	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
-	flex: none;
 }
 
-/* --------------------------------- partner ------------------------------- */
+.tc-party-shiny {
+	flex: none;
+	font-size: 9px;
+	color: var(--tc-accent);
+}
 
-.tc-section-partner {
-	align-items: center;
-	padding: 10px;
+.tc-party-level {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.6px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-party-partner-badge {
+	position: absolute;
+	top: -6px;
+	right: -4px;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-face-edge);
+}
+
+.tc-party-empty-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------------- footer -------------------------------- */
+
+/*
+ * TRAINER XP as a strong horizontal footer, with the compact PARTNER box
+ * beside it — the full-width row that reinforces the landscape shape (see
+ * "Preferred Card Hierarchy"). Stacks under the narrow-width breakpoint.
+ */
+.tc-footer-row {
+	grid-area: footer;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+	gap: 10px;
+	align-items: stretch;
+}
+
+/*
+ * PARTNER: a compact detail box, not a second full-size panel — the
+ * highlighted PARTY slot already shows WHO the partner is; this exists so
+ * Partner level/XP stay visible without duplicating that job.
+ */
+.tc-partner-box {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+	padding: 7px 9px;
 	border: 1px solid var(--tc-face-edge);
 	border-radius: 6px;
 	background: var(--tc-surface);
 	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
 }
 
+.tc-partner-box-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
 .tc-partner-frame {
+	flex: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 84px;
-	height: 68px;
+	width: 44px;
+	height: 44px;
 	border: 1px solid var(--tc-face-edge);
-	border-radius: 4px;
+	border-radius: 5px;
 	background-color: var(--tc-slot);
 	background-image: linear-gradient(
 		to bottom,
@@ -678,61 +948,57 @@ body {
 }
 
 .tc-partner-sprite {
-	width: 56px;
-	height: 56px;
+	width: 36px;
+	height: 36px;
 	max-width: none;
 	image-rendering: pixelated;
 	object-fit: contain;
 }
 
+.tc-partner-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
 .tc-partner-name {
 	display: flex;
 	align-items: baseline;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 5px;
-	text-align: center;
+	gap: 4px;
+	min-width: 0;
 }
 
 .tc-partner-species {
 	font-family: 'silkscreen', var(--vscode-font-family);
-	font-size: 12px;
-	letter-spacing: 0.6px;
+	font-size: 11px;
+	letter-spacing: 0.5px;
 	text-transform: uppercase;
 	color: var(--tc-ink);
-}
-
-.tc-partner-nick {
-	font-size: 11px;
-	color: var(--tc-ink-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .tc-partner-shiny {
-	font-size: 11px;
+	flex: none;
+	font-size: 10px;
 	color: var(--tc-accent);
 }
 
-/*
- * Partner level plate.
- *
- * Deliberately quieter than the trainer's own level plate: the partner is a
- * secondary track, and two competing level badges on one card read as noise.
- */
 .tc-partner-level {
 	display: block;
-	margin-top: 4px;
 	font-family: 'silkscreen', var(--vscode-font-family);
-	font-size: 10px;
-	letter-spacing: 0.8px;
-	text-align: center;
-	color: var(--tc-ink);
+	font-size: 9px;
+	letter-spacing: 0.6px;
+	color: var(--tc-ink-dim);
 }
 
 .tc-partner-xp {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin-top: 5px;
+	gap: 5px;
 }
 
 /*
@@ -742,7 +1008,7 @@ body {
 .tc-partner-xp-track {
 	position: relative;
 	flex: 1 1 auto;
-	height: 7px;
+	height: 6px;
 	border: 1px solid var(--tc-face-edge);
 	border-radius: 2px;
 	background: var(--tc-slot);
@@ -775,13 +1041,282 @@ body {
 	text-align: center;
 }
 
+/* ------------------------------- dev badges ------------------------------ */
+
+.tc-devbadges-actions {
+	display: flex;
+	gap: 10px;
+}
+
+/*
+ * Deliberately quieter than .tc-footer's .tc-button: these two actions live
+ * inside a section, not the card's primary controls, and should read as
+ * secondary text links rather than compete with Refresh/Change Trainer.
+ */
+.tc-devbadges-link {
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--tc-ink-dim);
+	font-size: 10px;
+	letter-spacing: 0.4px;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.tc-devbadges-link:hover:not(:disabled) {
+	color: var(--tc-ink);
+}
+
+.tc-devbadges-link:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+.tc-devbadges-link:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tc-devbadges-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* Shared by the disconnected (Connect DEV) and hard-error states. */
+.tc-devbadges-connect {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.tc-devbadges-hint {
+	margin: 0;
+	max-width: 420px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------- trainer sprite picker ------------------------ */
+
+/*
+ * A lightweight modal overlay inside the SAME webview - no second panel, no
+ * host round trip to open/close. Only the final decision (a chosen sprite id,
+ * or a reset to the GitHub avatar) is ever posted to the host; everything
+ * else - which tab is active, which tile is previewed - is client-side UI
+ * state, per `panel/trainer-card/main.ts`.
+ */
+.tc-picker-backdrop {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	background: rgba(6, 17, 36, 0.72);
+	z-index: 100;
+}
+
+.tc-picker-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	width: min(560px, 100%);
+	max-height: 86vh;
+	overflow-y: auto;
+	padding: 16px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: var(--tc-radius);
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	box-shadow:
+		var(--tc-shadow),
+		inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-picker-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.tc-picker-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-picker-close {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	border-radius: 4px;
+	background: transparent;
+	color: var(--tc-ink);
+	font-size: 13px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.tc-picker-close:hover {
+	background: var(--vscode-button-secondaryBackground);
+}
+
+.tc-picker-close:focus-visible,
+.tc-picker-tab:focus-visible,
+.tc-picker-tile:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.tc-picker-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.tc-picker-tab {
+	flex: 1 1 auto;
+	padding: 6px 4px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink-dim);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.tc-picker-tab[aria-selected='true'] {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.16);
+	color: var(--tc-accent);
+}
+
+.tc-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+	gap: 8px;
+}
+
+.tc-picker-empty {
+	margin: 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-picker-tile {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+	padding: 8px 5px 7px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 7px;
+	background: var(--tc-surface);
+	font-family: inherit;
+	color: inherit;
+	text-align: center;
+	cursor: pointer;
+}
+
+.tc-picker-tile:hover {
+	border-color: var(--tc-accent);
+}
+
+.tc-picker-tile-selected {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.16);
+	box-shadow: 0 0 8px rgba(255, 215, 95, 0.3);
+}
+
+.tc-picker-tile-sprite {
+	width: 48px;
+	height: 48px;
+	object-fit: contain;
+	image-rendering: pixelated;
+}
+
+.tc-picker-tile-name {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-picker-tile-game {
+	font-size: 8px;
+	color: var(--tc-ink-dim);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The one "you have this" indicator, matching the badge/party-slot visual
+ * language elsewhere on the card - never an emoji. */
+.tc-picker-tile-badge {
+	position: absolute;
+	top: -6px;
+	right: -4px;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-face-edge);
+}
+
+.tc-picker-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--tc-rule);
+}
+
+.tc-picker-actions-hint {
+	margin: 0 auto 0 0;
+	font-size: 10px;
+	color: var(--tc-ink-dim);
+}
+
 /* --------------------------------- XP bar -------------------------------- */
 
 .tc-xp-panel {
 	display: flex;
 	flex-direction: column;
+	justify-content: center;
 	gap: 6px;
-	padding: 10px 11px 11px;
+	min-width: 0;
+	padding: 9px 12px 10px;
 	border: 1px solid var(--tc-face-edge);
 	border-radius: 6px;
 	background: var(--tc-surface);
@@ -1146,48 +1681,82 @@ body {
 
 /* ------------------------------- responsive ------------------------------ */
 
-/* Panel dragged narrow: stack the hero, drop Partner below Trainer Record. */
-@media (max-width: 640px) {
-	.tc-hero {
-		grid-template-columns: auto minmax(0, 1fr);
+/*
+ * "Medium": the editor panel is narrower than a full desktop width but still
+ * comfortably wider than the collapse threshold below. The landscape
+ * composition holds - identity stays a left column, BADGES/PARTY stay on the
+ * right - just tightened: a narrower identity column, smaller badge tiles,
+ * and a party grid that gives up its minimum column width first.
+ */
+@media (max-width: 860px) {
+	.tc-card-body {
+		grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+		column-gap: 12px;
+	}
+
+	.tc-badges-grid {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 60px));
+		gap: 8px;
+	}
+
+	.tc-party-grid {
+		grid-template-columns: repeat(3, minmax(64px, 1fr));
+	}
+
+	.tc-footer-row {
+		grid-template-columns: minmax(0, 1fr) minmax(130px, 180px);
+	}
+}
+
+/*
+ * "Narrow": only below roughly 600-700px does the card give up on landscape
+ * and collapse to the classic vertical stack - identity, then BADGES, then
+ * PARTY, then the footer (XP above the compact Partner box). Still never a
+ * horizontal scroll.
+ */
+@media (max-width: 680px) {
+	.tc-card-body {
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-areas:
-			'portrait level'
-			'identity identity';
+			'identity'
+			'badges'
+			'party'
+			'footer';
 	}
 
-	.tc-portrait {
-		grid-area: portrait;
-		width: 76px;
-		height: 76px;
+	.tc-hero {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
 	}
 
-	.tc-avatar {
-		width: 76px;
-		height: 76px;
-	}
-
-	.tc-level-plate {
-		grid-area: level;
-		justify-self: end;
+	/*
+	 * The identity column no longer spans the height of BADGES + PARTY at
+	 * this breakpoint (everything stacks into single-row grid areas instead),
+	 * so there is no leftover height for `.tc-portrait-sprite` to flex into -
+	 * a smaller fixed size sits beside the identity text instead, per the
+	 * "smaller presentation is acceptable" narrow-width guidance.
+	 */
+	.tc-portrait-sprite {
+		width: 96px;
+		height: 96px;
+		flex: none;
+		min-height: 0;
+		max-height: none;
 	}
 
 	.tc-identity {
-		grid-area: identity;
+		flex: 1 1 160px;
 	}
 
-	.tc-lower {
-		grid-template-columns: minmax(0, 1fr);
-	}
-
-	.tc-section-partner {
-		flex-direction: row;
-		flex-wrap: wrap;
-		justify-content: flex-start;
-		gap: 10px;
-	}
-
-	.tc-section-partner .tc-section-title {
+	.tc-identity-stats {
 		flex-basis: 100%;
+		margin-top: 4px;
+		padding-top: 6px;
+	}
+
+	.tc-footer-row {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -1196,17 +1765,9 @@ body {
 		padding: 10px;
 	}
 
-	/*
-	 * Only the 4-column DEV RECORD needs collapsing. The 3-column TRAINER
-	 * RECORD holds single digits and "0 / 8", which still fit — and collapsing
-	 * it to two columns would leave a visibly empty fourth cell.
-	 */
+	/* Only the 4-column DEV RECORD needs collapsing. */
 	.tc-record-grid-4 {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.tc-trainer-name {
-		font-size: 18px;
 	}
 
 	.tc-spec {
@@ -1218,8 +1779,23 @@ body {
 		flex: 1 1 auto;
 	}
 
-	.tc-badge-slots {
-		grid-template-columns: repeat(4, auto);
+	/* 2 columns rather than 3 - still never a horizontal scroll, and 3 rows
+	 * of 2 comfortably fits PARTY_SLOTS (6). */
+	.tc-party-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-badges-grid {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 60px));
+		gap: 8px;
+	}
+
+	.tc-picker-tabs {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-picker-tab {
+		flex: 1 1 40%;
 	}
 }
 
@@ -1266,10 +1842,12 @@ body {
 	.tc-xp-track,
 	.tc-xp-panel,
 	.tc-spec-track,
-	.tc-timerow,
 	.tc-status,
-	.tc-section-partner,
-	.tc-partner-frame {
+	.tc-partner-box,
+	.tc-partner-frame,
+	.tc-badge-tile,
+	.tc-party-slot,
+	.tc-devrecord-panel {
 		border: 1px solid CanvasText;
 		background: Canvas;
 		box-shadow: none;
@@ -1301,13 +1879,19 @@ body {
 	.tc-section-subtitle,
 	.tc-record-label,
 	.tc-record-value,
-	.tc-level-word,
-	.tc-level-value,
+	.tc-identity-stat-label,
+	.tc-identity-stat-value,
 	.tc-class-chip,
 	.tc-partner-empty,
 	.tc-trainer-name,
 	.tc-bio,
-	.tc-location {
+	.tc-location,
+	.tc-devbadges-link,
+	.tc-devbadges-hint,
+	.tc-devbadges-empty,
+	.tc-party-name,
+	.tc-party-level,
+	.tc-party-empty-label {
 		color: CanvasText;
 	}
 

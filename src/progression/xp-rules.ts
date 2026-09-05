@@ -22,7 +22,20 @@ export const XP_RULES: Record<ProgressionEventType, XpAward> = {
   // The strongest signal available: a commit is a milestone someone chose to
   // record, which stays true whether a human or an agent wrote the diff.
   'git-commit': { trainerXp: 25, pokemonXp: 40 },
-  'task-success': { trainerXp: 10, pokemonXp: 15 },
+  // The unclassified fallback: some Build/Test-group task succeeded, but the
+  // Dev Action classifier could not name what kind. Matched to
+  // 'build-success'/'test-success' below rather than priced above them - a
+  // task PokeDev cannot identify should never outearn one it can.
+  'task-success': { trainerXp: 5, pokemonXp: 8 },
+  // Dev Actions. Deliberately lower than 'git-commit': a commit is a
+  // milestone someone chose to record, while a build or test run can - and
+  // should - happen many times on the way there. typecheck/lint are priced
+  // lower still; they are cheaper to run and to satisfy than an actual build
+  // or test pass.
+  'build-success': { trainerXp: 5, pokemonXp: 8 },
+  'test-success': { trainerXp: 5, pokemonXp: 8 },
+  'typecheck-success': { trainerXp: 3, pokemonXp: 5 },
+  'lint-success': { trainerXp: 3, pokemonXp: 5 },
   // Granted only by the debug commands, which are off by default.
   'debug-grant': { trainerXp: 0, pokemonXp: 0 },
 };
