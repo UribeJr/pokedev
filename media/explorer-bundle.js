@@ -2,6 +2,72 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "./src/panel/trainer-card/card-presentation.ts":
+/*!*****************************************************!*\
+  !*** ./src/panel/trainer-card/card-presentation.ts ***!
+  \*****************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.stripEmoji = exports.cardClassName = exports.skinClassName = void 0;
+/**
+ * The current skin as a single CSS class (`tc-skin-pokedev`/
+ * `tc-skin-crystal`), the one thing both Trainer Card surfaces share -
+ * everything each skin actually changes lives in CSS scoped under this
+ * class (`.tc-skin-crystal` in media/trainer-card.css and media/
+ * explorer.css, with shared colour tokens in media/pokedev-tokens.css),
+ * never here.
+ */
+function skinClassName(model) {
+    return `tc-skin-${model.style}`;
+}
+exports.skinClassName = skinClassName;
+/**
+ * The full landscape card's base class list: always `tc-card`, always the
+ * current skin, plus whatever else this particular card state needs (tier,
+ * compact, skeleton, ...). The compact Explorer HUD builds its own class
+ * list around `skinClassName` directly instead (`pd-card`, not `tc-card` -
+ * see `renderTrainer` in panel/explorer/main.ts), since it is a different
+ * component with its own CSS, not a shrunken `.tc-card`.
+ */
+function cardClassName(model, extra) {
+    return ['tc-card', skinClassName(model), extra]
+        .filter((part) => Boolean(part))
+        .join(' ');
+}
+exports.cardClassName = cardClassName;
+/**
+ * Strips emoji from arbitrary third-party text (a GitHub bio/location), FOR
+ * THE CRYSTAL SKIN ONLY - never mutates the underlying `GithubProfileView`
+ * data, only what gets printed onto the Crystal card's JOB/FROM metadata
+ * rows (`renderHero` in main.ts). The PokeDev skin keeps showing the raw
+ * string untouched.
+ *
+ * `\p{Extended_Pictographic}` covers the overwhelming majority of emoji
+ * codepoints, but NOT skin-tone modifiers (U+1F3FB-U+1F3FF, a separate
+ * Unicode property) - `\p{Emoji_Modifier}` catches those, so a modified
+ * emoji (e.g. a skin-toned profession emoji) doesn't leave a stray modifier
+ * character behind. `\u200d` (zero-width joiner) and `\ufe0f` (variation
+ * selector-16) additionally strip the joiners/selectors that combine or
+ * force-emoji-render adjacent codepoints in a multi-part sequence.
+ * Whitespace left behind by a removed emoji is then collapsed so the result
+ * never reads as double-spaced or leads with a stray space.
+ */
+// Alternation, not a `[...]` character class: a class containing the ZWJ/
+// variation-selector codepoints alongside the pictographic ranges trips
+// `no-misleading-character-class` (it assumes a class member combines with
+// its neighbors) even though each alternative here is matched and stripped
+// independently, one codepoint at a time, which is exactly the intent.
+const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f/gu;
+function stripEmoji(text) {
+    return text.replace(EMOJI_PATTERN, '').replace(/\s+/g, ' ').trim();
+}
+exports.stripEmoji = stripEmoji;
+
+
+/***/ }),
+
 /***/ "./src/progression/friendship-rules.ts":
 /*!*********************************************!*\
   !*** ./src/progression/friendship-rules.ts ***!
@@ -261,6 +327,7 @@ exports.dailyChallengesView = exports.pokemonView = exports.trainerView = void 0
 const pokemon_display_name_1 = __webpack_require__(/*! ../../trainer/pokemon-display-name */ "./src/trainer/pokemon-display-name.ts");
 const trainer_types_1 = __webpack_require__(/*! ../../trainer/trainer-types */ "./src/trainer/trainer-types.ts");
 const friendship_rules_1 = __webpack_require__(/*! ../../progression/friendship-rules */ "./src/progression/friendship-rules.ts");
+const card_presentation_1 = __webpack_require__(/*! ../trainer-card/card-presentation */ "./src/panel/trainer-card/card-presentation.ts");
 let vscodeApi;
 function post(message) {
     if (!vscodeApi) {
@@ -378,7 +445,7 @@ function renderTrainer(model) {
     const labels = model.labels;
     const host = root();
     host.textContent = '';
-    const card = el('div', 'pd-card');
+    const card = el('div', `pd-card ${(0, card_presentation_1.skinClassName)(model)}`);
     if (!model.connected) {
         // Nothing useful to show without an account, so ask once rather than
         // rendering an identity block full of blanks.
@@ -458,6 +525,13 @@ function renderTrainer(model) {
         }
         meta.appendChild(nameLine);
         meta.appendChild(el('span', 'pd-partner-level', `${labels.levelLabel} ${padStart(String(p.level), 2, '0')}`));
+        // Friendship: the full Trainer Card's Partner panel already shows this
+        // (hearts + progress); the compact HUD's Partner summary previously
+        // didn't, even though `ExplorerPartnerView.friendship` was already
+        // there unused. Added for both skins - real Trainer Card data, not a
+        // Crystal-only enhancement - reusing the exact same `heartMeter` this
+        // file already uses for the Pokemon list.
+        meta.appendChild(heartMeter(p.friendship, labels.friendshipTierLabels, 'pd-hearts'));
         if (p.xpForNextLevel > 0) {
             meta.appendChild(xpBar(p.currentXp, p.xpForNextLevel, labels.xpLabel, 'pd-mini'));
         }

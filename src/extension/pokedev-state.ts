@@ -47,6 +47,7 @@ import {
   getConfiguredDevUsername,
   getConfiguredGithubUsername,
 } from './trainer-card-panel';
+import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
 import { resolveTrainerSpriteUri } from './trainer-sprite-service';
 import {
   readDevCache,
@@ -71,7 +72,8 @@ export type PokedevChangeKind =
   | 'partner'
   | 'github'
   | 'collection'
-  | 'challenges';
+  | 'challenges'
+  | 'trainerCardStyle';
 
 class PokedevState {
   private readonly _emitter = new vscode.EventEmitter<PokedevChangeKind>();
@@ -132,6 +134,7 @@ class PokedevState {
       devBadgesEarned: this._readDevBadgesEarned(context),
       partner: this._buildPartner(context, webview, now),
       labels: buildExplorerLabels(),
+      style: getConfiguredTrainerCardStyle(),
     };
   }
 

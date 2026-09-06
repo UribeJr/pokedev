@@ -538,6 +538,62 @@ body {
 	color: var(--vscode-descriptionForeground);
 }
 
+/* -------------------------------- crystal skin ---------------------------- */
+
+/*
+ * The compact Explorer Trainer HUD's "Crystal" skin - the SAME
+ * `pokedev.trainerCard.style` preference the full landscape card reads
+ * (`renderTrainer` in panel/explorer/main.ts applies `skinClassName(model)`
+ * here exactly like `cardClassName` does for `.tc-card`), never a separate
+ * "Explorer style". This is a compact Crystal STATUS card, not a shrunken
+ * copy of the full card - see media/trainer-card.css's own `.tc-skin-crystal`
+ * block for the full card's structural rules; only the color/token palette
+ * is shared between them (media/pokedev-tokens.css's bare `.tc-skin-crystal`
+ * block) - everything below is specific to this surface's own `.pd-*`
+ * markup.
+ */
+/*
+ * No corner-spiral accent here (unlike the full card): this card is dense
+ * enough at its default 220-280px width that an ornament in any corner
+ * risks overlapping the portrait/name or the actions row - "if already
+ * available" was explicitly conditional, and restraint wins. The double-
+ * ruled border alone already reads clearly as the same Crystal skin.
+ */
+.tc-skin-crystal.pd-card {
+	border-radius: 0;
+	/* Same flat black double-ruled window edge as the full card, replacing
+	 * the base's soft bevel - see .tc-card.tc-skin-crystal in
+	 * trainer-card.css for the identical technique. */
+	box-shadow:
+		0 0 0 1px var(--tc-face-top),
+		0 0 0 3px var(--tc-face-edge);
+}
+
+.tc-skin-crystal .pd-portrait,
+.tc-skin-crystal .pd-xp-track,
+.tc-skin-crystal .pd-mini-track {
+	border-radius: 0;
+}
+
+.tc-skin-crystal .pd-xp-track {
+	box-shadow: none;
+}
+
+/* Square, high-contrast "menu row" buttons - inverted colours on hover/
+ * focus instead of a modern hover animation, echoing how a Game Boy menu
+ * highlights the selected row. */
+.tc-skin-crystal .pd-action {
+	border-radius: 0;
+	border-color: var(--tc-face-edge);
+}
+
+.tc-skin-crystal .pd-action:hover,
+.tc-skin-crystal .pd-action:focus-visible {
+	background: var(--tc-accent);
+	border-color: var(--tc-accent);
+	color: var(--tc-face-top);
+}
+
 /* ------------------------------ narrow width ---------------------------- */
 
 /*

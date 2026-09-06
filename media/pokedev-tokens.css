@@ -42,3 +42,41 @@
 	--tc-xp-to: #f5b52a;
 	--tc-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
 }
+
+/*
+ * The "Crystal" Trainer Card skin's palette - shared by BOTH surfaces the
+ * `pokedev.trainerCard.style` preference controls: the full landscape card
+ * (`.tc-card.tc-skin-crystal` in media/trainer-card.css) and the compact
+ * Explorer HUD (`.tc-skin-crystal .pd-card` in media/explorer.css). Defined
+ * here, once, on the bare skin class (no `.tc-card`/`.pd-card` co-selector)
+ * so neither stylesheet keeps its own copy - see each stylesheet's own
+ * `.tc-skin-crystal` rules for the STRUCTURAL differences (border-radius,
+ * box-shadow, corner decoration) that are specific to each surface's own
+ * markup and therefore cannot be shared the same way.
+ *
+ * Off-white card, black ink, a single restrained red accent - deliberately
+ * NOT a blue background, which would be a shallow "PokeDev but blue" reskin
+ * rather than an actual Crystal one. The real in-game Trainer Card palette
+ * is resolved by SGB/GBC hardware palette-index logic (`SCGB_TRAINER_CARD`
+ * in `engine/menus/trainer_card.asm`), not one static color table - the
+ * same caveat `PALETTE_RAMPS` documents in build-crystal-environments.py.
+ */
+.tc-skin-crystal {
+	--tc-face-top: #f2efe0;
+	/* Same as --tc-face-top: the base `.tc-card`'s diagonal gradient
+	 * background collapses to a flat GBC-style fill with no code
+	 * duplicated - no gradients anywhere in this skin. */
+	--tc-face-bottom: #f2efe0;
+	--tc-face-edge: #1a1a1a;
+	--tc-edge-light: transparent;
+	--tc-ink: #1a1a1a;
+	--tc-ink-dim: #6b6456;
+	--tc-slot: #ddd6c2;
+	--tc-surface: #e9e3d0;
+	--tc-rule: #b9b092;
+	--tc-accent: #a52822;
+	--tc-xp-from: #1a1a1a;
+	--tc-xp-to: #1a1a1a;
+	--tc-shadow: none;
+	--tc-radius: 0;
+}

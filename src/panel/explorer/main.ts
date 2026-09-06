@@ -28,6 +28,7 @@ import {
   getFriendshipHearts,
   getFriendshipTier,
 } from '../../progression/friendship-rules';
+import { skinClassName } from '../trainer-card/card-presentation';
 
 interface VscodeApi {
   postMessage(message: ExplorerHostboundMessage): void;
@@ -185,7 +186,7 @@ function renderTrainer(model: ExplorerTrainerViewModel): void {
   const host = root();
   host.textContent = '';
 
-  const card = el('div', 'pd-card');
+  const card = el('div', `pd-card ${skinClassName(model)}`);
 
   if (!model.connected) {
     // Nothing useful to show without an account, so ask once rather than
@@ -307,6 +308,15 @@ function renderTrainer(model: ExplorerTrainerViewModel): void {
         'pd-partner-level',
         `${labels.levelLabel} ${padStart(String(p.level), 2, '0')}`,
       ),
+    );
+    // Friendship: the full Trainer Card's Partner panel already shows this
+    // (hearts + progress); the compact HUD's Partner summary previously
+    // didn't, even though `ExplorerPartnerView.friendship` was already
+    // there unused. Added for both skins - real Trainer Card data, not a
+    // Crystal-only enhancement - reusing the exact same `heartMeter` this
+    // file already uses for the Pokemon list.
+    meta.appendChild(
+      heartMeter(p.friendship, labels.friendshipTierLabels, 'pd-hearts'),
     );
     if (p.xpForNextLevel > 0) {
       meta.appendChild(

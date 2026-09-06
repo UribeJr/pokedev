@@ -7,6 +7,7 @@ import {
 } from '../../common/trainer-card-style';
 import {
   cardClassName,
+  skinClassName,
   stripEmoji,
 } from '../../panel/trainer-card/card-presentation';
 
@@ -97,6 +98,31 @@ suite('Trainer Card style: presentation-only application', () => {
     assert.strictEqual(className, 'tc-card tc-skin-pokedev');
   });
 });
+
+suite(
+  'Trainer Card style: skinClassName (shared by full + compact Explorer HUD)',
+  () => {
+    test('produces the same class the full card embeds inside cardClassName', () => {
+      assert.strictEqual(
+        skinClassName({ style: 'pokedev' }),
+        'tc-skin-pokedev',
+      );
+      assert.strictEqual(
+        skinClassName({ style: 'crystal' }),
+        'tc-skin-crystal',
+      );
+      assert.ok(
+        cardClassName({ style: 'crystal' })
+          .split(' ')
+          .includes(skinClassName({ style: 'crystal' })),
+      );
+    });
+
+    test('never includes the tc-card class - the compact HUD is its own component', () => {
+      assert.ok(!skinClassName({ style: 'crystal' }).includes('tc-card'));
+    });
+  },
+);
 
 suite('Trainer Card style: stripEmoji (Crystal-only profile metadata)', () => {
   test('leaves plain text untouched', () => {

@@ -8,11 +8,7 @@ import {
   isValidGithubUsername,
 } from '../trainer/github-parse';
 import { computeTrainerClass } from '../trainer/trainer-class';
-import {
-  DEFAULT_TRAINER_CARD_STYLE,
-  isValidTrainerCardStyle,
-  TrainerCardStyle,
-} from '../common/trainer-card-style';
+import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
 import {
   getTrainerCardTier,
   getXpForNextTrainerLevel,
@@ -104,23 +100,6 @@ export function isCodingTimeVisible(): boolean {
   return vscode.workspace
     .getConfiguration(CONFIG_SECTION)
     .get<boolean>(CODING_TIME_SETTING, false);
-}
-
-const TRAINER_CARD_STYLE_SETTING = 'trainerCard.style';
-
-/**
- * The user's chosen Trainer Card visual skin (`pokedev.trainerCard.style`).
- * Presentation only - see `src/common/trainer-card-style.ts` for the
- * catalog and `.tc-skin-*` in `media/trainer-card.css` for what each skin
- * actually changes.
- */
-export function getConfiguredTrainerCardStyle(): TrainerCardStyle {
-  const styleId = vscode.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .get<string>(TRAINER_CARD_STYLE_SETTING, DEFAULT_TRAINER_CARD_STYLE);
-  return isValidTrainerCardStyle(styleId)
-    ? styleId
-    : DEFAULT_TRAINER_CARD_STYLE;
 }
 
 /** Only GitHub's avatar CDN is allowed as an image source. */

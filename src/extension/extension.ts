@@ -29,7 +29,6 @@ import {
   EXTRA_POKEMON_KEY_TYPES,
 } from '../common/storage-keys';
 import {
-  getConfiguredTrainerCardStyle,
   isDevRecordVisible,
   promptForDevUsername,
   promptForGithubUsername,
@@ -37,6 +36,7 @@ import {
   setConfiguredGithubUsername,
   TrainerCardPanel,
 } from './trainer-card-panel';
+import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
 import { clearDevCache } from './trainer-storage';
 import { getNonce } from './webview-util';
 import { ActivityTracker } from './activity-tracker';
@@ -1425,6 +1425,16 @@ export function activate(context: vscode.ExtensionContext) {
           // The card is open often enough that requiring a reopen to see a
           // visibility/style change take effect would feel broken.
           TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+        }
+
+        if (e.affectsConfiguration('pokedev.trainerCard.style')) {
+          // ONE persisted preference drives both Trainer Card surfaces (see
+          // `src/common/trainer-card-style.ts`) - this is what makes the
+          // compact Explorer HUD (which reacts to any `pokedevState`
+          // change, see `PokedevExplorerViewProvider`'s constructor) pick
+          // up the new skin live, the same way the full card just did
+          // above via `notifyProgressionChanged`.
+          pokedevState.notify('trainerCardStyle');
         }
         if (e.affectsConfiguration('pokedev.pokemonLanguage')) {
           // Reset the Pokemon translations cache when the language changes

@@ -1696,6 +1696,13 @@ button.tc-party-slot {
  * already proven by the tier colours above), so the default `.tc-skin-pokedev`
  * card is untouched byte-for-byte.
  *
+ * The palette itself (`--tc-face-top`, `--tc-ink`, `--tc-accent`, etc.) is
+ * defined ONCE, on the bare `.tc-skin-crystal` class, in media/
+ * pokedev-tokens.css - shared with the compact Explorer HUD's own
+ * `.tc-skin-crystal .pd-card` in media/explorer.css. Only the STRUCTURAL
+ * rules below (this card's own border-radius/box-shadow/corners, which the
+ * Explorer HUD does not share the markup for) live here.
+ *
  * See scripts/build-crystal-trainer-card.py's own docstring for exactly which
  * real pret/pokecrystal assets/conventions were adapted (the classic default
  * text-box window-frame corners and the Trainer Card's own folded-corner
@@ -1703,33 +1710,8 @@ button.tc-party-slot {
  * or badge/leader graphics (character likenesses and the real Johto Gym
  * Badges - neither appropriate for PokeDev's own trainer sprite and Dev
  * Badges).
- *
- * Palette: this project's own GBC-authentic approximation (off-white card,
- * black ink, a single restrained red accent) - deliberately NOT a blue
- * background, which would be a shallow "PokeDev but blue" reskin rather than
- * an actual Crystal one. The real in-game Trainer Card palette is resolved by
- * SGB/GBC hardware palette-index logic (`SCGB_TRAINER_CARD` in
- * `engine/menus/trainer_card.asm`), not one static color table - the same
- * caveat `PALETTE_RAMPS` documents in build-crystal-environments.py.
  */
 .tc-card.tc-skin-crystal {
-	--tc-face-top: #f2efe0;
-	/* Same as --tc-face-top: the base `.tc-card`'s diagonal gradient
-	 * background collapses to a flat GBC-style fill with no code duplicated -
-	 * see the "no gradients" instruction this skin follows throughout. */
-	--tc-face-bottom: #f2efe0;
-	--tc-face-edge: #1a1a1a;
-	--tc-edge-light: transparent;
-	--tc-ink: #1a1a1a;
-	--tc-ink-dim: #6b6456;
-	--tc-slot: #ddd6c2;
-	--tc-surface: #e9e3d0;
-	--tc-rule: #b9b092;
-	--tc-accent: #a52822;
-	--tc-xp-from: #1a1a1a;
-	--tc-xp-to: #1a1a1a;
-	--tc-shadow: none;
-	--tc-radius: 0;
 	/* Flat black double-ruled window edge (a thin border, a gap, another thin
 	 * border) instead of the base's soft bevel + drop shadow - the single
 	 * most recognizable Gen II window-border language, achieved without a new

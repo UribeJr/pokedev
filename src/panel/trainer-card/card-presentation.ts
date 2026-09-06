@@ -4,27 +4,49 @@
  * rest of `panel/trainer-card/`) so it can be unit tested directly, the same
  * convention `panel/roaming/*.ts` already follows.
  *
- * `TrainerCardViewModel.style` is read in a handful of places in
- * `panel/trainer-card/main.ts` - which class the physical card element
- * carries (`cardClassName`), whether GitHub bio/location render as free text
- * or as emoji-free JOB/FROM metadata rows (`stripEmoji`), and where the DEV
- * badge Refresh/Disconnect actions get mounted - but NEVER changes what data
- * is available: `profile`/`party`/`partner`/`devBadges`/`github` are
- * identical regardless of skin.
+ * Shared by BOTH Trainer Card surfaces - the full landscape card
+ * (`panel/trainer-card/main.ts`) AND the compact Explorer HUD
+ * (`panel/explorer/main.ts`, a separate webpack bundle/entry point) - the
+ * same way `progression/friendship-rules.ts` already gets bundled into both.
+ * This is the "share presentation primitives, not layouts" seam: both
+ * surfaces call `skinClassName` to apply the current skin, but each builds
+ * its own DOM/layout around it.
+ *
+ * `TrainerCardStyle` is read in a handful of places across both bundles -
+ * which class the physical card/HUD element carries (`cardClassName`/
+ * `skinClassName`), whether GitHub bio/location render as free text or as
+ * emoji-free JOB/FROM metadata rows on the full card (`stripEmoji`), and
+ * where the DEV badge Refresh/Disconnect actions get mounted - but NEVER
+ * changes what data is available: `profile`/`party`/`partner`/`devBadges`/
+ * `github` are identical regardless of skin.
  */
-import { TrainerCardViewModel } from '../../trainer/trainer-types';
+import { TrainerCardStyle } from '../../common/trainer-card-style';
 
 /**
- * The physical card's base class list: always `tc-card`, always the current
- * skin (`tc-skin-pokedev`/`tc-skin-crystal` - presentation only, see
- * `src/common/trainer-card-style.ts`), plus whatever else this particular
- * card state needs (tier, compact, skeleton, ...).
+ * The current skin as a single CSS class (`tc-skin-pokedev`/
+ * `tc-skin-crystal`), the one thing both Trainer Card surfaces share -
+ * everything each skin actually changes lives in CSS scoped under this
+ * class (`.tc-skin-crystal` in media/trainer-card.css and media/
+ * explorer.css, with shared colour tokens in media/pokedev-tokens.css),
+ * never here.
+ */
+export function skinClassName(model: { style: TrainerCardStyle }): string {
+  return `tc-skin-${model.style}`;
+}
+
+/**
+ * The full landscape card's base class list: always `tc-card`, always the
+ * current skin, plus whatever else this particular card state needs (tier,
+ * compact, skeleton, ...). The compact Explorer HUD builds its own class
+ * list around `skinClassName` directly instead (`pd-card`, not `tc-card` -
+ * see `renderTrainer` in panel/explorer/main.ts), since it is a different
+ * component with its own CSS, not a shrunken `.tc-card`.
  */
 export function cardClassName(
-  model: Pick<TrainerCardViewModel, 'style'>,
+  model: { style: TrainerCardStyle },
   extra?: string,
 ): string {
-  return ['tc-card', `tc-skin-${model.style}`, extra]
+  return ['tc-card', skinClassName(model), extra]
     .filter((part): part is string => Boolean(part))
     .join(' ');
 }

@@ -13,6 +13,7 @@
 
 import { DailyChallengesViewModel } from '../challenges/daily-challenges-view-types';
 import { FriendshipTierId } from '../progression/friendship-rules';
+import { TrainerCardStyle } from '../common/trainer-card-style';
 
 /** Explorer view ids, also used as the `when` clauses' view names. */
 export const TRAINER_EXPLORER_VIEW_TYPE = 'pokedev.trainerView';
@@ -69,6 +70,13 @@ export interface ExplorerTrainerViewModel {
   devBadgesEarned: number;
   partner?: ExplorerPartnerView;
   labels: ExplorerLabels;
+  /**
+   * The same `pokedev.trainerCard.style` preference the full Trainer Card
+   * reads - ONE persisted setting drives both surfaces, never a separate
+   * "Explorer style". Presentation only - see
+   * `src/common/trainer-card-style.ts`.
+   */
+  style: TrainerCardStyle;
 }
 
 /* ------------------------------------------------------------------ *
