@@ -6,6 +6,8 @@ import {
   PokemonSpeed,
   PokemonType,
 } from '../common/types';
+import { computeDepthZIndex } from './roaming/overworld-target';
+import { isOverworldRoaming } from './roaming/roaming-mode';
 import { ISequenceTree } from './sequences';
 import {
   States,
@@ -19,6 +21,33 @@ import {
   FrameResult,
   IPokemonType,
 } from './states';
+import { getWorldHeight } from './world-bounds';
+
+/**
+ * A sprite's rendered width/height in px for a given size setting.
+ *
+ * Standalone (not just `BasePokemonType.calculateSpriteWidth`, which
+ * delegates here) so callers that do not yet have a Pokemon instance - e.g.
+ * `main.ts` choosing an Overworld starting position before construction -
+ * can compute the same sprite-aware margin a live instance would.
+ */
+export function calculateSpriteWidth(
+  size: PokemonSize,
+  originalSpriteSize: number,
+): number {
+  switch (size) {
+    case PokemonSize.nano:
+      return originalSpriteSize;
+    case PokemonSize.small:
+      return originalSpriteSize * 1.5;
+    case PokemonSize.medium:
+      return originalSpriteSize * 2;
+    case PokemonSize.large:
+      return originalSpriteSize * 2.5;
+    default:
+      return originalSpriteSize;
+  }
+}
 
 export class InvalidStateError extends Error {
   fromState: States;
@@ -50,6 +79,12 @@ export abstract class BasePokemonType implements IPokemonType {
   private _bottom: number;
   pokemonRoot: string;
   _floor: number;
+  /** The last Overworld (2D) resting `bottom` - see the doc comment on
+   * `PokemonInstanceState.overworldBottom`, which this backs. Kept
+   * separate from `_bottom`/`_floor` so a Classic <-> Overworld switch
+   * never has to choose between "preserve Classic's floor" and "preserve
+   * Overworld's last position" - both are always available. */
+  private _overworldBottom: number | undefined;
   _friend: IPokemonType | undefined;
   private _name: string;
   private _baseSpeed: number;
@@ -141,24 +176,35 @@ export abstract class BasePokemonType implements IPokemonType {
   }
 
   calculateSpriteWidth(size: PokemonSize, originalSpriteSize: number): number {
-    switch (size) {
-      case PokemonSize.nano:
-        return originalSpriteSize;
-      case PokemonSize.small:
-        return originalSpriteSize * 1.5;
-      case PokemonSize.medium:
-        return originalSpriteSize * 2;
-      case PokemonSize.large:
-        return originalSpriteSize * 2.5;
-      default:
-        return originalSpriteSize;
-    }
+    return calculateSpriteWidth(size, originalSpriteSize);
   }
 
   positionBottom(bottom: number): void {
     this._bottom = bottom;
     this.el.style.bottom = `${this._bottom}px`;
+
+    if (isOverworldRoaming()) {
+      // Remembered independently of Classic's floor, so switching back to
+      // Overworld later (even after Classic has moved `_bottom` to the
+      // floor) can restore this exact spot - see `_overworldBottom`'s doc
+      // comment.
+      this._overworldBottom = bottom;
+      this.el.style.zIndex = String(
+        computeDepthZIndex(bottom, getWorldHeight()),
+      );
+    } else {
+      // Falls back to the static `z-index: 2` rule in pokemon.css - clears
+      // any depth value a previous Overworld session left behind.
+      this.el.style.zIndex = '';
+    }
+
     this.repositionAccompanyingElements();
+  }
+
+  /** The last Overworld resting position, if this Pokemon has ever been in
+   * Overworld mode - see `_overworldBottom`'s doc comment. */
+  get overworldBottom(): number | undefined {
+    return this._overworldBottom;
   }
 
   positionLeft(left: number): void {
@@ -181,7 +227,10 @@ export abstract class BasePokemonType implements IPokemonType {
   }
 
   getState(): PokemonInstanceState {
-    return { currentStateEnum: this.currentStateEnum };
+    return {
+      currentStateEnum: this.currentStateEnum,
+      overworldBottom: this._overworldBottom,
+    };
   }
 
   get speed(): number {
@@ -221,11 +270,19 @@ export abstract class BasePokemonType implements IPokemonType {
     // because holdState is no longer valid.
     this.currentStateEnum = state.currentStateEnum ?? States.sitIdle;
     this.currentState = resolveState(this.currentStateEnum, this);
+    // Restored regardless of mode/ground state below - this is just
+    // remembered data, not a position change on its own.
+    this._overworldBottom = state.overworldBottom;
 
     if (!isStateAboveGround(this.currentStateEnum)) {
       // Reset the bottom of the sprite to the floor as the theme
-      // has likely changed.
-      this.positionBottom(this.floor);
+      // has likely changed - Classic mode only. Overworld's starting
+      // position is decided by `applyRoamingStyle`/spawn logic in
+      // `main.ts`, which runs after recovery and uses `overworldBottom`
+      // above when present, so this must not clobber it back to the floor.
+      if (!isOverworldRoaming()) {
+        this.positionBottom(this.floor);
+      }
     }
   }
 

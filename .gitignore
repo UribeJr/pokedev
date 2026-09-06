@@ -18,3 +18,15 @@ media/trainer-card-bundle.js
 # See the provenance/licensing note at the top of src/common/display-skins.ts.
 media/borders/*.png
 
+# Environment scene PNGs built from pret/pokecrystal source tile art
+# (scripts/build-crystal-environments.py) - development/testing only. The
+# repo declares no license, and these tiles are Nintendo/Game Freak's
+# copyrighted pixel art in disassembled-but-unmodified form, not something
+# pokecrystal's own (absent) license could re-grant. See the provenance/
+# licensing note at the top of src/common/environments.ts.
+media/environments/*.png
+
+# Debug metatile atlases from build-crystal-environments.py --atlas-only -
+# development visual QA only, never shipped.
+/debug/
+

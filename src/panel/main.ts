@@ -25,6 +25,23 @@ import {
   getDisplaySkinById,
   PokedevDisplaySkin,
 } from '../common/display-skins';
+import { getEnvironmentById } from '../common/environments';
+import {
+  DEFAULT_ROAMING_STYLE,
+  isValidRoamingStyle,
+  RoamingStyle,
+} from '../common/roaming-style';
+import { calculateSpriteWidth } from './base-pokemon-type';
+import {
+  chooseInitialOverworldPosition,
+  chooseOverworldY,
+  rescaleForResize,
+} from './roaming/overworld-target';
+import {
+  getRoamingStyle,
+  isOverworldRoaming,
+  setRoamingStyle,
+} from './roaming/roaming-mode';
 import { getWorldHeight, getWorldWidth } from './world-bounds';
 
 /* This is how the VS Code API can be invoked from the panel */
@@ -462,6 +479,17 @@ function recoverState(
     console.log('Recovering pokemon ', p.pokemonType, p.pokemonName);
     try {
       console.log('Adding pokemon to panel for recovery');
+      // Overworld mode: the last remembered 2D resting spot if this
+      // Pokemon has one (see `PokemonInstanceState.overworldBottom`), else
+      // a fresh Y - X is always the real, preserved position either way.
+      // Classic mode is completely unchanged: `elBottom` as before.
+      const initialBottom = isOverworldRoaming()
+        ? (p.pokemonState?.overworldBottom ??
+          chooseOverworldY(
+            getWorldHeight(),
+            calculateSpriteWidth(pokemonSize, p.originalSpriteSize ?? 32),
+          ))
+        : parseInt(p.elBottom ?? '0');
       var newPokemon = addPokemonToPanel(
         p.pokemonType ?? 'bulbasaur',
         basePokemonUri,
@@ -470,7 +498,7 @@ function recoverState(
         p.pokemonColor ?? PokemonColor.default,
         pokemonSize,
         parseInt(p.elLeft ?? '0'),
-        parseInt(p.elBottom ?? '0'),
+        initialBottom,
         floor,
         p.pokemonName ?? randomName(),
         stateApi,
@@ -503,6 +531,31 @@ function recoverState(
 
 function randomStartPosition(): number {
   return Math.floor(Math.random() * (getWorldWidth() * 0.7));
+}
+
+/**
+ * Where a newly-spawned Pokemon should appear. Classic mode is completely
+ * unchanged (`randomStartPosition()` + the floor); Overworld mode picks a
+ * full 2D spot with the same lightweight separation-avoidance initial
+ * placement uses, checked against every Pokemon already visible.
+ */
+function chooseSpawnPosition(
+  spriteSize: number,
+  floor: number,
+): { x: number; y: number } {
+  if (!isOverworldRoaming()) {
+    return { x: randomStartPosition(), y: floor };
+  }
+  const others = allPokemon.pokemonCollection.map((p) => ({
+    x: p.pokemon.left,
+    y: p.pokemon.bottom,
+  }));
+  return chooseInitialOverworldPosition(
+    getWorldWidth(),
+    getWorldHeight(),
+    spriteSize,
+    others,
+  );
 }
 
 let canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D;
@@ -593,6 +646,77 @@ function applyDisplaySkin(basePokemonUri: string, skinId: string): void {
   layoutDisplay();
 }
 
+/**
+ * Applies a background environment scene by id: shows/hides the
+ * `#pokedevEnvironment` image. Entirely independent of `applyDisplaySkin`
+ * above - the environment is a plain background layer behind the Pokemon,
+ * the display skin is the bezel overlay above everything - so this never
+ * touches `.pokedev-screen`'s geometry or re-letterboxes anything. Never
+ * touches `allPokemon`/webview state either; purely presentational, safe to
+ * call any number of times.
+ */
+function applyEnvironment(basePokemonUri: string, environmentId: string): void {
+  const environment = getEnvironmentById(environmentId);
+
+  const environmentEl = document.getElementById(
+    'pokedevEnvironment',
+  ) as HTMLImageElement | null;
+  if (!environmentEl) {
+    return;
+  }
+  if (environment.imageFile) {
+    environmentEl.src = `${basePokemonUri}/${environment.imageFile}`;
+    environmentEl.style.display = 'block';
+  } else {
+    environmentEl.removeAttribute('src');
+    environmentEl.style.display = 'none';
+  }
+}
+
+/**
+ * Live-switches roaming strategy: never reloads the webview, never resets
+ * `allPokemon`/XP/Friendship/anything else - it only ever repositions
+ * `bottom` (X is shared between both modes already) and lets whichever walk
+ * state is currently in flight finish naturally, exactly like
+ * `applyDisplaySkin`/`applyEnvironment` for their own cosmetic state.
+ *
+ * Classic -> Overworld: restores each Pokemon's last remembered Overworld
+ * spot (`overworldBottom`) if it has one, else generates a fresh Y -
+ * X is untouched either way ("preserve X where practical").
+ *
+ * Overworld -> Classic: projects each Pokemon back onto its own floor.
+ * Nothing about `overworldBottom` is deleted - `positionBottom` only
+ * updates it while Overworld mode is the ACTIVE mode (see
+ * `BasePokemonType.positionBottom`), so switching back to Overworld later
+ * restores this exact spot.
+ */
+function applyRoamingStyle(newStyle: RoamingStyle): void {
+  const previous = getRoamingStyle();
+  if (previous === newStyle) {
+    return;
+  }
+
+  if (newStyle === 'classic') {
+    // Set the mode FIRST: `positionBottom` only treats a write as "the
+    // current Overworld position" while Overworld is still the active
+    // mode, so this order is what keeps the last Overworld spot intact
+    // instead of overwriting it with the floor projection below.
+    setRoamingStyle('classic');
+    allPokemon.pokemonCollection.forEach((p) => {
+      p.pokemon.positionBottom(p.pokemon.floor);
+    });
+    return;
+  }
+
+  setRoamingStyle('overworld');
+  allPokemon.pokemonCollection.forEach((p) => {
+    const y =
+      p.pokemon.overworldBottom ??
+      chooseOverworldY(getWorldHeight(), p.pokemon.width);
+    p.pokemon.positionBottom(y);
+  });
+}
+
 // It cannot access the main VS Code APIs directly.
 export function pokemonPanelApp(
   basePokemonUri: string,
@@ -605,6 +729,8 @@ export function pokemonPanelApp(
   gen: string,
   originalSpriteSize: number,
   displaySkinId?: string,
+  environmentId?: string,
+  roamingStyleId?: string,
   stateApi?: VscodeStateApi,
 ) {
   var floor = 0;
@@ -612,11 +738,23 @@ export function pokemonPanelApp(
     stateApi = acquireVsCodeApi();
   }
 
+  // Set before anything below constructs/recovers a single Pokemon:
+  // `resolveState` (which strategy's states get built) and `positionBottom`
+  // (depth z-index) both read this synchronously, with no message round
+  // trip - so the very first frame already uses the right strategy instead
+  // of one frame of the wrong one.
+  setRoamingStyle(
+    isValidRoamingStyle(roamingStyleId)
+      ? roamingStyleId
+      : DEFAULT_ROAMING_STYLE,
+  );
+
   // Sizes `.pokedev-display`/`.pokedev-screen` before anything below reads
   // `getWorldWidth()`/`getWorldHeight()` (recovered/spawned Pokemon states
   // included), so the very first frame already respects the selected skin's
   // screen opening instead of the full viewport.
   applyDisplaySkin(basePokemonUri, displaySkinId ?? 'none');
+  applyEnvironment(basePokemonUri, environmentId ?? 'none');
 
   // Apply Theme backgrounds
   const foregroundEl = document.getElementById('foreground');
@@ -691,8 +829,12 @@ export function pokemonPanelApp(
     const message = event.data; // The json data that the extension sent
     console.log('Received message in panel:', message);
     switch (message.command) {
-      case 'spawn-pokemon':
+      case 'spawn-pokemon': {
         console.log('adding pokemon to panel from message', message);
+        const spawnAt = chooseSpawnPosition(
+          calculateSpriteWidth(pokemonSize, message.originalSpriteSize),
+          floor,
+        );
         allPokemon.push(
           addPokemonToPanel(
             message.type,
@@ -701,8 +843,8 @@ export function pokemonPanelApp(
             message.originalSpriteSize,
             message.color,
             pokemonSize,
-            randomStartPosition(),
-            floor,
+            spawnAt.x,
+            spawnAt.y,
             floor,
             message.name ?? randomName(),
             stateApi,
@@ -710,10 +852,18 @@ export function pokemonPanelApp(
         );
         saveState(stateApi);
         break;
+      }
 
-      case 'spawn-random-pokemon':
+      case 'spawn-random-pokemon': {
         var [randomPokemonType, randomPokemonConfig] = getRandomPokemonConfig();
         console.log('adding random pokemon to panel from message');
+        const spawnAt = chooseSpawnPosition(
+          calculateSpriteWidth(
+            pokemonSize,
+            randomPokemonConfig.originalSpriteSize ?? 32,
+          ),
+          floor,
+        );
         allPokemon.push(
           addPokemonToPanel(
             randomPokemonType,
@@ -722,8 +872,8 @@ export function pokemonPanelApp(
             randomPokemonConfig.originalSpriteSize ?? 32,
             PokemonColor.default,
             pokemonSize,
-            randomStartPosition(),
-            floor,
+            spawnAt.x,
+            spawnAt.y,
             floor,
             randomName(),
             stateApi,
@@ -731,6 +881,7 @@ export function pokemonPanelApp(
         );
         saveState(stateApi);
         break;
+      }
 
       case 'list-pokemon':
         var pokemonCollection = allPokemon.pokemonCollection;
@@ -787,9 +938,39 @@ export function pokemonPanelApp(
       case 'set-display-skin':
         applyDisplaySkin(basePokemonUri, message.text);
         break;
+      case 'set-environment':
+        applyEnvironment(basePokemonUri, message.text);
+        break;
+      case 'set-roaming-style':
+        if (isValidRoamingStyle(message.text)) {
+          applyRoamingStyle(message.text);
+        }
+        break;
     }
   });
 }
 window.addEventListener('resize', function () {
+  const oldWidth = getWorldWidth();
+  const oldHeight = getWorldHeight();
   layoutDisplay();
+
+  // Overworld positions are proportional, not fixed pixels - rescale every
+  // Pokemon's spot to the new screen size so nothing jumps to a corner (or
+  // off-screen) on a resize. Classic mode needs no such pass: it already
+  // only ever cares about `left` relative to the current `getWorldWidth()`,
+  // recomputed fresh the next time a walk state starts.
+  if (isOverworldRoaming()) {
+    const newWidth = getWorldWidth();
+    const newHeight = getWorldHeight();
+    if (newWidth !== oldWidth || newHeight !== oldHeight) {
+      allPokemon.pokemonCollection.forEach((p) => {
+        p.pokemon.positionLeft(
+          rescaleForResize(p.pokemon.left, oldWidth, newWidth),
+        );
+        p.pokemon.positionBottom(
+          rescaleForResize(p.pokemon.bottom, oldHeight, newHeight),
+        );
+      });
+    }
+  }
 });

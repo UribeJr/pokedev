@@ -67,6 +67,16 @@ import {
   DISPLAY_SKINS,
   isValidDisplaySkinId,
 } from '../common/display-skins';
+import {
+  DEFAULT_ENVIRONMENT_ID,
+  ENVIRONMENTS,
+  isValidEnvironmentId,
+} from '../common/environments';
+import {
+  DEFAULT_ROAMING_STYLE,
+  isValidRoamingStyle,
+  ROAMING_STYLES,
+} from '../common/roaming-style';
 
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
@@ -126,6 +136,22 @@ function getConfiguredDisplaySkin(): string {
     .getConfiguration('pokedev')
     .get<string>('displaySkin', DEFAULT_DISPLAY_SKIN_ID);
   return isValidDisplaySkinId(skinId) ? skinId : DEFAULT_DISPLAY_SKIN_ID;
+}
+
+function getConfiguredEnvironment(): string {
+  const environmentId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('environment', DEFAULT_ENVIRONMENT_ID);
+  return isValidEnvironmentId(environmentId)
+    ? environmentId
+    : DEFAULT_ENVIRONMENT_ID;
+}
+
+function getConfiguredRoamingStyle(): string {
+  const styleId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('roamingStyle', DEFAULT_ROAMING_STYLE);
+  return isValidRoamingStyle(styleId) ? styleId : DEFAULT_ROAMING_STYLE;
 }
 
 function getConfigurationPosition() {
@@ -887,6 +913,78 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.change-environment', async () => {
+      const currentEnvironment = getConfiguredEnvironment();
+
+      const options: Array<vscode.QuickPickItem & { value: string }> =
+        ENVIRONMENTS.map((environment) => ({
+          label: environment.label,
+          description: environment.description,
+          detail:
+            environment.id === currentEnvironment
+              ? vscode.l10n.t('Current')
+              : undefined,
+          value: environment.id,
+        }));
+
+      const picked = await vscode.window.showQuickPick(options, {
+        placeHolder: vscode.l10n.t('Select a PokéDev environment'),
+      });
+
+      if (!picked || picked.value === currentEnvironment) {
+        return;
+      }
+
+      // Cosmetic and user-specific, not tied to any one workspace - same
+      // reasoning as `pokedev.displaySkin`.
+      await vscode.workspace
+        .getConfiguration('pokedev')
+        .update('environment', picked.value, vscode.ConfigurationTarget.Global);
+      // The onDidChangeConfiguration handler above does the live
+      // `updateEnvironment` postMessage; nothing else to do here.
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-roaming-style',
+      async () => {
+        const currentStyle = getConfiguredRoamingStyle();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          ROAMING_STYLES.map((style) => ({
+            label: style.label,
+            description: style.description,
+            detail:
+              style.id === currentStyle ? vscode.l10n.t('Current') : undefined,
+            value: style.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a PokéDev roaming style'),
+        });
+
+        if (!picked || picked.value === currentStyle) {
+          return;
+        }
+
+        // Cosmetic/behavior and user-specific, not tied to any one
+        // workspace - same reasoning as `pokedev.displaySkin`/
+        // `pokedev.environment`.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'roamingStyle',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `updateRoamingStyle` postMessage; nothing else to do here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('pokedev.export-pokemon-list', async () => {
       const pokemonCollection = PokemonSpecification.collectionFromMemento(
         context,
@@ -1266,6 +1364,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (e.affectsConfiguration('pokedev.displaySkin')) {
           getPokemonPanel()?.updateDisplaySkin(getConfiguredDisplaySkin());
+        }
+
+        if (e.affectsConfiguration('pokedev.environment')) {
+          getPokemonPanel()?.updateEnvironment(getConfiguredEnvironment());
+        }
+
+        if (e.affectsConfiguration('pokedev.roamingStyle')) {
+          getPokemonPanel()?.updateRoamingStyle(getConfiguredRoamingStyle());
         }
 
         if (
@@ -1695,6 +1801,8 @@ interface IPokemonPanel {
   updatePokemonSize(newSize: PokemonSize): void;
   updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind): void;
   updateDisplaySkin(skinId: string): void;
+  updateEnvironment(environmentId: string): void;
+  updateRoamingStyle(styleId: string): void;
   update(): void;
   setThrowWithMouse(newThrowWithMouse: boolean): void;
   evolvePokemon(payload: {
@@ -1812,6 +1920,34 @@ class PokemonWebviewContainer implements IPokemonPanel {
     void this.getWebview().postMessage({
       command: 'set-display-skin',
       text: skinId,
+    });
+  }
+
+  /**
+   * Live-switches the background environment scene with no webview reload -
+   * same reasoning as `updateDisplaySkin`, and entirely independent of it:
+   * the environment is a plain background image behind the Pokemon, the
+   * display skin is the bezel above everything. Switching one never touches
+   * the other, and neither ever touches the Pokemon roster/positions/state.
+   */
+  public updateEnvironment(environmentId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-environment',
+      text: environmentId,
+    });
+  }
+
+  /**
+   * Live-switches roaming strategy with no webview reload - same reasoning
+   * as `updateDisplaySkin`/`updateEnvironment`. The client converts existing
+   * Pokemon positions in place (`applyRoamingStyle` in `panel/main.ts`);
+   * nothing about the Pokemon roster, XP, Friendship or any other
+   * progression is touched here or there.
+   */
+  public updateRoamingStyle(styleId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-roaming-style',
+      text: styleId,
     });
   }
 
@@ -1953,6 +2089,7 @@ class PokemonWebviewContainer implements IPokemonPanel {
 			<body>
                 <div class="pokedev-display" id="pokedevDisplay">
                     <div class="pokedev-screen" id="pokedevScreen">
+                        <img class="pokedev-environment" id="pokedevEnvironment" alt="">
                         <canvas id="pokemonCanvas"></canvas>
                         <div id="pokemonContainer"></div>
                         <div id="foreground"></div>
@@ -1972,6 +2109,8 @@ class PokemonWebviewContainer implements IPokemonPanel {
                         "${this.pokemonGeneration()}",
                         "${this.pokemonOriginalSpriteSize()}",
                         "${getConfiguredDisplaySkin()}",
+                        "${getConfiguredEnvironment()}",
+                        "${getConfiguredRoamingStyle()}",
                     );
                 </script>
             </body>

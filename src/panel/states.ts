@@ -1,5 +1,7 @@
 import { PokemonColor, PokemonType } from '../common/types';
-import { getWorldWidth } from './world-bounds';
+import { chooseOverworldTarget } from './roaming/overworld-target';
+import { isOverworldRoaming } from './roaming/roaming-mode';
+import { getWorldHeight, getWorldWidth } from './world-bounds';
 
 export interface IPokemonType {
   nextFrame(): void;
@@ -25,6 +27,10 @@ export interface IPokemonType {
   positionLeft(left: number): void;
   width: number;
   floor: number;
+  /** The last Overworld (2D) resting `bottom`, independent of whatever
+   * Classic mode currently has `bottom` set to - see
+   * `PokemonInstanceState.overworldBottom`'s doc comment. */
+  overworldBottom: number | undefined;
 
   // Friends API
   name: string;
@@ -47,6 +53,15 @@ export interface IPokemonType {
 
 export class PokemonInstanceState {
   currentStateEnum: States | undefined;
+  /**
+   * The last Overworld (2D) resting `bottom`, remembered independently of
+   * whatever `elBottom`/`floor` Classic mode is currently using - see
+   * `BasePokemonType`'s `_overworldBottom`. Undefined for a Pokemon that has
+   * never been in Overworld mode; on a Classic -> Overworld switch (or a
+   * reload while Overworld is active) with no remembered value, a fresh
+   * position is generated instead of defaulting to the floor.
+   */
+  overworldBottom: number | undefined;
 }
 
 export class PokemonElementState {
@@ -124,6 +139,21 @@ export function isStateAboveGround(state: States): boolean {
 }
 
 export function resolveState(state: string, pokemon: IPokemonType): IState {
+  // The one seam between roaming strategies: everything else about the
+  // state machine (the per-species sequence tree, swipe, ball/friend chase,
+  // evolution, save/restore) is completely unaware a second strategy
+  // exists - only which CLASS gets built for the wander states changes.
+  if (isOverworldRoaming()) {
+    switch (state) {
+      case States.walkRight:
+      case States.walkLeft:
+        return new WalkOverworldState(pokemon, state, 1);
+      case States.runRight:
+      case States.runLeft:
+        return new WalkOverworldState(pokemon, state, 1.6);
+    }
+  }
+
   switch (state) {
     case States.sitIdle:
       return new SitIdleState(pokemon);
@@ -317,6 +347,108 @@ export class RunLeftState extends WalkLeftState {
   spriteLabel = 'walk_fast';
   speedMultiplier = 1.6;
   holdTime = 130;
+}
+
+/**
+ * Overworld (2D) roaming's wander state - substituted for
+ * `WalkRightState`/`WalkLeftState`/`RunRightState`/`RunLeftState` by
+ * `resolveState` when Overworld mode is active. One class handles all four
+ * sequence-tree slots: direction is a straight-line walk toward a single
+ * chosen (x, y) target rather than a fixed left/right heading, so there is
+ * nothing left/right-specific to split into separate classes.
+ *
+ * `label` is threaded through from whichever `States` value `resolveState`
+ * was actually asked for, so `currentStateEnum`/save-restore/the sequence
+ * tree still see exactly `walkRight`/`walkLeft`/`runRight`/`runLeft` as
+ * before - only the MOVEMENT this state performs differs from Classic mode.
+ *
+ * `spriteLabel`/`horizontalDirection` update at the END of each frame based
+ * on this frame's actual dx, so `BasePokemonType.nextFrame()`'s facing/
+ * animation choice (made just before calling into this state) reflects the
+ * most recent real movement direction. A frame that is mostly vertical
+ * leaves both exactly as they were - "retain previous facing direction"
+ * rather than flipping on every small vertical-only step.
+ */
+export class WalkOverworldState implements IState {
+  label: States;
+  spriteLabel = 'walk';
+  horizontalDirection = HorizontalDirection.right;
+  pokemon: IPokemonType;
+  speedMultiplier: number;
+  targetX: number;
+  targetY: number;
+  idleCounter = 0;
+  holdTime = 60;
+  /** Hard safety cap so a target that is somehow never reached (e.g. the
+   * screen shrank out from under it) cannot wander forever - matches
+   * Classic's own `holdTime`-bounded idle, just for movement instead. */
+  maxWalkFrames = 600;
+
+  constructor(pokemon: IPokemonType, label: States, speedMultiplier = 1) {
+    this.pokemon = pokemon;
+    this.label = label;
+    this.speedMultiplier = speedMultiplier;
+    const target = chooseOverworldTarget(
+      { x: pokemon.left, y: pokemon.bottom },
+      getWorldWidth(),
+      getWorldHeight(),
+      pokemon.width,
+    );
+    this.targetX = target.x;
+    this.targetY = target.y;
+    this.updateFacing(target.x - pokemon.left);
+  }
+
+  private updateFacing(dx: number): void {
+    // A small dead zone around 0 keeps a nearly-vertical target from
+    // flipping facing back and forth every frame on floating-point noise.
+    if (dx > 0.5) {
+      this.horizontalDirection = HorizontalDirection.right;
+      this.spriteLabel = 'walk';
+    } else if (dx < -0.5) {
+      this.horizontalDirection = HorizontalDirection.left;
+      this.spriteLabel = 'walk_left';
+    }
+    // else: keep whatever facing/spriteLabel this state already had.
+  }
+
+  nextFrame(): FrameResult {
+    this.idleCounter++;
+
+    const dx = this.targetX - this.pokemon.left;
+    const dy = this.targetY - this.pokemon.bottom;
+    const remaining = Math.hypot(dx, dy);
+    const speed = this.pokemon.speed * this.speedMultiplier;
+
+    if (!this.pokemon.isMoving) {
+      return this.idleCounter > this.holdTime
+        ? FrameResult.stateComplete
+        : FrameResult.stateContinue;
+    }
+
+    if (remaining <= speed || remaining < 0.5) {
+      this.pokemon.positionLeft(this.targetX);
+      this.pokemon.positionBottom(this.targetY);
+      return FrameResult.stateComplete;
+    }
+
+    const stepX = (dx / remaining) * speed;
+    const stepY = (dy / remaining) * speed;
+    this.pokemon.positionLeft(this.pokemon.left + stepX);
+    this.pokemon.positionBottom(this.pokemon.bottom + stepY);
+    this.updateFacing(dx);
+
+    // Same "stop early sometimes" feel Classic's walk states already have,
+    // so Overworld pauses read the same way rather than always finishing a
+    // full hop.
+    if (Math.random() < 0.01) {
+      return FrameResult.stateComplete;
+    }
+    if (this.idleCounter > this.maxWalkFrames) {
+      return FrameResult.stateComplete;
+    }
+    return FrameResult.stateContinue;
+  }
 }
 
 export class ChaseState implements IState {
