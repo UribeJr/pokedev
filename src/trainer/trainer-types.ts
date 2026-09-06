@@ -10,6 +10,7 @@ import { DevBadge } from './dev-badge-parse';
 import { ExplorerPokemonEntry } from './explorer-types';
 import { TrainerGeneration } from './trainer-sprite-catalog';
 import { FriendshipTierId } from '../progression/friendship-rules';
+import { TrainerCardStyle } from '../common/trainer-card-style';
 
 /** Webview panel view type, also used as the serializer key. */
 export const TRAINER_CARD_VIEW_TYPE = 'pokedevTrainerCard';
@@ -313,6 +314,15 @@ export interface TrainerCardLabels {
   /** Badge on the currently-selected sprite tile in the picker. */
   selectedTrainerLabel: string;
   trainerClass: string;
+  /**
+   * Metadata row labels used ONLY by the Crystal skin's JOB/FROM rows
+   * (`renderHero` in panel/trainer-card/main.ts), which restate GitHub's
+   * `bio`/`location` as Trainer-Card-style fields instead of free text. The
+   * PokeDev skin never reads these - it keeps showing `bio`/`location` as
+   * plain paragraphs.
+   */
+  jobLabel: string;
+  fromLabel: string;
   createTrainerHeading: string;
   connectHint: string;
   usernamePlaceholder: string;
@@ -365,6 +375,13 @@ export interface TrainerCardViewModel {
   /** Always present, even while onboarding, so the card can render level/XP. */
   profile: TrainerProfile;
   tier: TrainerCardTier;
+  /**
+   * The user's chosen Trainer Card visual skin (`pokedev.trainerCard.style`).
+   * Presentation only - never affects `profile`/`party`/`partner`/badges,
+   * which render identically under either skin. See
+   * `src/common/trainer-card-style.ts`.
+   */
+  style: TrainerCardStyle;
   /** XP required to advance from the profile's current level. */
   xpForNextLevel: number;
   /**

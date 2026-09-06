@@ -30,3 +30,9 @@ media/environments/*.png
 # development visual QA only, never shipped.
 /debug/
 
+# Trainer Card "Crystal" skin decoration PNGs built from pret/pokecrystal
+# source art (scripts/build-crystal-trainer-card.py) - development/testing
+# only, same licensing caveat as media/environments/*.png above. See the
+# provenance/licensing note at the top of that script.
+media/trainer-card/*.png
+

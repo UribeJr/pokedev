@@ -29,6 +29,7 @@ import {
   EXTRA_POKEMON_KEY_TYPES,
 } from '../common/storage-keys';
 import {
+  getConfiguredTrainerCardStyle,
   isDevRecordVisible,
   promptForDevUsername,
   promptForGithubUsername,
@@ -77,6 +78,7 @@ import {
   isValidRoamingStyle,
   ROAMING_STYLES,
 } from '../common/roaming-style';
+import { TRAINER_CARD_STYLES } from '../common/trainer-card-style';
 
 const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
 const DEFAULT_COLOR = PokemonColor.default;
@@ -985,6 +987,47 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-trainer-card-style',
+      async () => {
+        const currentStyle = getConfiguredTrainerCardStyle();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          TRAINER_CARD_STYLES.map((style) => ({
+            label: style.label,
+            description: style.description,
+            detail:
+              style.id === currentStyle ? vscode.l10n.t('Current') : undefined,
+            value: style.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a Trainer Card style'),
+          title: vscode.l10n.t('Trainer Card Style'),
+        });
+
+        if (!picked || picked.value === currentStyle) {
+          return;
+        }
+
+        // Cosmetic and user-specific, not tied to any one workspace - same
+        // reasoning as `pokedev.displaySkin`/`pokedev.environment`. Data
+        // (profile/party/partner/badges) is untouched either way - see
+        // `src/common/trainer-card-style.ts`.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'trainerCard.style',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `notifyProgressionChanged` push; nothing else to do here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('pokedev.export-pokemon-list', async () => {
       const pokemonCollection = PokemonSpecification.collectionFromMemento(
         context,
@@ -1376,10 +1419,11 @@ export function activate(context: vscode.ExtensionContext) {
 
         if (
           e.affectsConfiguration('pokedev.trainerCard.showDevRecord') ||
-          e.affectsConfiguration('pokedev.trainerCard.showCodingTime')
+          e.affectsConfiguration('pokedev.trainerCard.showCodingTime') ||
+          e.affectsConfiguration('pokedev.trainerCard.style')
         ) {
           // The card is open often enough that requiring a reopen to see a
-          // visibility toggle take effect would feel broken.
+          // visibility/style change take effect would feel broken.
           TrainerCardPanel.currentPanel?.notifyProgressionChanged();
         }
         if (e.affectsConfiguration('pokedev.pokemonLanguage')) {

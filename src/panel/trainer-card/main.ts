@@ -29,6 +29,7 @@ import {
   TrainerHostboundMessage,
   TrainerSpriteOption,
 } from '../../trainer/trainer-types';
+import { cardClassName, stripEmoji } from './card-presentation';
 
 interface TrainerVscodeApi {
   postMessage(message: TrainerHostboundMessage): void;
@@ -298,6 +299,20 @@ function renderHead(labels: TrainerCardLabels, idText?: string): HTMLElement {
 /* ---------------------------- card composition --------------------------- */
 
 /**
+ * A LABEL / value row, shared by the Crystal skin's JOB/FROM metadata
+ * (`renderHero`) and reusing the exact same `.tc-identity-stat-*` classes
+ * the TRAINER/CODING TIME stats row already uses - one consistent
+ * "label left, value right" convention across the whole identity column,
+ * rather than a second row style invented just for this.
+ */
+function metaRow(label: string, value: string): HTMLElement {
+  return appendAll(el('div', 'tc-identity-stat-row'), [
+    el('span', 'tc-identity-stat-label', label),
+    el('span', 'tc-identity-stat-value', value),
+  ]);
+}
+
+/**
  * The left identity column: portrait, trainer identity, and a slim stat
  * row for Trainer Level (always) plus Coding Time (only when the
  * `showCodingTime` setting is on - Coding Time itself keeps accruing
@@ -376,11 +391,31 @@ function renderHero(model: TrainerCardViewModel): HTMLElement {
     identity.appendChild(el('div', 'tc-handle', `@${github.login}`));
   }
   identity.appendChild(el('div', 'tc-class-chip', labels.trainerClass));
-  if (github && github.bio) {
-    identity.appendChild(el('p', 'tc-bio', github.bio));
-  }
-  if (github && github.location) {
-    identity.appendChild(el('p', 'tc-location', github.location));
+  if (model.style === 'crystal') {
+    // Crystal restates bio/location as Trainer-Card-style JOB/FROM fields
+    // (emoji stripped - see `stripEmoji`'s own doc comment) rather than free
+    // text, so a modern GitHub bio never breaks the Gen II illusion. Never
+    // touches `github.bio`/`github.location` themselves - only what gets
+    // printed here.
+    const metaRows: HTMLElement[] = [];
+    const job = github ? stripEmoji(github.bio) : '';
+    const from = github ? stripEmoji(github.location) : '';
+    if (job) {
+      metaRows.push(metaRow(labels.jobLabel, job));
+    }
+    if (from) {
+      metaRows.push(metaRow(labels.fromLabel, from));
+    }
+    if (metaRows.length > 0) {
+      identity.appendChild(appendAll(el('div', 'tc-meta-rows'), metaRows));
+    }
+  } else {
+    if (github && github.bio) {
+      identity.appendChild(el('p', 'tc-bio', github.bio));
+    }
+    if (github && github.location) {
+      identity.appendChild(el('p', 'tc-location', github.location));
+    }
   }
   hero.appendChild(identity);
 
@@ -878,7 +913,10 @@ function renderBadges(model: TrainerCardViewModel): HTMLElement {
       break;
     default:
       section.appendChild(renderBadgesGrid(dev, labels));
-      if (dev.status === 'connected') {
+      // Crystal moves these OUTSIDE the physical card instead (see `render`
+      // below) - application controls (Refresh/Disconnect) printed onto a
+      // Trainer Card break the illusion; PokeDev keeps them here, unchanged.
+      if (dev.status === 'connected' && model.style !== 'crystal') {
         section.appendChild(renderDevBadgesActions(labels));
       }
       break;
@@ -1076,7 +1114,7 @@ function renderTrainerSpritePicker(model: TrainerCardViewModel): HTMLElement {
 function renderCard(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
   const github = model.github;
-  const card = el('div', `tc-card tc-tier-${model.tier}`);
+  const card = el('div', cardClassName(model, `tc-tier-${model.tier}`));
 
   const idText = `${labels.idLabel} ${padStart(
     github ? String(github.id) : '0',
@@ -1113,7 +1151,7 @@ function renderCard(model: TrainerCardViewModel): HTMLElement {
 
 function renderOnboarding(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
-  const card = el('div', 'tc-card tc-card-compact');
+  const card = el('div', cardClassName(model, 'tc-card-compact'));
   card.appendChild(renderHead(labels));
 
   const body = el('div', 'tc-card-body');
@@ -1172,7 +1210,7 @@ function renderOnboarding(model: TrainerCardViewModel): HTMLElement {
 
 function renderLoading(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
-  const card = el('div', 'tc-card tc-skeleton');
+  const card = el('div', cardClassName(model, 'tc-skeleton'));
   card.setAttribute('aria-busy', 'true');
   card.appendChild(renderHead(labels));
 
@@ -1205,7 +1243,7 @@ function renderLoading(model: TrainerCardViewModel): HTMLElement {
 
 function renderError(model: TrainerCardViewModel): HTMLElement {
   const labels = model.labels;
-  const card = el('div', 'tc-card tc-card-compact');
+  const card = el('div', cardClassName(model, 'tc-card-compact'));
   card.appendChild(renderHead(labels));
 
   const body = el('div', 'tc-card-body');
@@ -1346,6 +1384,13 @@ function render(model: TrainerCardViewModel): void {
       break;
     default:
       shell.appendChild(renderCard(model));
+      // Crystal-only: application controls (Refresh/Disconnect DEV), not
+      // Trainer Card data - printed as a subtle utility row directly below
+      // the physical card rather than inside it. See the matching gate in
+      // `renderBadges` above. Same "connected" gate that function uses.
+      if (model.style === 'crystal' && model.devBadges.status === 'connected') {
+        shell.appendChild(renderDevBadgesActions(model.labels));
+      }
       // Hidden by preference, not by absence of data - the GitHub block is
       // still fetched and cached, it just is not drawn. Kept OUTSIDE the
       // physical card so opening it never resizes the compact landscape

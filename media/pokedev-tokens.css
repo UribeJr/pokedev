@@ -17,6 +17,16 @@
 	--tc-radius: 10px;
 	--tc-ball: url('pokeball_sprite_sheet.png');
 
+	/*
+	 * Crystal skin decoration - see scripts/build-crystal-trainer-card.py for
+	 * exactly which pret/pokecrystal source assets these are extracted from
+	 * and why. Declared here (not inside `.tc-skin-crystal`) purely so every
+	 * asset path PokeDev references lives in one place; only `.tc-skin-crystal`
+	 * rules in trainer-card.css actually use them.
+	 */
+	--tc-crystal-corner: url('trainer-card/crystal-frame.png');
+	--tc-crystal-fold: url('trainer-card/card-corner-fold.png');
+
 	/* Card face palette (base tier). */
 	--tc-face-top: #2f6bb5;
 	--tc-face-bottom: #16386a;

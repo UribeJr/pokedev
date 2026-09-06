@@ -1686,6 +1686,250 @@ button.tc-party-slot {
 	}
 }
 
+/* -------------------------------- crystal skin ---------------------------- */
+
+/*
+ * The "Crystal" Trainer Card skin (`pokedev.trainerCard.style`) - presentation
+ * only. Every rule below is scoped under `.tc-skin-crystal` (applied by
+ * `cardClassName()` in panel/trainer-card/main.ts alongside the existing
+ * `.tc-tier-*` class - the same "override tokens via a modifier class" system
+ * already proven by the tier colours above), so the default `.tc-skin-pokedev`
+ * card is untouched byte-for-byte.
+ *
+ * See scripts/build-crystal-trainer-card.py's own docstring for exactly which
+ * real pret/pokecrystal assets/conventions were adapted (the classic default
+ * text-box window-frame corners and the Trainer Card's own folded-corner
+ * accent) and why NOT the Trainer Card's literal border tiles, portrait art,
+ * or badge/leader graphics (character likenesses and the real Johto Gym
+ * Badges - neither appropriate for PokeDev's own trainer sprite and Dev
+ * Badges).
+ *
+ * Palette: this project's own GBC-authentic approximation (off-white card,
+ * black ink, a single restrained red accent) - deliberately NOT a blue
+ * background, which would be a shallow "PokeDev but blue" reskin rather than
+ * an actual Crystal one. The real in-game Trainer Card palette is resolved by
+ * SGB/GBC hardware palette-index logic (`SCGB_TRAINER_CARD` in
+ * `engine/menus/trainer_card.asm`), not one static color table - the same
+ * caveat `PALETTE_RAMPS` documents in build-crystal-environments.py.
+ */
+.tc-card.tc-skin-crystal {
+	--tc-face-top: #f2efe0;
+	/* Same as --tc-face-top: the base `.tc-card`'s diagonal gradient
+	 * background collapses to a flat GBC-style fill with no code duplicated -
+	 * see the "no gradients" instruction this skin follows throughout. */
+	--tc-face-bottom: #f2efe0;
+	--tc-face-edge: #1a1a1a;
+	--tc-edge-light: transparent;
+	--tc-ink: #1a1a1a;
+	--tc-ink-dim: #6b6456;
+	--tc-slot: #ddd6c2;
+	--tc-surface: #e9e3d0;
+	--tc-rule: #b9b092;
+	--tc-accent: #a52822;
+	--tc-xp-from: #1a1a1a;
+	--tc-xp-to: #1a1a1a;
+	--tc-shadow: none;
+	--tc-radius: 0;
+	/* Flat black double-ruled window edge (a thin border, a gap, another thin
+	 * border) instead of the base's soft bevel + drop shadow - the single
+	 * most recognizable Gen II window-border language, achieved without a new
+	 * image asset. */
+	box-shadow:
+		0 0 0 1px var(--tc-face-top),
+		0 0 0 4px var(--tc-face-edge);
+}
+
+/* No CRT scanlines - a modern arcade affectation, not a GBC one. Repurposed
+ * (rather than hidden outright) into the top-left corner-spiral accent below. */
+.tc-skin-crystal.tc-card::before {
+	inset: auto;
+	top: 4px;
+	left: 4px;
+	width: 28px;
+	height: 28px;
+	background-image: var(--tc-crystal-corner);
+	background-repeat: no-repeat;
+	background-size: 56px 56px;
+	background-position: 0 0;
+}
+
+/* The matching bottom-right corner-spiral accent - same two-diagonal-corners
+ * convention `.tc-portrait::before/::after` already uses elsewhere on this
+ * card, reused here at the card's own corners. */
+.tc-skin-crystal.tc-card::after {
+	content: '';
+	position: absolute;
+	pointer-events: none;
+	inset: auto;
+	bottom: 4px;
+	right: 4px;
+	width: 28px;
+	height: 28px;
+	background-image: var(--tc-crystal-corner);
+	background-repeat: no-repeat;
+	background-size: 56px 56px;
+	background-position: -28px -28px;
+}
+
+/* The head bar loses its translucent glass overlay (flat, not glass) and
+ * gains the real Trainer Card's folded-corner accent, top right. */
+.tc-skin-crystal .tc-card-head {
+	background: transparent;
+}
+
+.tc-skin-crystal .tc-card-head::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 20px;
+	height: 20px;
+	background-image: var(--tc-crystal-fold);
+	background-repeat: no-repeat;
+	background-size: 20px 20px;
+	pointer-events: none;
+}
+
+/* Square corners everywhere: rounded corners read as a modern dashboard, not
+ * a Game Boy Color window. */
+.tc-skin-crystal .tc-portrait,
+.tc-skin-crystal .tc-badge-tile,
+.tc-skin-crystal .tc-party-slot,
+.tc-skin-crystal .tc-record-grid,
+.tc-skin-crystal .tc-xp-track,
+.tc-skin-crystal .tc-xp-panel,
+.tc-skin-crystal .tc-spec-track,
+.tc-skin-crystal .tc-partner-box,
+.tc-skin-crystal .tc-partner-frame,
+.tc-skin-crystal .tc-partner-xp-track,
+.tc-skin-crystal .tc-class-chip,
+.tc-skin-crystal .tc-status,
+.tc-skin-crystal .tc-devrecord-panel,
+.tc-skin-crystal .tc-picker-panel,
+.tc-skin-crystal .tc-picker-tile,
+.tc-skin-crystal .tc-picker-tab,
+.tc-skin-crystal .tc-picker-close,
+.tc-skin-crystal .tc-input {
+	border-radius: 0;
+}
+
+/* Pixel-segment XP fills, not a gradient bar - see `--tc-xp-from`/
+ * `--tc-xp-to` above (both flat black) and the notch overlay already built
+ * into `.tc-xp-track::after`, which reads as distinct GBC-style segments
+ * once the fill beneath it is a flat colour instead of a gradient. */
+.tc-skin-crystal .tc-xp-fill,
+.tc-skin-crystal .tc-spec-fill,
+.tc-skin-crystal .tc-partner-xp-fill {
+	box-shadow: none;
+}
+
+/*
+ * The "you have this" states (current partner, selected sprite/badge tile)
+ * lose their soft gold glow - not a GBC effect - in favour of the same
+ * cursor-arrow language `.tc-button` already uses elsewhere on this card
+ * (`content: '▸'`), the closest authentic equivalent to how a Game Boy menu
+ * points at the active row/selection.
+ */
+.tc-skin-crystal .tc-party-slot-partner,
+.tc-skin-crystal .tc-picker-tile-selected {
+	box-shadow: none;
+	background: var(--tc-slot);
+}
+
+.tc-skin-crystal .tc-party-slot-partner::before,
+.tc-skin-crystal .tc-picker-tile-selected::before {
+	content: '▸';
+	position: absolute;
+	top: 2px;
+	left: 3px;
+	color: var(--tc-accent);
+	font-size: 10px;
+	line-height: 1;
+}
+
+.tc-skin-crystal .tc-class-chip {
+	background: transparent;
+}
+
+/*
+ * BADGES, not dashboard tiles - the biggest single visual-polish target from
+ * this pass. Base PokeDev badges are large individually-boxed squares
+ * (56-72px, more visual weight than the Party sprites beside them); Crystal
+ * shrinks them close to `.tc-party-sprite`'s own 34px and strips the
+ * surrounding box down to a hairline mounting plate, so the artwork itself
+ * (unchanged - still real Dev Badge art, never replaced) reads as a row of
+ * small mounted badges rather than a row of icon cards. Higher specificity
+ * than the responsive breakpoints below (2 classes vs 1), so this applies
+ * at every viewport width without needing its own breakpoint overrides.
+ */
+.tc-skin-crystal .tc-badges-grid {
+	grid-template-columns: repeat(auto-fill, minmax(30px, 34px));
+	gap: 5px;
+}
+
+.tc-skin-crystal .tc-badge-tile {
+	padding: 2px;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+}
+
+.tc-skin-crystal .tc-badge-tile-broken::after {
+	font-size: 14px;
+}
+
+/*
+ * Trainer/profile metadata: `.tc-meta-rows` (built only for this skin - see
+ * `renderHero` in main.ts) reuses the exact same LABEL/value row already
+ * used for TRAINER/CODING TIME below it, so JOB/FROM read as the same kind
+ * of Trainer Card field rather than a second style invented for GitHub data.
+ * A bio can be a full sentence rather than a short value like "Lv. 18"
+ * though, so - unlike the stats row - the value here needs to be allowed to
+ * shrink and truncate rather than push the row wider than the column.
+ */
+.tc-meta-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 2px;
+}
+
+.tc-skin-crystal .tc-meta-rows .tc-identity-stat-value {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: right;
+}
+
+/*
+ * A small visual rule between BADGES and PARTY in the right column, so the
+ * two sections read as distinct regions rather than one continuous block -
+ * see the milestone's own "use empty space intentionally" guidance. Left
+ * unset for PokeDev, which already separates them with its own section gap.
+ */
+.tc-skin-crystal .tc-section-party {
+	padding-top: 8px;
+	border-top: 1px dashed var(--tc-rule);
+}
+
+/*
+ * A real, authentic Gen II detail: the actual Trainer Card's own BADGES
+ * label ends in a small arrow glyph ("  BADGES▶", see
+ * `TrainerCard_Page1_PrintDexCaught_GameTime` in engine/menus/
+ * trainer_card.asm), not a plain word. Applied to every section title
+ * (BADGES/PARTY/TRAINER XP/PARTNER all share `.tc-section-title` - see
+ * `sectionTitle()` in main.ts), echoing that exact convention consistently
+ * rather than reproducing it in just the one place it happens to appear in
+ * the original game.
+ */
+.tc-skin-crystal .tc-section-title::after {
+	content: ' \25b6';
+	font-size: 8px;
+	vertical-align: middle;
+}
+
 /* ------------------------------- responsive ------------------------------ */
 
 /*

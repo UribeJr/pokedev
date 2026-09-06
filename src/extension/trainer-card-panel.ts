@@ -9,6 +9,11 @@ import {
 } from '../trainer/github-parse';
 import { computeTrainerClass } from '../trainer/trainer-class';
 import {
+  DEFAULT_TRAINER_CARD_STYLE,
+  isValidTrainerCardStyle,
+  TrainerCardStyle,
+} from '../common/trainer-card-style';
+import {
   getTrainerCardTier,
   getXpForNextTrainerLevel,
   withTrainerSprite,
@@ -99,6 +104,23 @@ export function isCodingTimeVisible(): boolean {
   return vscode.workspace
     .getConfiguration(CONFIG_SECTION)
     .get<boolean>(CODING_TIME_SETTING, false);
+}
+
+const TRAINER_CARD_STYLE_SETTING = 'trainerCard.style';
+
+/**
+ * The user's chosen Trainer Card visual skin (`pokedev.trainerCard.style`).
+ * Presentation only - see `src/common/trainer-card-style.ts` for the
+ * catalog and `.tc-skin-*` in `media/trainer-card.css` for what each skin
+ * actually changes.
+ */
+export function getConfiguredTrainerCardStyle(): TrainerCardStyle {
+  const styleId = vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .get<string>(TRAINER_CARD_STYLE_SETTING, DEFAULT_TRAINER_CARD_STYLE);
+  return isValidTrainerCardStyle(styleId)
+    ? styleId
+    : DEFAULT_TRAINER_CARD_STYLE;
 }
 
 /** Only GitHub's avatar CDN is allowed as an image source. */
@@ -273,6 +295,8 @@ function buildLabels(trainerClassId: TrainerClassId): TrainerCardLabels {
     partnerLabel: vscode.l10n.t('Partner'),
     noPartnerLabel: vscode.l10n.t('No partner selected'),
     trainerClass: localizeTrainerClass(trainerClassId),
+    jobLabel: vscode.l10n.t('Job'),
+    fromLabel: vscode.l10n.t('From'),
     createTrainerHeading: vscode.l10n.t('Create trainer profile'),
     connectHint: vscode.l10n.t(
       'Your Trainer Card shows your public GitHub profile. No authentication is used and nothing is sent anywhere except GitHub.',
@@ -883,6 +907,7 @@ export class TrainerCardPanel {
       labels: buildLabels(trainerClassId),
       profile,
       tier: getTrainerCardTier(profile.trainerLevel),
+      style: getConfiguredTrainerCardStyle(),
       xpForNextLevel: getXpForNextTrainerLevel(profile.trainerLevel),
       showDevRecord: isDevRecordVisible(),
       showCodingTime: isCodingTimeVisible(),
