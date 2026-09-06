@@ -81,7 +81,7 @@ USAGE
    never shipped in the extension).
 3. Render the final scenes:
      python3 scripts/build-crystal-environments.py --source /path/to/pokecrystal
-   The five PNGs land in `media/environments/` (also gitignored - see
+   The PNGs land in `media/environments/` (also gitignored - see
    `src/common/environments.ts` for why). Pass `--only <scene-id>` (e.g.
    `--only ilex-forest`, repeatable) to regenerate just one scene while
    iterating on it without touching the others.
@@ -90,11 +90,12 @@ COMPOSITION: HAND-BUILT LAYOUT VS. REAL MAP CROP
 --------------------------------------------------
 Two ways a scene's `blocks` grid gets filled, both producing the same
 `BlockGrid` shape so `render_scene`/`validate_scene` don't care which was
-used:
+used - both remain supported for any scene added in the future:
 
-  - `ice_path` and `pokemon_center` are a hand-built arrangement of
-    individually-verified metatile indices - see each function's own
-    comments for which.
+  - A hand-built arrangement of individually-verified metatile indices
+    (see e.g. an earlier revision's `pokemon_center`/`ice_path` for the
+    pattern, before PokéDev Environment V1 trimmed the catalog down to
+    `johto_route`/`ilex_forest`/`cave` - see git history for those two).
   - `ilex_forest`, `cave`, and `johto_route` instead crop a real,
     block-aligned window straight out of an actual map's `.blk` layout
     data (`load_map_blocks`/`crop_map_region`), so their composition is
@@ -454,7 +455,7 @@ def render_scene(spec: SceneSpec, source_dir: str) -> Image.Image:
 
 
 # --------------------------------------------------------------------------
-# The five scenes
+# The scenes
 #
 # Every non-None entry below is a METATILE INDEX verified by eye against
 # this tileset's debug atlas (`debug/<tileset>-metatiles.png`) - not a raw
@@ -586,59 +587,23 @@ def cave(source_dir: str) -> SceneSpec:
     )
 
 
-def ice_path(source_dir: str) -> SceneSpec:
-    del source_dir  # unused - hand-built layout, see johto_route's note
-    blocks = _grid(5, 5)
-    for c in range(5):
-        blocks[0][c] = ICE_WALL
-        blocks[4][c] = ICE_WALL
-    for r in range(1, 4):
-        blocks[r][0] = ICE_WALL
-        blocks[r][4] = ICE_WALL
-    blocks[1][3] = ICE_ROCK
-    blocks[3][1] = ICE_ROCK
-    return SceneSpec(
-        id="ice-path",
-        tileset="ice_path",
-        ground_fill=PALETTE_RAMPS["WATER"][255],
-        blocks=blocks,
-    )
-
-
-def pokemon_center(source_dir: str) -> SceneSpec:
-    del source_dir  # unused - hand-built layout, see johto_route's note
-    blocks = _grid(5, 5)
-    blocks[0][1] = POKECENTER_COUNTER
-    blocks[0][2] = POKECENTER_MACHINE
-    blocks[0][3] = POKECENTER_COUNTER
-    # The rest of the floor is a flat color, not a tiled metatile - see the
-    # module-level comment above POKECENTER_MACHINE for why.
-    return SceneSpec(
-        id="pokemon-center",
-        tileset="pokecenter",
-        ground_fill=(232, 168, 168),
-        blocks=blocks,
-    )
-
-
 # Metatile indices, each confirmed by directly rendering that ONE metatile
 # in isolation and viewing it (via `--atlas-only`, then cropping/zooming the
 # specific candidate) - not read off the composite atlas grid, which proved
 # unreliable at a glance (an early pass misread indices this way twice: a
 # "path" that was actually grass, and a "wall" that was actually grass too).
 FOREST_TREE = 0  # complete bushy tree on grass
-ICE_WALL = 5  # icy rock wall texture, tiles seamlessly
-ICE_ROCK = 25  # a complete pale round ice boulder
-POKECENTER_MACHINE = 1  # the complete healing-machine counter
-POKECENTER_COUNTER = 44  # a complete side shelf/cabinet unit
-# No POKECENTER_FLOOR metatile is used: every candidate in this tileset that
-# looked like plain floor at a glance turned out to carry some counter/pipe
-# fragment baked in (verified the same way as above), which would repeat
-# oddly if tiled edge-to-edge across the whole open floor. The floor is a
-# flat color instead - see `pokemon_center()`'s `ground_fill`.
 
-SCENES = [johto_route, ilex_forest, cave, ice_path, pokemon_center]
-TILESETS_NEEDED = ["johto", "forest", "cave", "ice_path", "pokecenter"]
+# PokéDev Environment V1 trims the catalog to exactly `johto_route`,
+# `ilex_forest`, and `cave` (plus the image-less "none"); Ice Path and
+# Pokémon Center were removed here after visual review - see git history
+# for their scene functions (`ice_path`/`pokemon_center`) and metatile
+# constants (`ICE_FLOOR`/`ICE_WALL`/`ICE_BOULDER_*`/`POKECENTER_MACHINE`/
+# `POKECENTER_COUNTER`) if reviving either one. `SCENES`/`TILESETS_NEEDED`
+# below are intentionally still plain lists, not hardcoded to "exactly
+# three" - adding a new scene function later is just adding it to both.
+SCENES = [johto_route, ilex_forest, cave]
+TILESETS_NEEDED = ["johto", "forest", "cave"]
 
 
 def main() -> None:

@@ -420,9 +420,7 @@
                             "none",
                             "johto-route",
                             "ilex-forest",
-                            "cave",
-                            "ice-path",
-                            "pokemon-center"
+                            "cave"
                         ],
                         "default": "none",
                         "scope": "application",

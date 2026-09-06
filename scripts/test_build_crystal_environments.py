@@ -372,8 +372,6 @@ class RegressionTests(unittest.TestCase):
     def test_every_scene_final_index_is_valid_in_the_real_data(self):
         checks = [
             ("forest", [bce.FOREST_TREE]),
-            ("ice_path", [bce.ICE_WALL, bce.ICE_ROCK]),
-            ("pokecenter", [bce.POKECENTER_MACHINE, bce.POKECENTER_COUNTER]),
         ]
         for name, indices in checks:
             tileset = bce.TilesetData.load(self.source, name)

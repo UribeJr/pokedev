@@ -79,21 +79,6 @@ export const ENVIRONMENTS: readonly PokedevEnvironment[] = [
     imageFile: 'environments/cave.png',
     sourceAttribution: 'pret/pokecrystal cave tileset (see build script)',
   },
-  {
-    id: 'ice-path',
-    label: 'Ice Path',
-    description: 'An icy cave floor.',
-    imageFile: 'environments/ice-path.png',
-    sourceAttribution: 'pret/pokecrystal ice path tileset (see build script)',
-  },
-  {
-    id: 'pokemon-center',
-    label: 'Pokémon Center',
-    description: 'A Pokémon Center interior.',
-    imageFile: 'environments/pokemon-center.png',
-    sourceAttribution:
-      'pret/pokecrystal Pokémon Center tileset (see build script)',
-  },
 ];
 
 export function isValidEnvironmentId(id: string | undefined): boolean {
