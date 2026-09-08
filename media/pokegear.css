@@ -1,0 +1,312 @@
+/*
+ * PokeGear - a dedicated Gen II "utility/status" panel.
+ *
+ * Deliberately small: `.tc-card`/`.tc-shell`/`.tc-section`/`.tc-section-title`/
+ * `.tc-xp-track`/`.tc-xp-fill`/`.tc-record-grid`/`.tc-badges-grid`/
+ * `.tc-badge-tile`/`.tc-party-sprite`/`.tc-partner-hearts`/`.tc-button`/etc are
+ * ALL reused as-is from media/trainer-card.css (linked alongside this file -
+ * see `pokegear-panel.ts`), including its `.tc-skin-crystal` rules. PokeGear
+ * always carries `tc-skin-crystal` regardless of the Trainer Card's own
+ * selected style - see `src/pokegear/pokegear-types.ts`'s module doc comment
+ * for why - so every one of those shared rules already renders in the
+ * Crystal palette with zero extra code here.
+ *
+ * Everything below is either genuinely new layout (the tab bar, the header
+ * clock, the activity feed rows, the party list rows) or a small selection-
+ * state accent PokeGear needs that the Trainer Card never did.
+ */
+
+body {
+	margin: 0;
+	padding: 16px;
+	color: var(--vscode-foreground);
+	font-size: var(--vscode-font-size);
+	font-family: var(--vscode-font-family);
+	background-color: var(--vscode-editor-background);
+}
+
+.pg-shell {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+/* The card face itself needs its own internal padding - the full Trainer
+ * Card gets this from `.tc-card-body`'s grid, which PokeGear does not use. */
+.pg-card {
+	padding: 12px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* -------------------------------- header --------------------------------- */
+
+.pg-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	padding-bottom: 8px;
+	border-bottom: 2px solid var(--tc-face-edge);
+}
+
+.pg-title {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 14px;
+	font-weight: normal;
+	letter-spacing: 1.3px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.pg-clock {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
+/* --------------------------------- tabs ----------------------------------- */
+
+/*
+ * A game-menu tab row, not modern browser tabs: square, a plain bottom rule,
+ * and a small arrow cursor marking the active tab - the same "▶" language
+ * `.tc-button`'s hover state and the Crystal skin's section titles already
+ * use elsewhere, reused here rather than inventing a second cursor glyph.
+ */
+.pg-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding-bottom: 8px;
+	border-bottom: 1px dashed var(--tc-rule);
+}
+
+.pg-tab {
+	flex: 1 1 auto;
+	padding: 5px 10px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 0;
+	background: var(--tc-surface);
+	color: var(--tc-ink-dim);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.pg-tab::before {
+	content: '';
+}
+
+.pg-tab-active {
+	background: var(--tc-slot);
+	color: var(--tc-ink);
+	border-color: var(--tc-accent);
+}
+
+.pg-tab-active::before {
+	content: '▶ ';
+	color: var(--tc-accent);
+}
+
+.pg-tab:hover:not(.pg-tab-active) {
+	border-color: var(--tc-accent);
+	color: var(--tc-ink);
+}
+
+.pg-tab:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.pg-tab-panel {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Vertical rhythm between stacked `.tc-section` blocks - the full Trainer
+ * Card gets this from its grid's `row-gap`, which PokeGear's flow layout
+ * does not have. */
+.pg-status-block {
+	margin-bottom: 14px;
+}
+
+.pg-status-block:last-child {
+	margin-bottom: 0;
+}
+
+/* -------------------------------- STATUS ---------------------------------- */
+
+.pg-trainer-name {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--tc-ink);
+	margin-bottom: 4px;
+}
+
+.pg-partner-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.pg-partner-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/* ------------------------------- ACTIVITY --------------------------------- */
+
+.pg-activity-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.pg-activity-row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 3px 0;
+	border-bottom: 1px dashed var(--tc-rule);
+}
+
+.pg-activity-row:last-child {
+	border-bottom: none;
+}
+
+.pg-activity-time {
+	flex: none;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
+.pg-activity-label {
+	font-size: 11px;
+	color: var(--tc-ink);
+}
+
+/* -------------------------------- BADGES ---------------------------------- */
+
+.pg-badge-tile-selected {
+	border-color: var(--tc-accent);
+}
+
+.pg-badge-detail {
+	border-top: 1px dashed var(--tc-rule);
+	padding-top: 10px;
+}
+
+/* --------------------------------- PARTY ----------------------------------- */
+
+.pg-party-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/*
+ * Game-menu rows, not modern cards: a plain row, a left-hand cursor marker
+ * for the current Partner, square selection state - never an individual
+ * boxed tile per Pokemon.
+ */
+.pg-party-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 6px;
+	border: 1px solid transparent;
+	border-radius: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	width: 100%;
+}
+
+.pg-party-row:hover {
+	background: var(--tc-surface);
+}
+
+.pg-party-row-selected {
+	border-color: var(--tc-accent);
+	background: var(--tc-slot);
+}
+
+.pg-party-row:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.pg-party-marker {
+	flex: none;
+	width: 12px;
+	color: var(--tc-accent);
+	font-size: 11px;
+	text-align: center;
+}
+
+.pg-party-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.pg-party-sub {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.pg-party-detail {
+	border-top: 1px dashed var(--tc-rule);
+	padding-top: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* ------------------------------ narrow width ------------------------------ */
+
+@media (max-width: 460px) {
+	.pg-tabs {
+		flex-direction: column;
+	}
+
+	.tc-record-grid-4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-badges-grid {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 60px));
+	}
+}
+
+@media (max-width: 320px) {
+	body {
+		padding: 10px;
+	}
+
+	.pg-card {
+		padding: 10px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tc-card {
+		animation: none;
+	}
+}

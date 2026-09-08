@@ -43,6 +43,7 @@ import { recordEvolution } from '../trainer/trainer-profile';
 import { TrainerProfile } from '../trainer/trainer-types';
 import { PROGRESSION_PARTNER_KEY } from '../common/storage-keys';
 import {
+  appendProgressionLogEvent,
   readPokemonProgress,
   readPokemonProgressMap,
   writePokemonProgress,
@@ -296,6 +297,20 @@ export async function evolvePokemonInstance(
   // Card's PARTY/PARTNER sections all rebuild from storage on this same
   // event, so nothing here needs to know any of them exist.
   pokedevState.notify('collection');
+
+  // Observational only - see `ProgressionEventType`'s own doc comment.
+  // Grants no XP; PokeGear's ACTIVITY tab reads this same log.
+  await appendProgressionLogEvent(context, {
+    type: 'pokemon-evolved',
+    trainerXp: 0,
+    pokemonXp: 0,
+    timestamp: now,
+    metadata: {
+      nickname: newIdentity,
+      fromSpecies: identity.species,
+      toSpecies: target,
+    },
+  });
 
   return {
     nickname: newIdentity,

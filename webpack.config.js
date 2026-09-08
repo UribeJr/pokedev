@@ -84,6 +84,48 @@ const trainerCardConfig = {
 	},
 };
 
+// PokeGear webview bundle. Its own config for the same reason the trainer
+// card and Explorer bundles have their own: desktopConfig declares a single
+// global library name and strips source-map URLs with a plugin keyed to
+// /main-bundle\.js$/, neither of which applies here.
+const pokeGearConfig = {
+	mode: "development",
+	devtool: "inline-source-map",
+	entry: {
+		"pokegear": "./src/panel/pokegear/main.ts",
+	},
+	output: {
+		path: path.resolve(__dirname, './media'),
+		filename: "[name]-bundle.js",
+		library: {
+			name: 'pokeGearApp',
+			type: 'global'
+		}
+	},
+	plugins: [
+		new removeSourceMapUrlWebpackPlugin({
+			test: /pokegear-bundle\.js$/
+		})
+	],
+	resolve: {
+		extensions: [".ts", ".tsx", ".js"],
+	},
+	module: {
+		rules: [{
+			test: /\.ts$/,
+			exclude: /node_modules/,
+			use: [
+				{
+					loader: 'ts-loader',
+					options: {
+						configFile: 'tsconfig.panel.json'
+					}
+				},
+			],
+		}]
+	},
+};
+
 // Explorer sidebar views. Its own config for the same reason the trainer card
 // has one: desktopConfig declares a single global library name and strips
 // source-map URLs with a plugin keyed to /main-bundle\.js$/, neither of which
@@ -183,4 +225,4 @@ const webExtensionConfig = {
 	devtool: 'nosources-source-map', // create a source map that points to the original source file
 };
 
-module.exports = [desktopConfig, trainerCardConfig, explorerConfig, webExtensionConfig];
+module.exports = [desktopConfig, trainerCardConfig, pokeGearConfig, explorerConfig, webExtensionConfig];

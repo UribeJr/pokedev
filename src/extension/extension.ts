@@ -37,6 +37,7 @@ import {
   TrainerCardPanel,
 } from './trainer-card-panel';
 import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
+import { PokeGearPanel } from './pokegear-panel';
 import { clearDevCache } from './trainer-storage';
 import { getNonce } from './webview-util';
 import { ActivityTracker } from './activity-tracker';
@@ -1456,6 +1457,12 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.openPokeGear', () => {
+      PokeGearPanel.createOrShow(context);
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand(
       'pokedev.configure-github-trainer',
       async () => {
@@ -1732,6 +1739,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewPanelSerializer(TrainerCardPanel.viewType, {
       async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
         TrainerCardPanel.revive(webviewPanel, context);
+      },
+    });
+  }
+
+  if (vscode.window.registerWebviewPanelSerializer) {
+    vscode.window.registerWebviewPanelSerializer(PokeGearPanel.viewType, {
+      async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+        PokeGearPanel.revive(webviewPanel, context);
       },
     });
   }

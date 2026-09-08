@@ -9,6 +9,7 @@ coverage/
 .idea/
 media/main-bundle.js
 media/trainer-card-bundle.js
+media/pokegear-bundle.js
 .DS_Store
 
 # Real GBC overlay PNGs vendored locally from mugwomp93/muOS_Customization for

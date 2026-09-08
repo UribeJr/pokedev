@@ -425,6 +425,22 @@ export class ProgressionService {
       toastHub.notifyLevelUp(identity.nickname, displayName, level, now);
     }
 
+    // Observational only - see `ProgressionEventType`'s own doc comment.
+    // Grants no XP of its own (the real XP was already granted above via
+    // `outcome.xpGranted`); PokeGear's ACTIVITY tab reads this same log.
+    await this._log({
+      type: 'pokemon-level-up',
+      trainerXp: 0,
+      pokemonXp: 0,
+      timestamp: now,
+      metadata: {
+        nickname: identity.nickname,
+        species: identity.species,
+        level: result.toLevel,
+        isPartner: grant.isPartner,
+      },
+    });
+
     if (grant.isPartner) {
       await this._maybeOfferEvolution(identity.nickname, result.toLevel);
     }

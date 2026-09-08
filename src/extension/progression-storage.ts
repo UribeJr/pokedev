@@ -23,7 +23,7 @@ import {
   ProgressionEvent,
 } from '../progression/progression-types';
 import { rememberCommitIn } from '../progression/activity-rules';
-import { normalizeLog } from '../progression/xp-ledger';
+import { appendToLog, normalizeLog } from '../progression/xp-ledger';
 
 /** Progression for every Pokemon that has ever earned XP, keyed by nickname. */
 export type PokemonProgressMap = Record<string, PokemonProgress>;
@@ -84,6 +84,24 @@ export async function writeProgressionLog(
   log: readonly ProgressionEvent[],
 ): Promise<void> {
   await context.globalState.update(PROGRESSION_LOG_KEY, log);
+}
+
+/**
+ * Appends one event to the progression log and persists it - the exact
+ * read-append-write `ProgressionService._log` already does for its own
+ * XP-granting events, exposed here so call sites OUTSIDE that service
+ * (which don't have access to its private `_log`) can append an
+ * observational event (`pokemon-level-up`/`pokemon-evolved`/
+ * `daily-challenge-complete` - see `ProgressionEventType`) to the SAME
+ * bounded log instead of inventing a second one. See PokeGear's ACTIVITY
+ * tab (`src/extension/pokegear-panel.ts`) for the reader.
+ */
+export async function appendProgressionLogEvent(
+  context: vscode.ExtensionContext,
+  event: ProgressionEvent,
+): Promise<void> {
+  const log = appendToLog(readProgressionLog(context), event);
+  await writeProgressionLog(context, log);
 }
 
 /* ------------------------------ commits -------------------------------- */

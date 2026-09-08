@@ -49,7 +49,10 @@ import {
 } from './daily-challenges-storage';
 import { pokedevState } from './pokedev-state';
 import { ProgressionOutcome, ProgressionService } from './progression-service';
-import { readPokemonProgress } from './progression-storage';
+import {
+  appendProgressionLogEvent,
+  readPokemonProgress,
+} from './progression-storage';
 import { reactionHub } from './reaction-service';
 import { toastHub } from './toast-service';
 import {
@@ -319,6 +322,20 @@ export class DailyChallengesService implements vscode.Disposable {
       await this._progression.grantFriendshipToPartner(
         FRIENDSHIP_GAIN_DAILY_COMPLETE,
       );
+      // Observational only - see `ProgressionEventType`'s own doc comment.
+      // Grants no XP of its own (the Trainer XP grant above already
+      // happened); PokeGear's ACTIVITY tab reads this same log.
+      await appendProgressionLogEvent(this._context, {
+        type: 'daily-challenge-complete',
+        trainerXp: 0,
+        pokemonXp: 0,
+        timestamp: Date.now(),
+        metadata: {
+          definitionId: challenge.definitionId,
+          title: challenge.title,
+          rewardTrainerXp: challenge.rewardTrainerXp,
+        },
+      });
     }
   }
 

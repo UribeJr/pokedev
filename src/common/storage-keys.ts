@@ -83,3 +83,11 @@ export const DAILY_CHALLENGES_TOTAL_COMPLETED_KEY =
  * map itself - see `dev-action-rules.ts`.
  */
 export const DEV_ACTION_COOLDOWNS_KEY = 'pokedev.devActions.cooldowns';
+
+/**
+ * PokeGear's last-selected tab (`STATUS`/`ACTIVITY`/`BADGES`/`PARTY`) - a
+ * cosmetic UI convenience only, restored on next open. `globalState`: which
+ * tab you left on is a preference about you, not about a project. See
+ * `src/extension/pokegear-panel.ts`.
+ */
+export const POKEGEAR_LAST_TAB_KEY = 'pokedev.pokeGear.lastTab';

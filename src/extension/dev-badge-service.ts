@@ -13,7 +13,11 @@ import {
   httpGetText,
   isHttpAvailable,
 } from '../trainer/trainer-http';
-import { DevBadgeError, DevBadgeErrorKind } from '../trainer/trainer-types';
+import {
+  DevBadgeError,
+  DevBadgeErrorKind,
+  DevBadgesView,
+} from '../trainer/trainer-types';
 import { readDevCache, writeDevCache } from './trainer-storage';
 
 /**
@@ -215,4 +219,44 @@ function describeError(kind: DevBadgeErrorKind, status?: number): string {
 /** Test/reset seam: drops any in-flight request bookkeeping. */
 export function resetDevBadgeRequestState(): void {
   inFlight.clear();
+}
+
+/** Shapes a resolution into the view the webview actually renders - shared
+ * by every surface that shows DEV badges (`TrainerCardPanel`, PokeGear's
+ * BADGES tab) so "what does an error/success resolution look like on
+ * screen" is defined once. */
+export function toDevBadgesView(
+  username: string,
+  resolution: DevBadgeResolution,
+): DevBadgesView {
+  if (resolution.badges) {
+    return {
+      status: 'connected',
+      username,
+      badges: resolution.badges,
+      error: resolution.error,
+      stale: resolution.stale,
+      fetchedAt: resolution.fetchedAt,
+    };
+  }
+  return { status: 'error', username, badges: [], error: resolution.error };
+}
+
+/**
+ * Resolves the DEV badges view for a given username, or the disconnected
+ * state for an empty one. Cache-preferring by default (`forceRefresh:
+ * false`) - see `resolveDevBadges`/`DEV_CACHE_TTL_MS` - so a surface that
+ * calls this on every render (PokeGear's live-update path included) does
+ * not re-fetch dev.to every time.
+ */
+export async function resolveDevBadgesView(
+  context: vscode.ExtensionContext,
+  username: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<DevBadgesView> {
+  if (username.length === 0) {
+    return { status: 'disconnected', username: '', badges: [] };
+  }
+  const resolution = await resolveDevBadges(context, username, options);
+  return toDevBadgesView(username, resolution);
 }

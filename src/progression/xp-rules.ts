@@ -38,6 +38,13 @@ export const XP_RULES: Record<ProgressionEventType, XpAward> = {
   'lint-success': { trainerXp: 3, pokemonXp: 5 },
   // Granted only by the debug commands, which are off by default.
   'debug-grant': { trainerXp: 0, pokemonXp: 0 },
+  // Observational log entries only (see `ProgressionEventType`'s own doc
+  // comment) - never passed through `ProgressionService.applyEvent`/this
+  // award pipeline, so these entries are never actually looked up. Present
+  // only so `XP_RULES` stays a total mapping over `ProgressionEventType`.
+  'pokemon-level-up': { trainerXp: 0, pokemonXp: 0 },
+  'pokemon-evolved': { trainerXp: 0, pokemonXp: 0 },
+  'daily-challenge-complete': { trainerXp: 0, pokemonXp: 0 },
 };
 
 /* ----------------------------- work batches ---------------------------- */

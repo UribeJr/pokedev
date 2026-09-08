@@ -47,7 +47,17 @@ export type ProgressionEventType =
   | 'test-success'
   | 'typecheck-success'
   | 'lint-success'
-  | 'debug-grant';
+  | 'debug-grant'
+  // Observational events: unlike every type above, these do not themselves
+  // grant XP (always `trainerXp: 0, pokemonXp: 0`) - they record a notable
+  // OUTCOME that already happened for PokeGear's ACTIVITY tab feed
+  // (`src/extension/pokegear-panel.ts`), reusing this same log rather than
+  // a second one. See each event's own append call for exactly where it is
+  // logged: `progression-service.ts` (level-up), `evolution-flow.ts`
+  // (evolution), `daily-challenges-service.ts` (daily completion).
+  | 'pokemon-level-up'
+  | 'pokemon-evolved'
+  | 'daily-challenge-complete';
 
 export interface ProgressionEvent {
   type: ProgressionEventType;
