@@ -51,16 +51,34 @@ leaves your sidebar.
 
 PokéDev is not published to any marketplace — it installs from a `.vsix` file.
 
-Download the latest `.vsix` from
-[Releases](https://github.com/UribeJr/pokedev/releases), then either:
+**1. Download** the latest `.vsix` from
+[Releases](https://github.com/UribeJr/pokedev/releases).
+
+**2. Install** it in your editor:
+
+### VS Code
+
+Via the terminal:
 
 ```bash
 code --install-extension pokedev-6.2.0.vsix
 ```
 
-(use `cursor --install-extension` for Cursor), **or** open the Extensions panel
-(`Ctrl+Shift+X` / `Cmd(⌘)+Shift+X`), click the `···` menu, and choose
-**Install from VSIX…**
+Or via the UI: open the Extensions panel (`Ctrl+Shift+X` / `Cmd(⌘)+Shift+X`),
+click the `···` menu in the top corner, and choose **Install from VSIX…**,
+then select the downloaded file.
+
+### Cursor
+
+Via the terminal:
+
+```bash
+cursor --install-extension pokedev-6.2.0.vsix
+```
+
+Or via the UI: open the Extensions panel (`Ctrl+Shift+X` / `Cmd(⌘)+Shift+X`),
+click the `···` menu in the top corner, and choose **Install from VSIX…**,
+then select the downloaded file.
 
 ### Building it yourself
 
