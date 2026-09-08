@@ -880,16 +880,19 @@ suite('Evolution data integrity', () => {
     assert.deepStrictEqual(missing, []);
   });
 
-  test('a species with more than one rule only ever splits by time of day', () => {
-    // Eevee (Espeon by day / Umbreon by night) is the one legitimate case: two
-    // rules for the same species are safe ONLY when no context could ever
-    // satisfy both at once - `getTimeOfDay()` is always exactly one of
-    // 'day'/'night', never both, so a same-species pair here must be
-    // `friendship-time` with different `time` values. Anything else (two
-    // plain `level` rules, or a `friendship` rule alongside another) would be
-    // genuinely ambiguous: `getAvailableEvolution` resolves ties by table
-    // order, not by asking, which is exactly the "do not pick randomly"
-    // requirement this guards.
+  test('a species with more than one rule only ever splits by time of day or by item', () => {
+    // Two rules for the same species are only ever safe when they belong to a
+    // family whose own selector can never satisfy two siblings at once:
+    //   - `friendship-time`: `getTimeOfDay()` is always exactly one of
+    //     'day'/'night', never both, so siblings must have distinct `time`.
+    //   - `item`: `getAvailableEvolution` only ever considers an item rule
+    //     when the caller names one specific `selectedItemId` (see its own
+    //     doc comment on Eevee), so siblings must have distinct `itemId` and
+    //     can never both match one "use this stone" action.
+    // Mixing a `level` or plain `friendship` rule into a multi-rule species
+    // would be genuinely ambiguous - `getAvailableEvolution` resolves ties by
+    // table order for THOSE, not by asking - which is exactly the "do not
+    // pick randomly" requirement this guards.
     const bySpecies = new Map<string, (typeof EVOLUTION_RULES)[number][]>();
     for (const rule of EVOLUTION_RULES) {
       const existing = bySpecies.get(rule.from);
@@ -903,17 +906,33 @@ suite('Evolution data integrity', () => {
       if (rules.length === 1) {
         continue;
       }
-      assert.strictEqual(rules.length, 2, species);
-      const times = rules.map((rule) =>
-        rule.condition.type === 'friendship-time'
-          ? rule.condition.time
-          : undefined,
+      const friendshipTimeRules = rules.filter(
+        (rule) => rule.condition.type === 'friendship-time',
       );
-      assert.ok(
-        times.every((time) => time !== undefined),
-        `${species}: every rule in a multi-rule species must be friendship-time`,
+      const itemRules = rules.filter((rule) => rule.condition.type === 'item');
+      assert.strictEqual(
+        friendshipTimeRules.length + itemRules.length,
+        rules.length,
+        `${species}: every rule in a multi-rule species must be friendship-time or item`,
       );
-      assert.notStrictEqual(times[0], times[1], species);
+
+      const times = friendshipTimeRules.map((rule) =>
+        rule.condition.type === 'friendship-time' ? rule.condition.time : '',
+      );
+      assert.strictEqual(
+        new Set(times).size,
+        times.length,
+        `${species}: duplicate friendship-time`,
+      );
+
+      const itemIds = itemRules.map((rule) =>
+        rule.condition.type === 'item' ? rule.condition.itemId : '',
+      );
+      assert.strictEqual(
+        new Set(itemIds).size,
+        itemIds.length,
+        `${species}: duplicate item rule`,
+      );
     }
   });
 
@@ -976,11 +995,11 @@ suite('Evolution data integrity', () => {
   });
 
   test('conditions this milestone does not model are left out', () => {
-    // Stone, trade, known-move, beauty and stat/random splits must not have
-    // been guessed at. Friendship-based species (golbat, eevee, togepi, ...)
-    // are deliberately NOT in this list any more - this milestone adds them.
+    // Trade, known-move, beauty and stat/random splits must not have been
+    // guessed at. Friendship-based species (golbat, eevee, togepi, ...) and
+    // evolution-stone species (pikachu, vulpix, ...) are deliberately NOT in
+    // this list - separate milestones added each of those.
     for (const from of [
-      'pikachu', // thunder stone
       'kadabra', // trade
       'machoke', // trade
       'graveler', // trade
@@ -1029,11 +1048,17 @@ suite('Evolution data integrity', () => {
       );
     }
 
-    // Eevee is the one species with two mutually exclusive rules.
+    // Eevee has two mutually exclusive friendship-time rules, plus three
+    // mutually exclusive item (evolution-stone) rules added by a later
+    // milestone - see `Evolution stones: Eevee ambiguity is impossible` in
+    // evolution-stones.test.ts for why the two families can never collide.
     const eeveeRules = getEvolutionRules('eevee');
-    assert.strictEqual(eeveeRules.length, 2);
+    assert.strictEqual(eeveeRules.length, 5);
     assert.ok(eeveeRules.some((rule) => rule.to === 'espeon'));
     assert.ok(eeveeRules.some((rule) => rule.to === 'umbreon'));
+    assert.ok(eeveeRules.some((rule) => rule.to === 'vaporeon'));
+    assert.ok(eeveeRules.some((rule) => rule.to === 'jolteon'));
+    assert.ok(eeveeRules.some((rule) => rule.to === 'flareon'));
   });
 });
 
@@ -1075,6 +1100,7 @@ suite('Evolution availability', () => {
     level: number;
     friendship: number;
     timeOfDay: 'day' | 'night';
+    selectedItemId?: string;
   } {
     switch (rule.condition.type) {
       case 'level':
@@ -1090,6 +1116,13 @@ suite('Evolution availability', () => {
           level: MAX_POKEMON_LEVEL,
           friendship: rule.condition.minFriendship,
           timeOfDay: rule.condition.time,
+        };
+      case 'item':
+        return {
+          level: MAX_POKEMON_LEVEL,
+          friendship: 0,
+          timeOfDay: 'day',
+          selectedItemId: rule.condition.itemId,
         };
     }
   }

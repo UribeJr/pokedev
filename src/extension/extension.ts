@@ -38,7 +38,10 @@ import {
 } from './trainer-card-panel';
 import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
 import { PokeGearPanel } from './pokegear-panel';
-import { clearDevCache } from './trainer-storage';
+import { clearDevCache, readTrainerProfile } from './trainer-storage';
+import { grantEarnedTrainerLevelStoneRewards } from './item-rewards';
+import { addItem } from './inventory-storage';
+import { ITEM_DEFINITIONS } from '../common/items';
 import { getNonce } from './webview-util';
 import { ActivityTracker } from './activity-tracker';
 import {
@@ -555,6 +558,25 @@ export function activate(context: vscode.ExtensionContext) {
     .then(() => relinkOrphanedProgression(context))
     .catch((error) => {
       console.error('PokeDev: evolution reconciliation failed', error);
+    });
+
+  // Catches a Trainer already above a stone-reward milestone the moment this
+  // feature ships (or one who somehow missed a mid-session grant) - safe on
+  // every activation since `grantEarnedTrainerLevelStoneRewards` persists
+  // each reward's claim before granting it, so an already-claimed one is
+  // never granted again. Not awaited by the rest of activation, matching the
+  // reconciliation call above.
+  void grantEarnedTrainerLevelStoneRewards(
+    context,
+    readTrainerProfile(context, Date.now()).trainerLevel,
+  )
+    .then((granted) => {
+      if (granted.length > 0) {
+        pokedevState.notify('inventory');
+      }
+    })
+    .catch((error) => {
+      console.error('PokeDev: startup item-reward grant failed', error);
     });
 
   context.subscriptions.push(
@@ -1733,6 +1755,34 @@ export function activate(context: vscode.ExtensionContext) {
         );
       },
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.debug-give-stone', async () => {
+      if (!areDebugCommandsEnabled()) {
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        ITEM_DEFINITIONS.map((definition) => ({
+          label: definition.name,
+          description: definition.description,
+          id: definition.id,
+        })),
+        {
+          placeHolder: vscode.l10n.t(
+            'Select an evolution stone to give yourself',
+          ),
+        },
+      );
+      if (!picked) {
+        return;
+      }
+      await addItem(context, picked.id, 1);
+      pokedevState.notify('inventory');
+      showStatusMessage(
+        vscode.l10n.t('Added 1 {0} to your Bag.', picked.label),
+      );
+    }),
   );
 
   if (vscode.window.registerWebviewPanelSerializer) {

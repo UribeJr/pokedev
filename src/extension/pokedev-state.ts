@@ -19,6 +19,7 @@
  */
 import * as vscode from 'vscode';
 import { getLocalizedPokemonName } from '../common/localize';
+import { ITEM_DEFINITIONS } from '../common/items';
 import { POKEMON_DATA } from '../common/pokemon-data';
 import {
   buildLoadingViewModel,
@@ -32,8 +33,11 @@ import {
   ExplorerPokemonViewModel,
   ExplorerTrainerViewModel,
 } from '../trainer/explorer-types';
+import { PokeGearBagView } from '../pokegear/pokegear-types';
+import { getAvailableEvolution } from '../progression/evolution-service';
 import { readDailyChallengeState } from './daily-challenges-storage';
 import { buildFriendshipTierLabels } from './friendship-labels';
+import { getItemQuantity, readInventory } from './inventory-storage';
 import {
   getPokemonXpForNextLevel,
   MAX_POKEMON_LEVEL,
@@ -73,7 +77,8 @@ export type PokedevChangeKind =
   | 'github'
   | 'collection'
   | 'challenges'
-  | 'trainerCardStyle';
+  | 'trainerCardStyle'
+  | 'inventory';
 
 class PokedevState {
   private readonly _emitter = new vscode.EventEmitter<PokedevChangeKind>();
@@ -269,6 +274,68 @@ class PokedevState {
       return buildLoadingViewModel(labels);
     }
     return toDailyChallengesViewModel(state, labels);
+  }
+
+  /* --------------------------------- bag --------------------------------- */
+
+  /**
+   * Every defined item, its current quantity, and - precomputed here rather
+   * than fetched on demand - which collection entries it currently has a
+   * rule for.
+   *
+   * Eligibility is the exact same `getAvailableEvolution` call
+   * `src/extension/evolution-flow.ts`'s `useEvolutionStoneOnPokemon` re-runs
+   * before actually consuming a stone, so what the Bag offers and what
+   * later validates a use can never disagree. Lives here rather than in
+   * `evolution-flow.ts` itself specifically to avoid a require cycle:
+   * `evolution-flow.ts` already imports `pokedevState` to broadcast
+   * evolution/inventory changes, so this file cannot import back from it.
+   */
+  public buildBagView(context: vscode.ExtensionContext): PokeGearBagView {
+    const inventory = readInventory(context);
+    const now = Date.now();
+    const candidates = listPartnerCandidates(context);
+
+    const items = ITEM_DEFINITIONS.map((definition) => {
+      const eligibleTargets = candidates
+        .filter((candidate) => {
+          const progress = readPokemonProgress(
+            context,
+            candidate.nickname,
+            candidate.species,
+            now,
+          );
+          return getAvailableEvolution(
+            candidate.species,
+            progress.level,
+            candidate.shiny,
+            { selectedItemId: definition.id },
+          ).available;
+        })
+        .map((candidate) => {
+          const progress = readPokemonProgress(
+            context,
+            candidate.nickname,
+            candidate.species,
+            now,
+          );
+          return {
+            nickname: candidate.nickname,
+            species: getLocalizedPokemonName(candidate.species),
+            level: progress.level,
+          };
+        });
+
+      return {
+        id: definition.id,
+        name: definition.name,
+        description: definition.description,
+        quantity: getItemQuantity(inventory, definition.id),
+        eligibleTargets,
+      };
+    });
+
+    return { items };
   }
 }
 

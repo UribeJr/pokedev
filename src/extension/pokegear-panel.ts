@@ -14,7 +14,9 @@
  * polling anywhere.
  */
 import * as vscode from 'vscode';
+import { isValidItemId } from '../common/items';
 import { resolveDevBadgesView } from './dev-badge-service';
+import { useEvolutionStoneOnPokemon } from './evolution-flow';
 import { getConfiguredDevUsername } from './trainer-card-panel';
 import { pokedevState } from './pokedev-state';
 import { readProgressionLog } from './progression-storage';
@@ -57,6 +59,7 @@ function buildPokeGearLabels(): PokeGearLabels {
     tabActivity: vscode.l10n.t('Activity'),
     tabParty: vscode.l10n.t('Party'),
     tabBadges: vscode.l10n.t('Badges'),
+    tabBag: vscode.l10n.t('Bag'),
     trainerLabel: vscode.l10n.t('Trainer'),
     levelLabel: vscode.l10n.t('Lv.'),
     xpLabel: vscode.l10n.t('Trainer XP'),
@@ -81,6 +84,13 @@ function buildPokeGearLabels(): PokeGearLabels {
     refreshButton: vscode.l10n.t('Refresh'),
     shinyLabel: vscode.l10n.t('Shiny'),
     unknownValue: vscode.l10n.t('—'),
+    useButton: vscode.l10n.t('Use'),
+    cancelButton: vscode.l10n.t('Cancel'),
+    yesButton: vscode.l10n.t('Yes'),
+    noButton: vscode.l10n.t('No'),
+    useItemOnLabel: vscode.l10n.t('Use {0} on:'),
+    confirmUseItemLabel: vscode.l10n.t('Use {0} on {1}?'),
+    noEffectLabel: vscode.l10n.t("It won't have any effect."),
   };
 }
 
@@ -241,6 +251,23 @@ export class PokeGearPanel {
         return;
       }
 
+      case 'pokegear/useItem': {
+        const itemId = typeof message.itemId === 'string' ? message.itemId : '';
+        const nickname =
+          typeof message.nickname === 'string' ? message.nickname : '';
+        if (!isValidItemId(itemId) || nickname.length === 0) {
+          return;
+        }
+        // `useEvolutionStoneOnPokemon` re-validates everything itself
+        // (quantity, target, rule) rather than trusting the webview's last
+        // rendered state - the collection or Bag can change between that
+        // render and this click. Its own `pokedevState.notify('inventory')`
+        // on success already triggers this panel's push; nothing further is
+        // needed here for any outcome, including a no-op one.
+        await useEvolutionStoneOnPokemon(this._context, itemId, nickname);
+        return;
+      }
+
       case 'pokegear/close':
         this._panel.dispose();
         return;
@@ -295,6 +322,7 @@ export class PokeGearPanel {
       activity,
       badges: { devBadges },
       party: { party, totalPartnerCandidates },
+      bag: pokedevState.buildBagView(context),
     };
   }
 

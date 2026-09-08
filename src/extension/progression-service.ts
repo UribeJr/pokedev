@@ -35,8 +35,10 @@ import {
   PokemonXpGrant,
 } from '../progression/xp-distribution';
 import { addTrainerXp } from '../trainer/trainer-profile';
+import { getItemDefinition } from '../common/items';
 import { promptToEvolvePartner } from './evolution-flow';
 import { friendshipTierDisplayName } from './friendship-labels';
+import { grantEarnedTrainerLevelStoneRewards } from './item-rewards';
 import {
   readPokemonProgress,
   readProgressionLog,
@@ -224,8 +226,35 @@ export class ProgressionService {
       showStatusMessage(
         vscode.l10n.t('Trainer reached Lv. {0}!', after.trainerLevel),
       );
+      await this._grantTrainerLevelStoneRewards(after.trainerLevel);
     }
     return granted;
+  }
+
+  /**
+   * Grants every Trainer-level milestone stone `level` newly qualifies for
+   * (see `item-rewards.ts`) and announces each one. Called from both places
+   * Trainer level can increase - the normal activity-event path above and
+   * `grantFlatTrainerXp` below - plus once at activation in `extension.ts`
+   * to catch an existing Trainer already above a milestone the moment this
+   * feature ships. Safe to call redundantly: `grantEarnedTrainerLevelStoneRewards`
+   * is itself idempotent per reward id.
+   */
+  private async _grantTrainerLevelStoneRewards(level: number): Promise<void> {
+    const granted = await grantEarnedTrainerLevelStoneRewards(
+      this._context,
+      level,
+    );
+    if (granted.length === 0) {
+      return;
+    }
+    for (const itemId of granted) {
+      const name = getItemDefinition(itemId)?.name ?? itemId;
+      showStatusMessage(
+        vscode.l10n.t('You received a {0}! Check your Bag in PokéGear.', name),
+      );
+    }
+    pokedevState.notify('inventory');
   }
 
   /**
@@ -255,6 +284,7 @@ export class ProgressionService {
       showStatusMessage(
         vscode.l10n.t('Trainer reached Lv. {0}!', after.trainerLevel),
       );
+      await this._grantTrainerLevelStoneRewards(after.trainerLevel);
     }
     this._notifyCard();
   }

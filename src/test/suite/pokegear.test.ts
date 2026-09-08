@@ -18,12 +18,13 @@ function event(
 }
 
 suite('PokeGear: tab catalog', () => {
-  test('has exactly the four V1 tabs, in the specified order', () => {
+  test('has exactly the five tabs, in the specified order', () => {
     assert.deepStrictEqual(POKEGEAR_TABS, [
       'status',
       'activity',
       'badges',
       'party',
+      'bag',
     ]);
   });
 

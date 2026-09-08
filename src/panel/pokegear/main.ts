@@ -14,6 +14,7 @@
  */
 import {
   PokeGearActivityEntry,
+  PokeGearBagItemView,
   PokeGearHostboundMessage,
   PokeGearLabels,
   PokeGearTab,
@@ -23,6 +24,13 @@ import {
 import { ExplorerPokemonEntry } from '../../trainer/explorer-types';
 import { hasDistinctNickname } from '../../trainer/pokemon-display-name';
 import { getFriendshipHearts } from '../../progression/friendship-rules';
+import { getItemDefinition } from '../../common/items';
+
+/** Falls back to the raw id for an item this build's catalog does not (or
+ * no longer) recognizes, rather than throwing on old log entries. */
+function itemDisplayName(itemId: string): string {
+  return getItemDefinition(itemId)?.name ?? itemId;
+}
 
 interface VscodeApi {
   postMessage(message: PokeGearHostboundMessage): void;
@@ -49,6 +57,27 @@ let lastModel: PokeGearViewModel | undefined;
  * never round-tripped to the host until the user actually acts on it. */
 let selectedBadgeIndex: number | undefined;
 let selectedPartyNickname: string | undefined;
+
+/**
+ * BAG selection state - a small client-side flow, mirroring
+ * `selectedPartyNickname` in shape but with two extra steps (USE, then pick
+ * a target, then confirm) before anything is ever sent to the host.
+ * `pokegear/useItem` is the only message this flow ever posts - everything
+ * before that (opening a stone's detail pane, clicking USE, picking a
+ * target) is pure re-render, exactly like the Party tab's own detail pane.
+ */
+let selectedBagItemId: string | undefined;
+/** Whether USE was clicked on `selectedBagItemId` - irrelevant/reset
+ * whenever `selectedBagItemId` changes. */
+let bagUseFlowActive = false;
+/** The target chosen from the eligible list, awaiting YES/NO - irrelevant/
+ * reset whenever `bagUseFlowActive` is cleared. */
+let bagConfirmNickname: string | undefined;
+
+function resetBagFlow(): void {
+  bagUseFlowActive = false;
+  bagConfirmNickname = undefined;
+}
 
 function post(message: PokeGearHostboundMessage): void {
   if (api) {
@@ -155,6 +184,7 @@ function renderTabs(model: PokeGearViewModel): HTMLElement {
     activity: labels.tabActivity,
     badges: labels.tabBadges,
     party: labels.tabParty,
+    bag: labels.tabBag,
   };
 
   const tabs = el('div', 'pg-tabs');
@@ -356,7 +386,10 @@ function activityEntryLabel(entry: PokeGearActivityEntry): string {
       const from =
         typeof meta.fromSpecies === 'string' ? meta.fromSpecies : '?';
       const to = typeof meta.toSpecies === 'string' ? meta.toSpecies : '?';
-      return `${from} evolved into ${to}`;
+      const viaItem = typeof meta.viaItem === 'string' ? meta.viaItem : '';
+      return viaItem
+        ? `${from} evolved into ${to} (${itemDisplayName(viaItem)})`
+        : `${from} evolved into ${to}`;
     }
     case 'work-batch':
     case 'active-coding':
@@ -601,6 +634,196 @@ function renderPartyTab(model: PokeGearViewModel): HTMLElement {
   return tab;
 }
 
+/* ---------------------------------- BAG ------------------------------------ */
+
+function renderBagItemRow(item: PokeGearBagItemView): HTMLElement {
+  const isSelected = selectedBagItemId === item.id;
+  const row = el(
+    'button',
+    isSelected ? 'pg-party-row pg-party-row-selected' : 'pg-party-row',
+  );
+  row.type = 'button';
+
+  const meta = el('div', 'pg-party-meta');
+  meta.appendChild(el('span', 'tc-party-name', item.name));
+  row.appendChild(meta);
+
+  row.appendChild(el('span', 'pg-bag-quantity', `×${item.quantity}`));
+
+  row.addEventListener('click', () => {
+    selectedBagItemId = isSelected ? undefined : item.id;
+    resetBagFlow();
+    rerender();
+  });
+
+  return row;
+}
+
+/** The eligible-target sub-list shown after clicking USE - visually the
+ * same row shape as the Party tab's own list, minus the Friendship meter
+ * (irrelevant to picking an evolution target). */
+function renderBagTargetRow(
+  target: { nickname: string; species: string; level: number },
+  labels: PokeGearLabels,
+): HTMLElement {
+  const isSelected = bagConfirmNickname === target.nickname;
+  const row = el(
+    'button',
+    isSelected ? 'pg-party-row pg-party-row-selected' : 'pg-party-row',
+  );
+  row.type = 'button';
+
+  const meta = el('div', 'pg-party-meta');
+  const nameLine = el('span', 'tc-party-name', target.species);
+  if (hasDistinctNickname(target.nickname, target.species)) {
+    nameLine.textContent = `${target.nickname} · ${target.species}`;
+  }
+  meta.appendChild(nameLine);
+  meta.appendChild(
+    el(
+      'span',
+      'tc-party-level',
+      `${labels.levelLabel} ${padStart(String(target.level), 2, '0')}`,
+    ),
+  );
+  row.appendChild(meta);
+
+  row.addEventListener('click', () => {
+    bagConfirmNickname = target.nickname;
+    rerender();
+  });
+
+  return row;
+}
+
+function renderBagTab(model: PokeGearViewModel): HTMLElement {
+  const labels = model.labels;
+  const tab = el('div', 'pg-tab-panel pg-bag');
+
+  const section = el('section', 'tc-section pg-status-block');
+  section.appendChild(sectionTitle(labels.tabBag));
+
+  const list = el('div', 'pg-party-list');
+  for (const item of model.bag.items) {
+    list.appendChild(renderBagItemRow(item));
+  }
+  section.appendChild(list);
+  tab.appendChild(section);
+
+  const selected = model.bag.items.find((i) => i.id === selectedBagItemId);
+  if (!selected) {
+    return tab;
+  }
+
+  const detail = el('section', 'tc-section pg-status-block pg-party-detail');
+  detail.appendChild(sectionTitle(selected.name));
+  detail.appendChild(el('p', 'tc-devbadges-hint', selected.description));
+
+  if (selected.quantity <= 0) {
+    tab.appendChild(detail);
+    return tab;
+  }
+
+  if (!bagUseFlowActive) {
+    const useButton = el('button', 'tc-button', labels.useButton);
+    useButton.type = 'button';
+    useButton.addEventListener('click', () => {
+      bagUseFlowActive = true;
+      rerender();
+    });
+    detail.appendChild(useButton);
+    tab.appendChild(detail);
+    return tab;
+  }
+
+  if (selected.eligibleTargets.length === 0) {
+    detail.appendChild(el('p', 'tc-devbadges-empty', labels.noEffectLabel));
+    const cancel = el('button', 'tc-button', labels.cancelButton);
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => {
+      resetBagFlow();
+      rerender();
+    });
+    detail.appendChild(cancel);
+    tab.appendChild(detail);
+    return tab;
+  }
+
+  if (!bagConfirmNickname) {
+    detail.appendChild(
+      el(
+        'p',
+        'tc-devbadges-hint',
+        formatTemplate(labels.useItemOnLabel, selected.name),
+      ),
+    );
+    const targetList = el('div', 'pg-party-list');
+    for (const target of selected.eligibleTargets) {
+      targetList.appendChild(renderBagTargetRow(target, labels));
+    }
+    detail.appendChild(targetList);
+    const cancel = el('button', 'tc-button', labels.cancelButton);
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => {
+      resetBagFlow();
+      rerender();
+    });
+    detail.appendChild(cancel);
+    tab.appendChild(detail);
+    return tab;
+  }
+
+  const confirmTarget = selected.eligibleTargets.find(
+    (t) => t.nickname === bagConfirmNickname,
+  );
+  detail.appendChild(
+    el(
+      'p',
+      'tc-devbadges-hint',
+      formatTemplate(
+        labels.confirmUseItemLabel,
+        selected.name,
+        confirmTarget
+          ? hasDistinctNickname(confirmTarget.nickname, confirmTarget.species)
+            ? confirmTarget.nickname
+            : confirmTarget.species
+          : bagConfirmNickname,
+      ),
+    ),
+  );
+  const actions = el('div', 'pg-bag-confirm-actions');
+  const yes = el('button', 'tc-button', labels.yesButton);
+  yes.type = 'button';
+  yes.addEventListener('click', () => {
+    const itemId = selected.id;
+    const nickname = bagConfirmNickname as string;
+    selectedBagItemId = undefined;
+    resetBagFlow();
+    post({ command: 'pokegear/useItem', itemId, nickname });
+    rerender();
+  });
+  actions.appendChild(yes);
+  const no = el('button', 'tc-button', labels.noButton);
+  no.type = 'button';
+  no.addEventListener('click', () => {
+    bagConfirmNickname = undefined;
+    rerender();
+  });
+  actions.appendChild(no);
+  detail.appendChild(actions);
+  tab.appendChild(detail);
+  return tab;
+}
+
+/** `"{0} on {1}"`-style substitution - PokeGear labels are plain strings (no
+ * `vscode.l10n` in the webview), so simple positional replacement is enough. */
+function formatTemplate(template: string, ...values: string[]): string {
+  return template.replace(/\{(\d+)\}/g, (match, index) => {
+    const value = values[Number(index)];
+    return value !== undefined ? value : match;
+  });
+}
+
 /* --------------------------------- wiring --------------------------------- */
 
 function setActiveTab(tab: PokeGearTab): void {
@@ -640,6 +863,7 @@ function render(model: PokeGearViewModel): void {
     activity: () => renderActivityTab(model),
     badges: () => renderBadgesTab(model),
     party: () => renderPartyTab(model),
+    bag: () => renderBagTab(model),
   };
 
   const content = panels[model.activeTab]();

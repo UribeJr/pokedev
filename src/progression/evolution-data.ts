@@ -8,13 +8,12 @@
  *
  * SCOPE OF THIS TABLE (V1)
  * ------------------------
- * Level-up, friendship, and friendship-plus-time-of-day evolutions for
- * Generations 1-4 only.
+ * Level-up, friendship, friendship-plus-time-of-day, and item (evolution
+ * stone) evolutions for Generations 1-4 only.
  *
  * Deliberately NOT encoded yet, because each needs a condition type that does
  * not exist:
  *
- *   - Evolution stones            (Vulpix, Gloom, Poliwhirl, ...)
  *   - Trade evolutions            (Kadabra, Machoke, Graveler, Haunter, ...)
  *   - Trade-with-held-item        (Onix, Seadra, Scyther, Porygon, ...)
  *   - Known-move                  (Aipom, Yanma, Bonsly, Mime Jr., Piloswine)
@@ -44,6 +43,7 @@
  *
  * Pure: no `vscode`, no DOM.
  */
+import { EvolutionStoneId } from '../common/items';
 import { PokemonType } from '../common/types';
 import { FRIENDSHIP_EVOLUTION_THRESHOLD } from './friendship-rules';
 import { TimeOfDay } from './time-of-day';
@@ -51,7 +51,8 @@ import { TimeOfDay } from './time-of-day';
 export type EvolutionCondition =
   | { type: 'level'; level: number }
   | { type: 'friendship'; minFriendship: number }
-  | { type: 'friendship-time'; minFriendship: number; time: TimeOfDay };
+  | { type: 'friendship-time'; minFriendship: number; time: TimeOfDay }
+  | { type: 'item'; itemId: EvolutionStoneId };
 
 export interface EvolutionRule {
   from: PokemonType;
@@ -85,6 +86,21 @@ function friendTime(
     to,
     condition: { type: 'friendship-time', minFriendship, time },
   };
+}
+
+/**
+ * Evolution-stone evolution. Never offered automatically - see
+ * `getAvailableEvolution`'s handling of `EvolutionEligibilityContext.
+ * selectedItemId` in `evolution-service.ts`: an item rule is only ever
+ * satisfied by an explicit "use this stone" action naming the exact
+ * `itemId`, never by a species' current level or friendship.
+ */
+function item(
+  from: string,
+  to: string,
+  itemId: EvolutionStoneId,
+): EvolutionRule {
+  return { from, to, condition: { type: 'item', itemId } };
 }
 
 export const EVOLUTION_RULES: readonly EvolutionRule[] = [
@@ -290,4 +306,31 @@ export const EVOLUTION_RULES: readonly EvolutionRule[] = [
   lvl('croagunk', 'toxicroak', 37),
   lvl('finneon', 'lumineon', 31),
   lvl('snover', 'abomasnow', 40),
+
+  /* --------------------------- Evolution stones ---------------------------- */
+  // Verified against Gen I-IV canon: none of these branches changed or
+  // gained a trade/held-item alternative before Generation 5 (Leafeon/
+  // Glaceon and Politoed's trade-item route are later/different species and
+  // are deliberately out of scope for V1 - see the module doc comment).
+  item('pikachu', 'raichu', 'thunder-stone'),
+  item('growlithe', 'arcanine', 'fire-stone'),
+  item('vulpix', 'ninetales', 'fire-stone'),
+  item('poliwhirl', 'poliwrath', 'water-stone'),
+  item('shellder', 'cloyster', 'water-stone'),
+  item('staryu', 'starmie', 'water-stone'),
+  item('gloom', 'vileplume', 'leaf-stone'),
+  item('weepinbell', 'victreebel', 'leaf-stone'),
+  item('clefairy', 'clefable', 'moon-stone'),
+  item('jigglypuff', 'wigglytuff', 'moon-stone'),
+  // Sun Stone was introduced in Generation 2, alongside Bellossom/Sunflora.
+  item('gloom', 'bellossom', 'sun-stone'),
+  item('sunkern', 'sunflora', 'sun-stone'),
+  // Eevee's three stone evolutions. These must never be ambiguous with its
+  // friendship-time rules above - `getAvailableEvolution` only ever
+  // considers item rules when a caller explicitly names `selectedItemId`,
+  // and only ever considers friendship/level rules when it does not, so the
+  // two families can never compete for the same evolution attempt.
+  item('eevee', 'vaporeon', 'water-stone'),
+  item('eevee', 'jolteon', 'thunder-stone'),
+  item('eevee', 'flareon', 'fire-stone'),
 ];

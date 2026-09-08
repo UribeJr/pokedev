@@ -23,6 +23,7 @@
  * and an evolution changes species but never the name.
  */
 import * as vscode from 'vscode';
+import { EvolutionStoneId } from '../common/items';
 import { POKEMON_DATA } from '../common/pokemon-data';
 import {
   EXTRA_POKEMON_KEY_COLORS,
@@ -42,6 +43,12 @@ import { getTimeOfDay } from '../progression/time-of-day';
 import { recordEvolution } from '../trainer/trainer-profile';
 import { TrainerProfile } from '../trainer/trainer-types';
 import { PROGRESSION_PARTNER_KEY } from '../common/storage-keys';
+import {
+  addItem,
+  consumeItem,
+  getItemQuantity,
+  readInventory,
+} from './inventory-storage';
 import {
   appendProgressionLogEvent,
   readPokemonProgress,
@@ -105,6 +112,19 @@ export interface EvolutionOutcome {
   toSpecies: PokemonType;
   color: PokemonColor;
   level: number;
+  /** Set when this evolution was resolved via an evolution-stone item rule -
+   * see `EvolvePokemonInstanceOptions.selectedItemId`. Absent for every other
+   * evolution method. */
+  viaItem?: string;
+}
+
+/** Options threading an explicit item selection through to the eligibility
+ * check `evolvePokemonInstance` re-runs internally - see
+ * `getAvailableEvolution`'s doc comment in `evolution-service.ts` for why an
+ * explicit item selection must be its own field rather than folded into the
+ * friendship/time-of-day context this function already builds. */
+export interface EvolvePokemonInstanceOptions {
+  selectedItemId?: string;
 }
 
 function readCollectionArrays(
@@ -212,6 +232,7 @@ async function repointPartnerIfNeeded(
 export async function evolvePokemonInstance(
   context: vscode.ExtensionContext,
   nickname: string,
+  options: EvolvePokemonInstanceOptions = {},
 ): Promise<EvolutionOutcome | undefined> {
   const identity = listPartnerCandidates(context).find(
     (candidate) => candidate.nickname === nickname,
@@ -231,7 +252,11 @@ export async function evolvePokemonInstance(
     identity.species,
     progress.level,
     identity.shiny,
-    { friendship: progress.friendship, timeOfDay: getTimeOfDay() },
+    {
+      friendship: progress.friendship,
+      timeOfDay: getTimeOfDay(),
+      selectedItemId: options.selectedItemId,
+    },
   );
   if (!availability.available || !availability.rule) {
     return undefined;
@@ -309,6 +334,7 @@ export async function evolvePokemonInstance(
       nickname: newIdentity,
       fromSpecies: identity.species,
       toSpecies: target,
+      ...(options.selectedItemId ? { viaItem: options.selectedItemId } : {}),
     },
   });
 
@@ -319,6 +345,7 @@ export async function evolvePokemonInstance(
     toSpecies: target,
     color: nextColor,
     level: progress.level,
+    ...(options.selectedItemId ? { viaItem: options.selectedItemId } : {}),
   };
 }
 
@@ -426,6 +453,118 @@ export async function applyEvolution(
   );
 
   return true;
+}
+
+/* ------------------------------------------------------------------ *
+ * Item (evolution stone) evolution
+ * ------------------------------------------------------------------ */
+
+export type UseEvolutionStoneOutcome =
+  | { kind: 'evolved'; outcome: EvolutionOutcome }
+  | { kind: 'no-item' }
+  | { kind: 'invalid-target' }
+  | { kind: 'no-rule' };
+
+/**
+ * Uses one evolution stone on one persistent Pokemon instance: the Bag's
+ * atomic "validate -> consume -> evolve" pipeline.
+ *
+ * Ordering is deliberate:
+ *
+ *   1. fail fast if the item is not actually available
+ *   2. validate the target Pokemon still exists (the collection can change
+ *      between the Bag rendering its eligible list and the user confirming)
+ *   3. re-validate the item's evolution rule against that Pokemon
+ *      specifically - never trust whatever the UI last rendered
+ *   4. consume exactly one stone, persisted BEFORE the evolution mutation -
+ *      the same "guard before grant" ordering `daily-challenges-service.ts`
+ *      uses for its own reward, so a crash between these two writes can only
+ *      under-deliver (stone gone, refunded below since the evolution never
+ *      happened), never double-consume
+ *   5. evolve the SAME Pokemon instance via `evolvePokemonInstance` - the one
+ *      function that ever writes a species change, exactly as every other
+ *      evolution method already uses
+ *
+ * If step 5 fails after the stone was already spent (only possible if the
+ * collection changed out from under this call between steps 3 and 5), the
+ * stone is refunded rather than left silently gone for nothing.
+ */
+export async function useEvolutionStoneOnPokemon(
+  context: vscode.ExtensionContext,
+  itemId: EvolutionStoneId,
+  nickname: string,
+): Promise<UseEvolutionStoneOutcome> {
+  if (getItemQuantity(readInventory(context), itemId) <= 0) {
+    return { kind: 'no-item' };
+  }
+
+  const identity = listPartnerCandidates(context).find(
+    (candidate) => candidate.nickname === nickname,
+  );
+  if (!identity) {
+    return { kind: 'invalid-target' };
+  }
+
+  const progress = readPokemonProgress(
+    context,
+    identity.nickname,
+    identity.species,
+    Date.now(),
+  );
+  const availability = getAvailableEvolution(
+    identity.species,
+    progress.level,
+    identity.shiny,
+    { selectedItemId: itemId },
+  );
+  if (!availability.available) {
+    return { kind: 'no-rule' };
+  }
+
+  // Captured BEFORE consuming/evolving: whether the panel (which only ever
+  // renders the partner) needs updating depends on who the partner WAS going
+  // into this call, not on where the partner pointer ends up afterward.
+  const wasPartner =
+    resolvePartnerIdentity(context)?.nickname === identity.nickname;
+
+  const consumed = await consumeItem(context, itemId, 1);
+  if (!consumed) {
+    // Lost a race with another concurrent use - see `consumeItem`'s own doc
+    // comment for why this should not be reachable in practice, but never
+    // trusted blindly.
+    return { kind: 'no-item' };
+  }
+
+  const outcome = await evolvePokemonInstance(context, identity.nickname, {
+    selectedItemId: itemId,
+  });
+  if (!outcome) {
+    await addItem(context, itemId, 1);
+    return { kind: 'no-rule' };
+  }
+
+  if (wasPartner) {
+    const config = POKEMON_DATA[outcome.toSpecies];
+    notifyPanel?.({
+      name: identity.nickname,
+      type: outcome.toSpecies,
+      color: outcome.color,
+      generation: `gen${config.generation}`,
+      originalSpriteSize: config.originalSpriteSize || 32,
+    });
+  }
+
+  pokedevState.notify('inventory');
+
+  void vscode.window.showInformationMessage(
+    vscode.l10n.t(
+      'Congratulations! Your {0} evolved into {1}!',
+      getLocalizedPokemonName(outcome.fromSpecies),
+      getLocalizedPokemonName(outcome.toSpecies),
+    ),
+  );
+
+  return { kind: 'evolved', outcome };
 }
 
 /**

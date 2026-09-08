@@ -279,6 +279,30 @@ body {
 	gap: 8px;
 }
 
+/* ---------------------------------- BAG ------------------------------------ */
+
+/*
+ * Reuses `.pg-party-row`/`.pg-party-row-selected`/`.pg-party-list`/
+ * `.pg-party-detail`/`.tc-button`/`.tc-devbadges-hint`/`.tc-devbadges-empty`
+ * wholesale (see the PARTY and BADGES sections above) - only the quantity
+ * readout and the YES/NO confirm row are genuinely new.
+ */
+.pg-bag-quantity {
+	flex: none;
+	/* Pushes the quantity to the row's trailing edge without giving
+	 * `.pg-party-meta` (shared with the PARTY tab) a flex-grow it does not
+	 * otherwise need. */
+	margin-left: auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+.pg-bag-confirm-actions {
+	display: flex;
+	gap: 8px;
+}
+
 /* ------------------------------ narrow width ------------------------------ */
 
 @media (max-width: 460px) {

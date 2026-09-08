@@ -183,6 +183,10 @@
                 {
                     "command": "pokedev.debug-add-friendship",
                     "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-give-stone",
+                    "when": "config.pokedev.enableDebugCommands"
                 }
             ]
         },
@@ -354,6 +358,11 @@
             {
                 "command": "pokedev.debug-add-friendship",
                 "title": "Add 50 Friendship to Partner",
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.debug-give-stone",
+                "title": "Give Evolution Stone...",
                 "category": "PokéDev Debug"
             },
             {
@@ -622,7 +631,7 @@
         "test:web": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
         "test:gifs": "node ./out/test/gifs.js",
         "prepare": "husky",
-        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/dev-badges.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js out/test/suite/daily-challenges.test.js out/test/suite/dev-actions.test.js out/test/suite/evolution-persistence.test.js out/test/suite/display-skins.test.js out/test/suite/friendship.test.js out/test/suite/environments.test.js out/test/suite/roaming.test.js out/test/suite/trainer-card-style.test.js out/test/suite/pokegear.test.js"
+        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/dev-badges.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js out/test/suite/daily-challenges.test.js out/test/suite/dev-actions.test.js out/test/suite/evolution-persistence.test.js out/test/suite/display-skins.test.js out/test/suite/friendship.test.js out/test/suite/environments.test.js out/test/suite/roaming.test.js out/test/suite/trainer-card-style.test.js out/test/suite/pokegear.test.js out/test/suite/evolution-stones.test.js"
     },
     "devDependencies": {
         "@rbarilani/remove-source-map-url-webpack-plugin": "^1.1.0",

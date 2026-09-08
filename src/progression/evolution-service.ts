@@ -60,18 +60,26 @@ export interface EvolutionAvailability {
 
 /**
  * What the live/host side already knows about the Pokemon that a
- * `friendship`/`friendship-time` rule needs to evaluate.
+ * `friendship`/`friendship-time`/`item` rule needs to evaluate.
  *
  * Optional and defaulted to "never eligible" (0 friendship, no time
- * context) rather than required, so every EXISTING call site that only ever
- * dealt with `level` rules keeps compiling and behaving identically -
- * `reconcileEntryEvolutions`'s internal call in particular only ever reaches
- * a `level` rule (see its own doc comment), so it is correct to never pass
- * this at all.
+ * context, no item selected) rather than required, so every EXISTING call
+ * site that only ever dealt with `level` rules keeps compiling and behaving
+ * identically - `reconcileEntryEvolutions`'s internal call in particular
+ * only ever reaches a `level` rule (see its own doc comment), so it is
+ * correct to never pass this at all.
+ *
+ * `selectedItemId` is deliberately its own field, not folded into
+ * `friendship`/`timeOfDay`: naming a specific item is an explicit user
+ * action ("use this stone on this Pokemon"), never an ambient fact about the
+ * Pokemon the way friendship or the clock are. See `getAvailableEvolution`'s
+ * doc comment for exactly how this keeps a species with BOTH an item rule
+ * and a friendship-time rule (Eevee) from ever resolving ambiguously.
  */
 export interface EvolutionEligibilityContext {
   friendship?: number;
   timeOfDay?: TimeOfDay;
+  selectedItemId?: string;
 }
 
 /**
@@ -114,6 +122,18 @@ export function getEvolutionRules(species: PokemonType): EvolutionRule[] {
  * reported is whichever rule was checked last; for every rule in this table
  * today, sibling rules for one species share the same `minFriendship`, so
  * the rejection reason is equivalent regardless of which one is reported.
+ *
+ * `context.selectedItemId` puts this function into a DIFFERENT mode
+ * entirely: when it is set, only that item's own rule is ever considered -
+ * every level/friendship/friendship-time rule the species also has is
+ * skipped without being evaluated at all, and the reverse is true when it is
+ * unset (item rules are always skipped). This is not a preference, it is a
+ * correctness requirement: Eevee has both stone rules and a friendship-time
+ * rule, and a real Trainer could easily have enough Friendship, at the right
+ * time of day, AND a stone in hand all at once. Using a stone must
+ * deterministically resolve to that stone's target - never silently fall
+ * through to whichever automatic condition also happens to be satisfied
+ * right now.
  */
 export function getAvailableEvolution(
   species: PokemonType,
@@ -126,16 +146,34 @@ export function getAvailableEvolution(
     return { available: false, reason: 'no-rule' };
   }
 
+  if (context.selectedItemId !== undefined) {
+    const itemRule = rules.find(
+      (rule) =>
+        rule.condition.type === 'item' &&
+        rule.condition.itemId === context.selectedItemId,
+    );
+    if (!itemRule) {
+      return { available: false, reason: 'no-rule' };
+    }
+    return evaluateRule(itemRule, level, shiny, context);
+  }
+
   let lastResult: EvolutionAvailability | undefined;
   for (const rule of rules) {
+    // Item rules require an explicit `selectedItemId` (handled above) and
+    // are never offered through the automatic level/friendship paths.
+    if (rule.condition.type === 'item') {
+      continue;
+    }
     const result = evaluateRule(rule, level, shiny, context);
     if (result.available) {
       return result;
     }
     lastResult = result;
   }
-  // Every rule was checked; `rules.length > 0` guarantees this is defined.
-  return lastResult as EvolutionAvailability;
+  // A species whose only rule(s) are item-based reaches here with
+  // `lastResult` still unset, since the loop above skips every one of them.
+  return lastResult ?? { available: false, reason: 'no-rule' };
 }
 
 function evaluateRule(
@@ -211,6 +249,13 @@ function evaluateRule(
         requiredTimeOfDay: rule.condition.time,
       };
     }
+
+    case 'item':
+      // The caller (`getAvailableEvolution`) only ever reaches this case
+      // after already confirming `context.selectedItemId` matches
+      // `rule.condition.itemId` - there is nothing further to check here
+      // beyond the shared target/shiny guard above.
+      return { available: true, rule };
   }
 }
 

@@ -146,13 +146,20 @@ shininess, its level, its XP, its whole history. Only the species and the sprite
 change. A shiny stays shiny; if an evolved form has no shiny sprite, PokéDev
 refuses the evolution rather than quietly turning your shiny into an ordinary one.
 
-**165 evolutions** are supported across Generations 1–4 — every starter line, and
-the form-specific ones this project actually ships sprites for (Nidoran, Shellos,
-Hippopotas, Combee, Gible).
+**165 straightforward level-up evolutions** are supported across Generations
+1–4 — every starter line, and the form-specific ones this project actually
+ships sprites for (Nidoran, Shellos, Hippopotas, Combee, Gible).
 
-Evolutions that need something PokéDev doesn't model yet — evolution stones,
-trading, friendship, time of day, held items, learned moves, and oddities like
-Wurmple and Tyrogue — are deliberately left out rather than guessed at.
+On top of those, some species evolve through **Friendship** instead of a
+level, and a handful of Generation 1–2 species evolve through
+**evolution stones** — a peculiar item you find in your Bag, used from
+PokéGear's BAG tab. Pikachu → Raichu (Thunder Stone), Eevee's three stone
+branches (Vaporeon/Jolteon/Flareon), and Gloom's Leaf Stone/Sun Stone split
+into Vileplume/Bellossom are among them.
+
+Evolutions that need something PokéDev doesn't model yet — trading, held
+items, learned moves, and oddities like Wurmple and Tyrogue — are
+deliberately left out rather than guessed at.
 
 ---
 

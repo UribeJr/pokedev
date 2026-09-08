@@ -33,7 +33,7 @@ import { ProgressionEventType } from '../progression/progression-types';
 /** Webview panel view type, also used as the serializer key. */
 export const POKEGEAR_VIEW_TYPE = 'pokedevPokeGear';
 
-export type PokeGearTab = 'status' | 'activity' | 'badges' | 'party';
+export type PokeGearTab = 'status' | 'activity' | 'badges' | 'party' | 'bag';
 
 /** In display order - also the order tab navigation cycles through. */
 export const POKEGEAR_TABS: readonly PokeGearTab[] = [
@@ -41,6 +41,7 @@ export const POKEGEAR_TABS: readonly PokeGearTab[] = [
   'activity',
   'badges',
   'party',
+  'bag',
 ];
 
 /* ------------------------------------------------------------------ *
@@ -142,6 +143,45 @@ export interface PokeGearPartyView {
 }
 
 /* ------------------------------------------------------------------ *
+ * BAG tab
+ * ------------------------------------------------------------------ */
+
+/** One collection entry an item's evolution rule currently accepts - exactly
+ * what `src/extension/evolution-flow.ts`'s `listEligiblePokemonForItem`
+ * computes, copied into the view model so the webview never has to ask. */
+export interface PokeGearBagEligibleTarget {
+  nickname: string;
+  /** Localized display species, matching every other PokeGear/Trainer Card
+   * surface. */
+  species: string;
+  level: number;
+}
+
+export interface PokeGearBagItemView {
+  id: string;
+  name: string;
+  description: string;
+  quantity: number;
+  /**
+   * Precomputed for EVERY item on every view-model push, not fetched on
+   * demand when a stone is selected - collections here are small, this stays
+   * cheap, and it avoids a second request/response message type on top of
+   * the one `pokegear/useItem` actually needs. Empty when nothing in the
+   * collection currently qualifies, which is exactly when the Bag's "USE"
+   * flow must show "IT WON'T HAVE ANY EFFECT." instead of a target list -
+   * see `panel/pokegear/main.ts`'s `renderBagTab`.
+   */
+  eligibleTargets: PokeGearBagEligibleTarget[];
+}
+
+export interface PokeGearBagView {
+  /** Every defined item (see `common/items.ts`), including ones at quantity
+   * 0 - shown rather than hidden, so a Trainer can always see what exists to
+   * earn, matching the Bag's own real in-game convention. */
+  items: PokeGearBagItemView[];
+}
+
+/* ------------------------------------------------------------------ *
  * Whole-panel view model
  * ------------------------------------------------------------------ */
 
@@ -151,6 +191,7 @@ export interface PokeGearLabels {
   tabActivity: string;
   tabParty: string;
   tabBadges: string;
+  tabBag: string;
   trainerLabel: string;
   levelLabel: string;
   xpLabel: string;
@@ -173,6 +214,17 @@ export interface PokeGearLabels {
   refreshButton: string;
   shinyLabel: string;
   unknownValue: string;
+  useButton: string;
+  cancelButton: string;
+  yesButton: string;
+  noButton: string;
+  /** "USE {0} ON:" - `{0}` is the item name. */
+  useItemOnLabel: string;
+  /** "USE {0} ON {1}?" - `{0}` item name, `{1}` target nickname/species. */
+  confirmUseItemLabel: string;
+  /** The authentic "no eligible target" message - see the Bag milestone's
+   * own spec for why this is shown verbatim rather than paraphrased. */
+  noEffectLabel: string;
 }
 
 export interface PokeGearViewModel {
@@ -186,6 +238,7 @@ export interface PokeGearViewModel {
   activity: PokeGearActivityView;
   badges: PokeGearBadgesView;
   party: PokeGearPartyView;
+  bag: PokeGearBagView;
 }
 
 /* ------------------------------------------------------------------ *
@@ -198,6 +251,7 @@ export type PokeGearHostboundMessage =
   | { command: 'pokegear/openTrainerCard' }
   | { command: 'pokegear/refreshDevBadges' }
   | { command: 'pokegear/selectPartner'; nickname: string }
+  | { command: 'pokegear/useItem'; itemId: string; nickname: string }
   | { command: 'pokegear/close' };
 
 export type PokeGearWebviewboundMessage = {

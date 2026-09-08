@@ -85,9 +85,28 @@ export const DAILY_CHALLENGES_TOTAL_COMPLETED_KEY =
 export const DEV_ACTION_COOLDOWNS_KEY = 'pokedev.devActions.cooldowns';
 
 /**
- * PokeGear's last-selected tab (`STATUS`/`ACTIVITY`/`BADGES`/`PARTY`) - a
- * cosmetic UI convenience only, restored on next open. `globalState`: which
+ * PokeGear's last-selected tab (`STATUS`/`ACTIVITY`/`BADGES`/`PARTY`/`BAG`) -
+ * a cosmetic UI convenience only, restored on next open. `globalState`: which
  * tab you left on is a preference about you, not about a project. See
  * `src/extension/pokegear-panel.ts`.
  */
 export const POKEGEAR_LAST_TAB_KEY = 'pokedev.pokeGear.lastTab';
+
+/**
+ * The Bag: item quantities (evolution stones in V1) - a genuinely new
+ * feature, like Daily Challenges, so it uses the current `pokedev.` prefix
+ * directly; there is no legacy install anywhere to orphan. `globalState`,
+ * not synced (see `EXTRA_POKEMON_KEY_TYPES`'s note above on the one
+ * `setKeysForSync` call site): the Bag is small enough, and new enough, that
+ * losing sync parity across machines is an acceptable V1 tradeoff, exactly
+ * like every other post-collection key in this file. See
+ * `src/extension/inventory-storage.ts`.
+ */
+export const INVENTORY_KEY = 'pokedev.inventory';
+
+/**
+ * IDs of one-time item rewards (currently only Trainer-level milestone
+ * stones) already claimed, so a reward already granted once is never granted
+ * again - see `src/extension/item-rewards.ts`.
+ */
+export const CLAIMED_ITEM_REWARDS_KEY = 'pokedev.claimedItemRewards';

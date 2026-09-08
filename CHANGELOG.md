@@ -2,6 +2,27 @@
 
 All notable changes to the PokeDev extension are documented in this file.
 
+## [Unreleased]
+
+- feat: Evolution Stones — Fire, Water, Thunder, Leaf, Moon and Sun Stone now
+  evolve the species that actually use them in Gen I-IV (Pikachu, Eevee's
+  three stone branches, Gloom's Leaf/Sun split, Growlithe, Vulpix, Poliwhirl,
+  Shellder, Staryu, Weepinbell, Clefairy, Jigglypuff, Sunkern). Never faked
+  with a level threshold — a stone is required exactly where the real games
+  require one, and using one always evolves the same persistent Pokémon
+  instance (nickname, XP, level, Friendship, Partner/Party status all
+  preserved) via the existing evolution pipeline
+- feat: a fifth PokéGear tab, **BAG** — shows every evolution stone and its
+  quantity, a description pane, and a USE flow that only ever offers Pokémon
+  the selected stone can actually evolve
+- feat: `PokéDev Debug: Give Evolution Stone...` debug command for QA
+- feat: Trainer Lv. 5/10/15/20/25/30 each grant one evolution stone the
+  first time you reach them — a simple, deterministic Bag acquisition path;
+  no random drops, no shop
+- chore: `pokedev.inventory` and `pokedev.claimedItemRewards` join the
+  existing set of post-collection storage keys that do not sync across
+  machines
+
 ## [6.2.0]
 
 - feat: Pokemon now visually react to real coding events — a meaningful save
