@@ -37,9 +37,8 @@ All notable changes to the PokeDev extension are documented in this file.
 
 ## [6.0.0]
 
-- **PokeDev** — this project is now a distinct fork of
-  [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) rather than a
-  patched copy of it. Published as `uribejr.pokedev`
+- **PokeDev** — the project takes its own identity. Published as
+  `uribejr.pokedev`
 - breaking: every command and setting moved from the `vscode-pokemon.` prefix
   to `pokedev.`, and the command palette category is now `PokeDev`. Existing
   settings and custom keybindings need updating to the new ids

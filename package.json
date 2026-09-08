@@ -3,6 +3,7 @@
     "displayName": "PokéDev",
     "description": "Pokémon that live in your editor, earn experience as you code, level up and evolve.",
     "version": "6.2.0",
+    "author": "UribeJr",
     "engines": {
         "vscode": "^1.73.0"
     },

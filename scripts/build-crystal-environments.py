@@ -56,9 +56,10 @@ category name: that is resolved by in-game engine logic
 dependent) rather than living in one static file for most of these
 tilesets. `PALETTE_RAMPS` below is this script's own GBC-style
 approximation of each category - built to look authentically
-limited-palette-GBC, not extracted from ROM color RAM. See the licensing
-note in `src/common/environments.ts` for why the OUTPUT stays local and
-gitignored rather than being bundled/published.
+limited-palette-GBC, not extracted from ROM color RAM. See the provenance
+note in `src/common/environments.ts` for why the OUTPUT stays gitignored
+(a generated build artifact, not an originally-authored file) even though
+it IS bundled into the packaged extension.
 
 FLIP / ATTRIBUTE HANDLING
 --------------------------

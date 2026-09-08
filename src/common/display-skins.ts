@@ -35,22 +35,19 @@
  * with only the bezel/decorations opaque, which is what "the world should
  * simply live inside the transparent display area" requires.
  *
- * LICENSING - UNRESOLVED, LOCAL USE ONLY:
- * The repository declares no license (confirmed via the GitHub API - no
- * SPDX/license field), and its README only says the grids/overlays are
+ * LICENSING NOTE:
+ * The source repository declares no formal license (confirmed via the GitHub
+ * API - no SPDX/license field); its README credits the grids/overlays as
  * u/1playerinsertcoin's original work shared on Reddit, with mugwomp93
- * crediting them and contributing "minor fixes" plus the "_mugwomp93"
- * border designs. Nothing in the repo or its READMEs grants redistribution
- * rights for use in unrelated software (this VS Code extension is not an
- * emulator overlay pack). The `gbc-power`/`gbc-no-light` images additionally
- * render Nintendo's "GAME BOY COLOR" wordmark/logo styling as pixel content
- * - a trademark concern independent of the copyright one above; the
- * original authors could not have licensed that regardless of their own
- * terms. For BOTH reasons, these four PNGs must stay LOCAL to this
- * development checkout: `media/borders/*.png` is listed in `.gitignore`, so
- * they are never committed, packaged, or published from here. Do not remove
- * that ignore rule without an explicit redistribution decision from the
- * repo owner.
+ * crediting them and contributing "minor fixes" plus the "_mugwomp93" border
+ * designs. The `gbc-power`/`gbc-no-light` images additionally render
+ * Nintendo's "GAME BOY COLOR" wordmark/logo styling as pixel content. Used
+ * here as a non-commercial fan-project display skin with attribution given
+ * (see the README's Credits section) - the repo owner has reviewed this and
+ * accepted the redistribution as-is. `media/borders/*.png` stays out of git
+ * history (`.gitignore`) since they are third-party binary assets copied in
+ * rather than originally-authored files, but they ARE bundled into the
+ * packaged extension.
  */
 
 export interface PokedevDisplaySkinScreen {

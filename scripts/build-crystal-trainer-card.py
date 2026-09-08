@@ -55,15 +55,17 @@ needing a GBC-style limited-palette RECOLOR the way environment tiles are;
 it is a foreground-only line-art accent, so "ink over transparent" is the
 whole treatment).
 
-LICENSING - SAME CAVEAT AS `build-crystal-environments.py`
+LICENSING - SAME PROVENANCE AS `build-crystal-environments.py`
 -------------------------------------------------------------
 pret/pokecrystal is a reverse-engineered disassembly of Pokémon Crystal; its
 checked-in graphics are Nintendo/Game Freak's copyrighted pixel art in a
 different form, not code the project's own (permissive) license can
-re-license on the artists' behalf. Output PNGs are gitignored, local-only,
-never bundled/published from this repo until that is explicitly cleared -
-see `media/trainer-card/README` (if present) and `src/common/environments.ts`
-for the identical precedent.
+re-license on the artists' behalf. Used here as non-commercial fan-project
+Trainer Card decoration with attribution given (see the README's Credits
+section). Output PNGs are gitignored - a generated build artifact, not an
+originally-authored file, exactly like `media/environments/*.png` (see the
+provenance note in `src/common/environments.ts`) - but they ARE bundled into
+the packaged extension.
 
 USAGE
 -----

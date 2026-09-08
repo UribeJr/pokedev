@@ -23,6 +23,10 @@ import {
  * regression that would only surface on a user's second machine.
  */
 
+// These three keys keep the `vscode-pokemon.` prefix deliberately - see the
+// identical note in `src/common/storage-keys.ts`. Renaming them would orphan
+// every existing user's saved trainer profile and cached GitHub/DEV data.
+
 /** Game-side progression. */
 export const TRAINER_PROFILE_KEY = 'vscode-pokemon.trainer.profile';
 

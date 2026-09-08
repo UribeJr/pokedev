@@ -12,19 +12,19 @@ media/trainer-card-bundle.js
 media/pokegear-bundle.js
 .DS_Store
 
-# Real GBC overlay PNGs vendored locally from mugwomp93/muOS_Customization for
-# development/testing only - the repo declares no license and two of these
-# files render Nintendo's "GAME BOY COLOR" trademark, so they must never be
-# committed/published until redistribution rights are explicitly cleared.
-# See the provenance/licensing note at the top of src/common/display-skins.ts.
+# Real GBC overlay PNGs vendored locally from mugwomp93/muOS_Customization.
+# Kept out of git history because they're third-party binary assets copied in
+# rather than originally-authored files - they ARE bundled into the packaged
+# extension, with attribution given in the README's Credits section.
+# See the provenance note at the top of src/common/display-skins.ts.
 media/borders/*.png
 
 # Environment scene PNGs built from pret/pokecrystal source tile art
-# (scripts/build-crystal-environments.py) - development/testing only. The
-# repo declares no license, and these tiles are Nintendo/Game Freak's
-# copyrighted pixel art in disassembled-but-unmodified form, not something
-# pokecrystal's own (absent) license could re-grant. See the provenance/
-# licensing note at the top of src/common/environments.ts.
+# (scripts/build-crystal-environments.py). Kept out of git history as a
+# generated build artifact rather than an originally-authored file - they ARE
+# bundled into the packaged extension, with attribution given in the
+# README's Credits section. See the provenance note at the top of
+# src/common/environments.ts.
 media/environments/*.png
 
 # Debug metatile atlases from build-crystal-environments.py --atlas-only -
@@ -32,8 +32,8 @@ media/environments/*.png
 /debug/
 
 # Trainer Card "Crystal" skin decoration PNGs built from pret/pokecrystal
-# source art (scripts/build-crystal-trainer-card.py) - development/testing
-# only, same licensing caveat as media/environments/*.png above. See the
-# provenance/licensing note at the top of that script.
+# source art (scripts/build-crystal-trainer-card.py) - same provenance as
+# media/environments/*.png above (generated build artifact, bundled into the
+# packaged extension). See the provenance note at the top of that script.
 media/trainer-card/*.png
 

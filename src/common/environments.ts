@@ -16,16 +16,15 @@
  * ASSET PROVENANCE / LICENSING - READ BEFORE TOUCHING `imageFile`
  * ---------------------------------------------------------------------------
  * See the header comment in `scripts/build-crystal-environments.py` for
- * exactly which pret/pokecrystal source files each scene is composed from,
- * and the licensing caveat that applies to all of them: pret/pokecrystal is
- * a reverse-engineered
- * disassembly of Pokémon Crystal, and its checked-in graphics are Nintendo/
- * Game Freak's copyrighted pixel art in a different form, not code the
- * project's own (permissive) license can re-license on the artists' behalf.
- * `media/environments/*.png` is therefore gitignored, exactly like
- * `media/borders/*.png` (see `display-skins.ts`'s own provenance note) -
- * local-only, for development/testing, never committed or published from
- * here until that is explicitly cleared.
+ * exactly which pret/pokecrystal source files each scene is composed from.
+ * pret/pokecrystal is a reverse-engineered disassembly of Pokémon Crystal,
+ * and its checked-in graphics are Nintendo/Game Freak's copyrighted pixel
+ * art in a different form - used here as non-commercial fan-project
+ * environment art with attribution given (see the README's Credits
+ * section). `media/environments/*.png` is gitignored, exactly like
+ * `media/borders/*.png` (see `display-skins.ts`'s own provenance note),
+ * since these are generated build outputs rather than originally-authored
+ * files - but they ARE bundled into the packaged extension.
  */
 
 export interface PokedevEnvironmentVariants {

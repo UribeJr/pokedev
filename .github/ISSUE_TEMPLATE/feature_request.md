@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for vscode-pokemon
+about: Suggest an idea for PokéDev
 title: ''
 labels: 'feature'
 assignees: ''

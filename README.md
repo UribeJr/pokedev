@@ -3,6 +3,11 @@
 # PokéDev
 
 ![icon](https://github.com/UribeJr/pokedev/raw/main/icon.png)
+
+![Version](https://img.shields.io/badge/version-6.2.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.73.0-007ACC?logo=visualstudiocode&logoColor=white)
+
 </div>
 
 <p align="center">
@@ -11,7 +16,7 @@
     <br>
     <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=bug_report.md&title=">Report a Bug</a>
     ·
-    <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=feature_request.md&title=">Request feature</a>
+    <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=feature_request.md&title=">Request a Feature</a>
 </p>
 
 <div align="center">
@@ -22,24 +27,25 @@
 </picture>
 </div>
 
-<div align="center">
+<br>
 
-A fork of [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon) by
-[jakobhoeg](https://github.com/jakobhoeg), extended with a GitHub Trainer Card
-and a full progression system.
+PokéDev turns your editor into a living Pokémon world. Pick a partner, watch it
+roam a real Game Boy-style overworld, and earn XP for the coding you were
+already doing — saving, committing, running builds and tests. Level up, evolve,
+grow Friendship with your partner, check a retro GitHub Trainer Card, clear
+three Daily Challenges, and track it all from a PokéGear panel that never
+leaves your sidebar.
 
-</div>
+## ✨ Features at a glance
 
-## 💖 Support
-
-If you enjoy this project, please consider supporting me.
-Manually creating the `.gif` files for each sprite takes a lot of time and effort.
-Your sponsorship helps me dedicate more energy to improve and expand the project.
-
-PokéDev builds on [jakobhoeg](https://github.com/jakobhoeg)'s work. If you find
-it useful, consider sponsoring the original author:
-
-[![GitHub Sponsor](https://img.shields.io/badge/Sponsor%20jakobhoeg-❤-blue?style=flat&logo=github)](https://github.com/sponsors/jakobhoeg)
+- 🗺️ **World & Roaming** — a full 2D overworld with selectable environments and Game Boy Color display borders, or classic floor-style roaming
+- 🪪 **GitHub Trainer Card** — a retro trainer profile built from your public GitHub data, in a PokéDev or Pokémon Crystal skin
+- 📟 **PokéGear** — one panel, four tabs: Status, Activity, Badges, Party
+- ✅ **Daily Challenges** — three fresh challenges every day, driven by real coding activity
+- 🏅 **Dev Badges** — your DEV Community badges, pulled into your Trainer Card and PokéGear
+- ⚙️ **Dev Actions** — successful builds, tests, lint and typecheck runs earn XP too
+- 📈 **Progression** — Trainer and Partner XP, levels, Generation 1–4 evolution, and a Friendship system that unlocks its own evolutions
+- 🧩 **Explorer sidebar views** — Trainer summary, Party and Daily Challenges without leaving your file tree
 
 ## Installation
 
@@ -49,7 +55,7 @@ Download the latest `.vsix` from
 [Releases](https://github.com/UribeJr/pokedev/releases), then either:
 
 ```bash
-code --install-extension pokedev-6.0.0.vsix
+code --install-extension pokedev-6.2.0.vsix
 ```
 
 (use `cursor --install-extension` for Cursor), **or** open the Extensions panel
@@ -74,7 +80,7 @@ Enjoy interacting with your favourite Pokémon!
 
 ## Keyboard Shortcuts
 
-VS Code Pokémon comes with default keyboard shortcuts to make managing your Pokémon quick and easy:
+PokéDev comes with default keyboard shortcuts to make managing your Pokémon quick and easy:
 
 ![Keybindings](https://github.com/UribeJr/pokedev/raw/main/keybindings.png)
 
@@ -90,7 +96,7 @@ You can customize these shortcuts to match your preferences:
 
 ## Changing settings
 
-Open the setting panel with Ctrl+, on Windows/Linux or Cmd(⌘)+, on MacOS. In the search bar, enter “vscode-pokemon" to see all available options.
+Open the setting panel with Ctrl+, on Windows/Linux or Cmd(⌘)+, on MacOS. In the search bar, enter "pokedev" to see all available options.
 
 Set the size and position of the extension.
 
@@ -172,22 +178,43 @@ Available options:
 
 **Note:** The language setting applies to all Pokémon names throughout the extension, including in the spawn selection menu, roll-call, and export features. Translations are available for all Pokémon from Generations 1, 2, 3, and 4.
 
+## World & Roaming
+
+PokéDev's world has three independent things you can mix and match: how your
+Pokémon move, what's behind them, and what frames the screen.
+
+- **Roaming style** (`pokedev.roamingStyle`, command `PokéDev: Change Roaming Style`)
+  — **Overworld** (default): Pokémon wander throughout the full 2D playable
+  screen. **Classic**: the original floor-style left/right pet movement.
+- **Environments** (`pokedev.environment`, command `PokéDev: Change Environment`)
+  — a background scene behind your Pokémon: **Johto Route**, **Ilex Forest**,
+  **Cave**, or **None** for the classic look.
+- **Display borders** (`pokedev.displaySkin`, command `PokéDev: Change Display Border`)
+  — an optional retro Game Boy Color bezel around the playable area:
+  **GBC Classic**, **GBC Minimal**, **GBC Power**, **GBC No Light**, or **None**.
+
+<img src="docs/screenshots/world-overworld.png" alt="World & Roaming — Overworld style with the Johto Route environment and a GBC display border (screenshot coming soon)" width="600">
+
 ## In the Explorer sidebar
 
-PokéDev adds two compact sections to your normal Explorer, alongside your files,
+PokéDev adds compact sections to your normal Explorer, alongside your files,
 Outline and Timeline:
 
 - **PokéDev Trainer** — your avatar, name, Trainer level, a live XP bar, coding
   time and your current partner, with small actions for `Open Full Card`,
   `Refresh` and `Change Partner`.
-- **Pokémon** — everything in your collection with each one's level, the
+- **Daily Challenges** — today's three challenges and their progress, without
+  opening PokéGear.
+- **Party** — everything in your collection with each one's level, the
   current partner clearly marked. Click any other Pokémon to make it your
   partner; the change takes effect everywhere immediately, and experience starts
   going to the new one.
 
 Both are ordinary collapsible Explorer sections — collapse them, reorder them,
 or hide them like any other view. They are additional surfaces: the full Trainer
-Card and the Pokémon walking along the bottom of your editor are unchanged.
+Card, PokéGear, and the Pokémon walking around your editor are unchanged.
+
+<img src="docs/screenshots/explorer-sidebar.png" alt="Explorer sidebar — PokéDev Trainer, Daily Challenges and Party sections (screenshot coming soon)" width="450">
 
 ## GitHub Trainer Card
 
@@ -234,10 +261,10 @@ when there isn't enough to go on). Your bio and location appear underneath.
 joined, plus `SPECIALTIES`: your top three languages with a relative bar and the
 number of repositories behind each.
 
-**`TRAINER RECORD`** — `Pokédex` caught count, `Badges` (0 / 8, shown as eight
-Poké Ball slots), `Shinies`, `Coding Time`, and your **Partner Pokémon**, with
-its animated sprite, its level and a small XP bar. If you have no Pokémon out,
-the slot reads `NO PARTNER SELECTED`.
+**`TRAINER RECORD`** — `Pokédex` caught count, DEV Badges earned, `Shinies`,
+`Coding Time`, and your **Partner Pokémon**, with its animated sprite, its level,
+Friendship, and a small XP bar. If you have no Pokémon out, the slot reads
+`NO PARTNER SELECTED`.
 
 ### Choosing your partner
 
@@ -252,9 +279,21 @@ existing users. If the Pokémon you chose is later released, the partner falls
 back to the first entry again.
 
 Switching partners neither transfers nor destroys progress. Each Pokémon's
-level and XP are stored against it individually, so the new partner picks up
-from its own level and the previous one stays exactly where it was, ready to
-resume if you switch back.
+level, XP and Friendship are stored against it individually, so the new
+partner picks up from its own level and the previous one stays exactly where
+it was, ready to resume if you switch back.
+
+### Card styles
+
+Choose between two visual styles with `pokedev.trainerCard.style` or the
+**`PokéDev: Change Trainer Card Style`** command — the underlying trainer data
+is identical either way:
+
+- **PokéDev** (default) — the original PokéDev Trainer Card design.
+- **Crystal** — a Pokémon Crystal-styled card: the game's window framing, GBC
+  palette, and pixel UI language.
+
+<img src="docs/screenshots/trainer-card-crystal.png" alt="GitHub Trainer Card — Crystal style (screenshot coming soon)" width="500">
 
 ### Hiding the DEV RECORD
 
@@ -266,15 +305,15 @@ GitHub data is still fetched and cached either way; only the display changes.
 
 Trainer level and XP are deliberately **not** derived from GitHub: GitHub is your
 trainer's identity, and the trainer profile tracks what you do in the editor.
-`Pokédex`, `Shinies` and `Badges` are not wired up yet and stay at zero.
+`Pokédex` and `Shinies` are not wired up yet and stay at zero.
 
 Stars and languages are worth one caveat: they are calculated from up to your
-100 most recently pushed non-fork repositories, and GitHub reports a single
-primary language per repository — so the language list is "repositories whose
-main language is X", not a byte-level breakdown. The `SPECIALTIES` bars are
-sized relative to your leading language rather than as percentages, precisely
-because repositories with no detected language are left out and a percentage
-would not add up.
+100 most recently pushed repositories that GitHub does not itself flag as a
+fork, and GitHub reports a single primary language per repository — so the
+language list is "repositories whose main language is X", not a byte-level
+breakdown. The `SPECIALTIES` bars are sized relative to your leading language
+rather than as percentages, precisely because repositories with no detected
+language are left out and a percentage would not add up.
 
 ### Refreshing
 
@@ -287,13 +326,75 @@ rather than going blank.
 
 ### Privacy
 
-- No authentication, no OAuth, no tokens — only public GitHub data is read.
-- The only setting stored is your username; cached profile data lives in the
+- No authentication, no OAuth, no tokens — only public GitHub and DEV Community data is read.
+- The only settings stored are your GitHub and DEV usernames; cached profile data lives in the
   extension's local storage and is **not** included in Settings Sync.
-- All GitHub requests are made by the extension, never by the card itself — the
-  card's content security policy has no network access at all.
+- All external requests are made by the extension, never by the card or panel itself — their
+  content security policy has no network access at all.
 - No telemetry, no third-party services.
 
+## PokéGear
+
+A dedicated panel that gathers your Trainer's whole picture into four tabs,
+cycled with the tab bar at the top. Open it with **`PokéDev: Open PokéGear`**.
+PokéGear always renders in the Crystal (GBC) skin, regardless of your Trainer
+Card style setting.
+
+- **Status** — trainer name, level and XP bar, coding time, your partner's
+  summary with its Friendship heart meter, today's Daily Challenge count, and
+  how many Dev Badges you've earned.
+- **Activity** — today's commit count and Dev Actions, your daily progress, and
+  a recent-activity feed built from the same progression log that powers XP —
+  high-frequency "ambient" events are filtered out so it stays readable.
+- **Badges** — a grid of your DEV Community badges with a detail view on click,
+  or a hint to connect your DEV profile from the Trainer Card if you haven't yet.
+- **Party** — your party Pokémon with level and Friendship, a detail panel per
+  Pokémon, and a **Make Partner** button.
+
+<img src="docs/screenshots/pokegear-status.png" alt="PokéGear — Status tab (screenshot coming soon)" width="500">
+<img src="docs/screenshots/pokegear-activity.png" alt="PokéGear — Activity tab (screenshot coming soon)" width="500">
+
+## Daily Challenges
+
+Three fresh challenges appear every day — regenerated once per calendar day,
+picked deterministically so everyone sees a fair, varied rotation rather than
+pure randomness. They're driven entirely by progression events you're already
+generating: saves, coding minutes, commits, and successful builds/tests/lint/
+typecheck runs. Nothing new is tracked just for challenges.
+
+Challenge families include things like Warm Up, File Hopper, Deep Work, Ship
+It, Partner Training, Level Up, Team Training, Underdog, Momentum, Green
+Light, Build Master, Test Trainer, Clean Check, and Ship Shape — each with its
+own escalating tiers. Completing one grants Trainer XP and a Friendship bump
+for your current partner, with a small toast to mark it.
+
+Check today's challenges from the Explorer's **Daily Challenges** section, or
+PokéGear's **Status**/**Activity** tabs.
+
+<img src="docs/screenshots/daily-challenges.png" alt="Daily Challenges — Explorer sidebar view (screenshot coming soon)" width="450">
+
+## Dev Badges
+
+If you have a [DEV Community](https://dev.to) profile, PokéDev can pull your
+public badges into your Trainer Card and PokéGear's **Badges** tab.
+
+1. Run **`PokéDev: Connect DEV Profile`** and enter your DEV username (or set
+   `pokedev.devUsername` directly)
+2. Your public profile is read — no authentication, no API key — and results
+   are cached for 12 hours
+3. Use **`PokéDev: Refresh DEV Badges`** to fetch immediately, or
+   **`PokéDev: Disconnect DEV Profile`** to stop showing them
+
+<img src="docs/screenshots/dev-badges.png" alt="PokéGear — Badges tab with connected DEV Community badges (screenshot coming soon)" width="500">
+
+## Dev Actions
+
+Successful VS Code tasks — builds, test runs, linting, type-checking — earn
+Trainer and partner XP too, on top of saves and commits. Detection is based
+only on a task's real, declared exit status via VS Code's own task API; no
+terminal output is ever read or scraped. Dev Actions also count toward Daily
+Challenges and give your partner a small Friendship bump. Turn them off with
+`pokedev.devActions.enabled`.
 
 ## Progression
 
@@ -372,17 +473,35 @@ Choosing **Not now** changes nothing and simply defers the question to the next
 level-up; you can also evolve at any time with **`PokéDev: Evolve
 Partner`**.
 
-Evolving preserves your Pokémon's **nickname, shininess, level, XP and
-history** — only its species and sprite change. A shiny stays shiny; if an
+Evolving preserves your Pokémon's **nickname, shininess, level, XP, Friendship
+and history** — only its species and sprite change. A shiny stays shiny; if an
 evolved form had no shiny sprite the evolution is refused rather than quietly
 turning your shiny into an ordinary one.
 
 Generation 1–4 straightforward level-up evolutions are supported (165 lines,
-including gender and regional forms such as Nidoran, Shellos and Hippopotas).
-Evolutions needing conditions this version does not model — stones, trades,
-friendship, time of day, held items, known moves, and special cases like Wurmple
-and Tyrogue — are deliberately left out rather than approximated. Generation 5
-is excluded because most of its species have no sprites in this repository yet.
+including gender and regional forms such as Nidoran, Shellos and Hippopotas),
+alongside Friendship-based evolutions once your partner reaches a high enough
+Friendship (see below). Evolutions needing conditions this version does not
+model — stones, trades, time of day, held items, known moves, and special
+cases like Wurmple and Tyrogue — are deliberately left out rather than
+approximated. Generation 5 is excluded because most of its species have no
+sprites in this repository yet.
+
+### Friendship
+
+Separate from XP and never decreasing, Friendship (0–255) tracks your bond
+with your current partner across five tiers — Wary, Friendly, Close, Very
+Close, and Best Friend — shown as hearts on the Trainer Card and PokéGear.
+
+It grows from the coding you're already doing: a small amount on every XP
+event your partner earns (more for a Dev Action), a bump on level-up, a bump
+for completing a Daily Challenge, and a trickle from sustained coding time
+with the same partner. At Best Friend, Friendship-based evolutions become
+eligible alongside the usual level-up ones.
+
+If `pokedev.progression.expShareEnabled` is on, non-partner party members earn
+a share of the partner's XP too — useful for keeping a bench Pokémon leveling
+without making it your active partner.
 
 ### Working style
 
@@ -411,28 +530,43 @@ is a deliberate act.
 
 `pokedev.progression.enabled` (default `true`) turns the whole system off.
 
-Progression is slow to test by design, so two debug commands can grant XP
-directly. They are hidden unless you set
+Progression is slow to test by design, so a few debug commands can grant XP or
+Friendship directly. They are hidden unless you set
 `pokedev.enableDebugCommands` to `true`:
 
 - **`PokéDev Debug: Add 100 Trainer XP`**
 - **`PokéDev Debug: Add 100 Partner XP`**
+- **`PokéDev Debug: Grant 5 Partner EXP`**
+- **`PokéDev Debug: Add 50 Friendship to Partner`**
 
 ### Where it is stored
 
-Trainer progression, Pokémon progression and the recent-activity log live in the
-extension's global storage, alongside your Pokémon collection. Rewarded commit
-hashes are stored per workspace, since a commit belongs to a repository. None of
-it is sent anywhere, and none of it joins Settings Sync.
+Trainer progression, Pokémon progression, Friendship, and the recent-activity
+log live in the extension's global storage, alongside your Pokémon collection.
+Rewarded commit hashes are stored per workspace, since a commit belongs to a
+repository. None of it is sent anywhere, and none of it joins Settings Sync.
 
 Pokémon progression is keyed by nickname, which is how this extension already
 identifies individual Pokémon — that is also why it survives an evolution
 untouched. Two Pokémon sharing a nickname share progression; only your partner
 earns XP, so at most one of them is ever writing.
 
-## Features
+## 📸 Adding Screenshots
 
-Extracting and creating .gif files involves quite a bit of tedious manual work, but I’ll aim to add Gen 5 when possible.
+A few sections above use placeholder images (they'll render as a broken-image
+icon with descriptive alt text until filled in). To complete them, capture
+each one below at a reasonable size, save it to `docs/screenshots/` under the
+exact filename shown, and it will appear automatically:
+
+| File | What to capture |
+| --- | --- |
+| `docs/screenshots/world-overworld.png` | The main PokéDev world view with `pokedev.roamingStyle` set to `overworld`, an environment picked (e.g. Johto Route via `PokéDev: Change Environment`), and a display border on (e.g. GBC Classic via `PokéDev: Change Display Border`) |
+| `docs/screenshots/explorer-sidebar.png` | The Explorer sidebar with the PokéDev Trainer, Daily Challenges, and Party sections expanded |
+| `docs/screenshots/trainer-card-crystal.png` | `PokéDev: Open Trainer Card` with `pokedev.trainerCard.style` set to `crystal` |
+| `docs/screenshots/pokegear-status.png` | `PokéDev: Open PokéGear`, on the **Status** tab |
+| `docs/screenshots/pokegear-activity.png` | PokéGear, on the **Activity** tab, ideally with a few real events in the feed |
+| `docs/screenshots/daily-challenges.png` | The Explorer's **Daily Challenges** section with today's challenges visible |
+| `docs/screenshots/dev-badges.png` | PokéGear's **Badges** tab with a DEV Community profile connected (`PokéDev: Connect DEV Profile`) |
 
 ## Credits
 
@@ -457,22 +591,32 @@ Extracting and creating .gif files involves quite a bit of tedious manual work, 
 - Only a small, curated selection is bundled here (one or two sprites per
   source game) — not that project's full multi-thousand-sprite archive
 
+### GBC Display Borders
+- The selectable Game Boy Color display borders are overlay art from
+  [mugwomp93/muOS_Customization](https://github.com/mugwomp93/muOS_Customization)'s
+  "Perfect GBC Overlays" pack, which itself credits u/1playerinsertcoin's
+  original work shared on Reddit
+- Two of the borders additionally render Nintendo's "GAME BOY COLOR"
+  wordmark styling as pixel content, used here as a non-commercial fan-project
+  display skin
+
+### Crystal Environments & Trainer Card
+- The selectable world environments and the Trainer Card's Crystal style are
+  built from tile and window-frame art in
+  [pret/pokecrystal](https://github.com/pret/pokecrystal), a reverse-engineered
+  disassembly of Pokémon Crystal
+- The underlying pixel art is Nintendo/Game Freak's, used here for
+  non-commercial fan-project purposes only
+
 ### Fonts
 - Silkscreen by Jason Kottke, licensed under the SIL Open Font License 1.1
   (see [media/Silkscreen-LICENSE.txt](media/Silkscreen-LICENSE.txt))
 
-### Acknowledgments
-
-PokéDev is a fork of [vscode-pokemon](https://github.com/jakobhoeg/vscode-pokemon)
-by [jakobhoeg](https://github.com/jakobhoeg), which is itself inspired by and
-based on [vscode-pets](https://github.com/tonybaloney/vscode-pets) by
-[tonybaloney](https://github.com/tonybaloney). The original code is released
-under CC0; this fork keeps that dedication and adds the GitHub Trainer Card and
-the progression system.
-
-- All sprites are property of their original creators
+### Notices
+- All sprites and game-derived pixel art are property of their original
+  creators
 - This repository is a fan project and is **not affiliated with, endorsed by, or
-  sponsored by** Nintendo, The Pokémon Company, or Game Freak
+  sponsored by** Nintendo, The Pokémon Company, Game Freak, or DEV Community
 - Pokémon and all related names and artwork are trademarks of Nintendo /
   Creatures Inc. / GAME FREAK inc. They are used here for non-commercial,
   personal, fan-project purposes only
