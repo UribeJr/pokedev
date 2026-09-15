@@ -1,0 +1,685 @@
+/*
+ * Compact PokeDev views for the Explorer sidebar.
+ *
+ * Palette and geometry come from media/pokedev-tokens.css, shared with the
+ * full Trainer Card, so the HUD reads as the same product rather than an
+ * unrelated widget.
+ *
+ * Designed for 220px-450px. Everything is fluid or wraps; nothing has a fixed
+ * width that could force horizontal scrolling. Deliberately does NOT reuse
+ * media/pokemon.css, which sets `body { overflow: hidden }` and would clip a
+ * list taller than the view.
+ */
+
+body {
+	margin: 0;
+	padding: 8px;
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	/* Transparent, so the view sits on the Explorer's own background in every
+	   theme rather than punching a differently-coloured hole in it. */
+	background: transparent;
+	overflow-x: hidden;
+}
+
+#root {
+	max-width: 100%;
+}
+
+/* ------------------------------- card face ------------------------------ */
+
+/*
+ * A smaller sibling of .tc-card: same bevel and gradient, less ornament. The
+ * fixed retro face is what makes it recognisably PokeDev in light themes too.
+ */
+.pd-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 8px;
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	box-shadow:
+		inset 0 1px 0 var(--tc-edge-light),
+		inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* -------------------------------- identity ------------------------------ */
+
+.pd-identity {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.pd-portrait {
+	flex: 0 0 auto;
+	width: 38px;
+	height: 38px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+.pd-avatar {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+/* A Trainer Sprite is pixel art, not a photo - contain + pixelated keeps it
+ * crisp and uncropped instead of the GitHub avatar's cover-fit treatment. */
+.pd-avatar-sprite {
+	object-fit: contain;
+	image-rendering: pixelated;
+}
+
+.pd-avatar-empty {
+	background:
+		var(--tc-ball) center / 60% no-repeat,
+		var(--tc-slot);
+	opacity: 0.45;
+}
+
+.pd-who {
+	display: flex;
+	flex-direction: column;
+	/* min-width:0 is what actually lets the ellipsis work inside a flex row. */
+	min-width: 0;
+	gap: 1px;
+}
+
+.pd-name,
+.pd-login {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 100%;
+}
+
+.pd-name {
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--tc-ink);
+}
+
+.pd-login {
+	font-size: 10px;
+	color: var(--tc-ink-dim);
+}
+
+.pd-level {
+	margin-top: 2px;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+}
+
+/* --------------------------------- rows --------------------------------- */
+
+.pd-row-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pd-row-spaced {
+	margin-top: 4px;
+}
+
+.pd-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
+.pd-label-section {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--tc-rule);
+}
+
+.pd-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	color: var(--tc-ink);
+	white-space: nowrap;
+}
+
+/* -------------------------------- xp bars ------------------------------- */
+
+.pd-xp-track {
+	position: relative;
+	height: 10px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 3px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.pd-xp-fill,
+.pd-mini-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	transition: width 500ms ease-out;
+}
+
+/* The row-level bar: thinner, so it never competes with the trainer gauge. */
+.pd-mini-track {
+	position: relative;
+	height: 4px;
+	margin-top: 3px;
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+/* -------------------------------- partner ------------------------------- */
+
+.pd-partner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.pd-partner-sprite,
+.pd-item-sprite {
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+	/* Sprites are small pixel gifs; smoothing turns them to mush. */
+	image-rendering: pixelated;
+}
+
+.pd-sprite-missing {
+	background: var(--tc-ball) center / contain no-repeat;
+	opacity: 0.35;
+}
+
+.pd-partner-meta {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.pd-partner-name,
+.pd-item-name {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+}
+
+.pd-partner-species,
+.pd-item-species {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.pd-partner-level,
+.pd-item-level {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--tc-accent);
+	white-space: nowrap;
+}
+
+.pd-shiny {
+	flex: 0 0 auto;
+	font-size: 9px;
+	color: var(--tc-accent);
+}
+
+/* ----------------------------- exp share toggle -------------------------- */
+
+.pd-exp-share {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	margin-bottom: 6px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid var(--tc-rule);
+}
+
+/* Same game-menu treatment as .pd-action, plus an ON state distinguishable
+   without relying on colour alone (the label itself flips ON/OFF). */
+.pd-toggle {
+	flex: 0 0 auto;
+	padding: 2px 8px;
+	border: 1px solid var(--tc-edge-light);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink-dim);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.pd-toggle:hover {
+	border-color: var(--tc-accent);
+}
+
+.pd-toggle:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.pd-toggle-on {
+	background: var(--tc-accent);
+	border-color: var(--tc-accent);
+	color: #21160a;
+}
+
+/* ------------------------------- team list ------------------------------ */
+
+.pd-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.pd-item {
+	min-width: 0;
+}
+
+/*
+ * A real <button> so keyboard and screen readers get selection for free,
+ * stripped back to look like a row rather than a control.
+ */
+.pd-item-button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	padding: 4px 6px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.pd-item-button:hover:not(:disabled) {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.pd-item-button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.pd-item-button:disabled {
+	cursor: default;
+}
+
+/* The current partner: accented border plus a badge, so it does not rely on
+   colour alone. */
+.pd-item-partner .pd-item-button {
+	border-color: var(--tc-accent);
+	background: var(--vscode-list-inactiveSelectionBackground);
+}
+
+.pd-item-meta {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+/* Inside the list the species uses theme colours, not the card palette — the
+   list sits on the sidebar background, not on a card face. */
+.pd-item-species {
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+}
+
+.pd-item-detail {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pd-item-level {
+	color: var(--vscode-descriptionForeground);
+}
+
+.pd-item-sub {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.pd-hearts {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: 10px;
+	letter-spacing: 1px;
+	color: #ff5f7e;
+	white-space: nowrap;
+}
+
+.pd-badge {
+	flex: 0 0 auto;
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	color: #21160a;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+}
+
+/*
+ * The row's configured Poké Ball - display-only (see panel/explorer/main.ts:
+ * no click handler, no selector; PokéGear's PARTY tab is the only place this
+ * is ever changed). Sits on the row's own right edge, ahead of the PARTNER
+ * badge, at `.pd-item-button`'s `align-items: center` - a secondary detail,
+ * never competing with the Pokemon sprite or the name/level/XP/friendship
+ * column. Always full-color, in every PokéDev/Crystal Day/Crystal Night
+ * skin - this sprite is never token-driven. No backing plate: the sprite's
+ * own art (it ships with a dark outline) already reads clearly on its own.
+ */
+.pd-item-ball {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+/* -------------------------------- actions ------------------------------- */
+
+.pd-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 8px;
+	padding-top: 6px;
+	border-top: 1px solid var(--tc-rule);
+}
+
+/* Small game-menu utilities, deliberately not calls to action. */
+.pd-action {
+	flex: 0 1 auto;
+	padding: 3px 7px;
+	border: 1px solid var(--tc-edge-light);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.pd-action:hover {
+	background: var(--tc-slot);
+	border-color: var(--tc-accent);
+}
+
+.pd-action:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.pd-empty {
+	margin: 4px 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+/* An empty team list sits on the sidebar, not on a card. */
+#root > .pd-empty {
+	color: var(--vscode-descriptionForeground);
+}
+
+/* ---------------------------- daily challenges --------------------------- */
+
+.pd-challenge-list {
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* A smaller, borderless sibling of .pd-card - three of these stack in one
+   sidebar, so each row stays a few lines tall rather than a full card. */
+.pd-challenge {
+	padding: 6px 8px;
+	border: 1px solid var(--tc-rule);
+	border-radius: 6px;
+	background: var(--vscode-sideBarSectionHeader-background, transparent);
+}
+
+.pd-challenge-complete {
+	border-color: var(--tc-accent);
+}
+
+.pd-challenge-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pd-challenge-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.5px;
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+}
+
+.pd-challenge-complete .pd-challenge-title {
+	color: var(--tc-accent);
+}
+
+.pd-challenge-count {
+	flex: 0 0 auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+}
+
+.pd-challenge-desc {
+	margin-top: 3px;
+	font-size: 10px;
+	line-height: 1.3;
+	color: var(--vscode-descriptionForeground);
+}
+
+.pd-challenge .pd-mini-track {
+	margin-top: 5px;
+}
+
+.pd-challenge-reward {
+	margin-top: 4px;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+}
+
+.pd-challenge-footer {
+	margin: 8px 0 0;
+	padding-top: 6px;
+	border-top: 1px solid var(--tc-rule);
+	font-size: 9px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* -------------------------------- crystal skin ---------------------------- */
+
+/*
+ * The compact Explorer Trainer HUD's "Crystal" skin - the SAME
+ * `pokedev.trainerCard.style` preference the full landscape card reads
+ * (`renderTrainer` in panel/explorer/main.ts applies `skinClassName(model)`
+ * here exactly like `cardClassName` does for `.tc-card`), never a separate
+ * "Explorer style". This is a compact Crystal STATUS card, not a shrunken
+ * copy of the full card - see media/trainer-card.css's own `.tc-skin-crystal`
+ * block for the full card's structural rules; only the color/token palette
+ * is shared between them (media/pokedev-tokens.css's bare `.tc-skin-crystal`
+ * block) - everything below is specific to this surface's own `.pd-*`
+ * markup.
+ */
+/*
+ * No corner-spiral accent here (unlike the full card): this card is dense
+ * enough at its default 220-280px width that an ornament in any corner
+ * risks overlapping the portrait/name or the actions row - "if already
+ * available" was explicitly conditional, and restraint wins. The double-
+ * ruled border alone already reads clearly as the same Crystal skin.
+ */
+.tc-skin-crystal.pd-card {
+	border-radius: 0;
+	/* Same flat black double-ruled window edge as the full card, replacing
+	 * the base's soft bevel - see .tc-card.tc-skin-crystal in
+	 * trainer-card.css for the identical technique. */
+	box-shadow:
+		0 0 0 1px var(--tc-face-top),
+		0 0 0 3px var(--tc-face-edge);
+}
+
+.tc-skin-crystal .pd-portrait,
+.tc-skin-crystal .pd-xp-track,
+.tc-skin-crystal .pd-mini-track {
+	border-radius: 0;
+}
+
+.tc-skin-crystal .pd-xp-track {
+	box-shadow: none;
+}
+
+/* Square, high-contrast "menu row" buttons - inverted colours on hover/
+ * focus instead of a modern hover animation, echoing how a Game Boy menu
+ * highlights the selected row. */
+.tc-skin-crystal .pd-action {
+	border-radius: 0;
+	border-color: var(--tc-face-edge);
+}
+
+.tc-skin-crystal .pd-action:hover,
+.tc-skin-crystal .pd-action:focus-visible {
+	background: var(--tc-accent);
+	border-color: var(--tc-accent);
+	color: var(--tc-face-top);
+}
+
+/* ------------------------------ narrow width ---------------------------- */
+
+/*
+ * The ball is the lowest-priority detail on a Party row (Pokemon, name/
+ * level, XP/friendship, and Partner state all outrank it - see
+ * panel/explorer/main.ts's own comment on why it renders last). It is the
+ * first thing to go as the sidebar narrows, well before the 240px breakpoint
+ * below touches friendship hearts or the species sub-line.
+ */
+@media (max-width: 280px) {
+	.pd-item-ball {
+		display: none;
+	}
+}
+
+/*
+ * Around 240px the avatar row and the name stop fitting side by side. Stack
+ * identity, drop the secondary species line, and shrink the portrait — but
+ * never shrink the text, which is already at its readable floor.
+ */
+@media (max-width: 240px) {
+	.pd-identity {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+
+	.pd-portrait {
+		width: 30px;
+		height: 30px;
+	}
+
+	.pd-item-sub,
+	.pd-hearts {
+		display: none;
+	}
+
+	.pd-actions {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.pd-action {
+		text-align: center;
+	}
+}
+
+/* ---------------------------- motion / a11y ----------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.pd-xp-fill,
+	.pd-mini-fill {
+		transition: none;
+	}
+}
+
+@media (forced-colors: active) {
+	.pd-card,
+	.pd-item-partner .pd-item-button,
+	.pd-action,
+	.pd-toggle {
+		border-color: CanvasText;
+	}
+
+	.pd-xp-fill,
+	.pd-mini-fill,
+	.pd-badge,
+	.pd-toggle-on {
+		background: Highlight;
+	}
+}

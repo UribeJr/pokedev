@@ -1,0 +1,182 @@
+/**
+ * View models for the compact Explorer surfaces.
+ *
+ * Imported by BOTH the extension host and the Explorer webview bundle, so this
+ * module must stay free of `vscode` imports and DOM references — the same
+ * constraint `trainer-types.ts` documents.
+ *
+ * These are deliberately NOT the full `TrainerCardViewModel`. The Explorer
+ * sidebar is a glanceable HUD at 220px, not a shrunken Trainer Card: sending
+ * the whole card model would invite the webview to render fields it has no
+ * room for, and would couple a compact view to every future card change.
+ */
+
+import { DailyChallengesViewModel } from '../challenges/daily-challenges-view-types';
+import { FriendshipTierId } from '../progression/friendship-rules';
+import { TrainerCardStyle } from '../common/trainer-card-style';
+import { ResolvedCrystalPalette } from '../common/crystal-palette';
+
+/** Explorer view ids, also used as the `when` clauses' view names. */
+export const TRAINER_EXPLORER_VIEW_TYPE = 'pokedev.trainerView';
+export const POKEMON_EXPLORER_VIEW_TYPE = 'pokedev.pokemonView';
+export const DAILY_CHALLENGES_EXPLORER_VIEW_TYPE =
+  'pokedev.dailyChallengesView';
+
+/* ------------------------------------------------------------------ *
+ * Trainer HUD
+ * ------------------------------------------------------------------ */
+
+export interface ExplorerPartnerView {
+  /** Localized species name. */
+  species: string;
+  /** Empty when the Pokemon has never been renamed off its species. */
+  nickname: string;
+  spriteUri: string;
+  shiny: boolean;
+  level: number;
+  currentXp: number;
+  /** 0 at the level cap, where there is nothing left to fill toward. */
+  xpForNextLevel: number;
+  /** 0-255, see `progression/friendship-rules.ts`. */
+  friendship: number;
+}
+
+export interface ExplorerTrainerViewModel {
+  /**
+   * Whether a GitHub account has been connected yet. When false the view shows
+   * a single prompt rather than an identity block full of blanks.
+   */
+  connected: boolean;
+  displayName: string;
+  login: string;
+  /** Empty when GitHub has never been fetched; the view falls back to a ball. */
+  avatarUrl: string;
+  /**
+   * The resolved, webview-safe image for the selected Trainer Sprite - the
+   * same canonical selection the full Trainer Card uses - or `undefined`
+   * when none is chosen, in which case the view falls back to `avatarUrl`.
+   */
+  trainerSpriteUri?: string;
+  trainerLevel: number;
+  /** Experience within the current level. */
+  trainerXp: number;
+  /** Experience required to advance; 0 at the level cap. */
+  xpForNextLevel: number;
+  totalCodingTimeMs: number;
+  /**
+   * Dev Badges earned, out of `DEV_BADGE_SLOTS`. Read from the cached DEV
+   * badge data only - see `PokedevState.buildTrainerView` - so this compact
+   * HUD never triggers its own fetch.
+   */
+  devBadgesEarned: number;
+  partner?: ExplorerPartnerView;
+  labels: ExplorerLabels;
+  /**
+   * The same `pokedev.trainerCard.style` preference the full Trainer Card
+   * reads - ONE persisted setting drives both surfaces, never a separate
+   * "Explorer style". Presentation only - see
+   * `src/common/trainer-card-style.ts`.
+   */
+  style: TrainerCardStyle;
+  /** The same resolved Crystal palette every Crystal-capable surface
+   * renders - see `TrainerCardViewModel.crystalPalette`'s identical doc
+   * comment in `trainer-types.ts`. */
+  crystalPalette: ResolvedCrystalPalette;
+}
+
+/* ------------------------------------------------------------------ *
+ * Team list
+ * ------------------------------------------------------------------ */
+
+export interface ExplorerPokemonEntry {
+  /** The instance identity: nickname is how this extension keys a Pokemon. */
+  nickname: string;
+  species: string;
+  spriteUri: string;
+  shiny: boolean;
+  level: number;
+  currentXp: number;
+  xpForNextLevel: number;
+  isPartner: boolean;
+  /** 0-255, see `progression/friendship-rules.ts`. */
+  friendship: number;
+  /** Cosmetic Poké Ball id (see `common/pokeballs.ts`) and its resolved,
+   * webview-safe sprite - always present, since `pokeballId` normalizes to
+   * the standard Poké Ball on read and `pokeballSpriteUri` is resolved from
+   * that same normalized id, never from unvalidated storage. */
+  pokeballId: string;
+  pokeballSpriteUri: string;
+}
+
+export interface ExplorerPokemonViewModel {
+  pokemon: ExplorerPokemonEntry[];
+  /** Whether non-partner active party Pokemon additionally earn shared XP. */
+  expShareEnabled: boolean;
+  labels: ExplorerLabels;
+}
+
+/* ------------------------------------------------------------------ *
+ * Labels
+ * ------------------------------------------------------------------ */
+
+/**
+ * Every string the Explorer webviews render.
+ *
+ * The webview has no access to `vscode.l10n`, so labels are localized on the
+ * host and shipped inside the view model — the same approach the full card
+ * uses.
+ */
+export interface ExplorerLabels {
+  trainerWord: string;
+  levelLabel: string;
+  xpLabel: string;
+  codingTimeLabel: string;
+  /** Compact "BADGES" row label, shown as e.g. "BADGES 3/8". */
+  devBadgesLabel: string;
+  partnerLabel: string;
+  noPartnerLabel: string;
+  noPokemonLabel: string;
+  connectPrompt: string;
+  connectButton: string;
+  openFullCardButton: string;
+  refreshButton: string;
+  changePartnerButton: string;
+  /** Tooltip on a non-partner row explaining what selecting it does. */
+  makePartnerHint: string;
+  partnerBadge: string;
+  shinyLabel: string;
+  /** "EXP SHARE" - the compact toggle heading above the team list. */
+  expShareLabel: string;
+  expShareOnLabel: string;
+  expShareOffLabel: string;
+  /** Tooltip on the EXP Share toggle. */
+  expShareTooltip: string;
+  /** Localized Friendship tier names, keyed by tier id - used as the
+   * accessible label/tooltip on the heart meter. Shares its five strings
+   * with the in-world tier-up toast (`friendshipTierDisplayName` in
+   * `progression-service.ts`) so the wording never drifts between them. */
+  friendshipTierLabels: Record<FriendshipTierId, string>;
+}
+
+/* ------------------------------------------------------------------ *
+ * Message protocol
+ * ------------------------------------------------------------------ */
+
+export type ExplorerHostboundMessage =
+  | { command: 'explorer/ready' }
+  | { command: 'explorer/openFullCard' }
+  | { command: 'explorer/refresh' }
+  | { command: 'explorer/changePartner' }
+  | { command: 'explorer/connect' }
+  /** Sent when a row in the team list is chosen. */
+  | { command: 'explorer/selectPartner'; nickname: string }
+  /** Sent when the EXP Share toggle in the team list is activated. */
+  | { command: 'explorer/toggleExpShare' };
+
+export type ExplorerWebviewboundMessage =
+  | { command: 'explorer/trainerState'; payload: ExplorerTrainerViewModel }
+  | { command: 'explorer/pokemonState'; payload: ExplorerPokemonViewModel }
+  | {
+      command: 'explorer/dailyChallengesState';
+      payload: DailyChallengesViewModel;
+    };

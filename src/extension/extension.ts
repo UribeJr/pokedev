@@ -1,0 +1,2729 @@
+import * as vscode from 'vscode';
+import { ColorThemeKind } from 'vscode';
+import * as localize from '../common/localize';
+import { randomName } from '../common/names';
+import {
+  getAllPokemon,
+  getDefaultPokemon as getDefaultPokemonType,
+  getPokemonByGeneration,
+  getRandomPokemonConfig,
+  getRandomPokemonConfigFrom,
+  POKEMON_DATA,
+} from '../common/pokemon-data';
+import {
+  ALL_COLORS,
+  ALL_SCALES,
+  ALL_THEMES,
+  ExtPosition,
+  PokemonColor,
+  PokemonGeneration,
+  PokemonSize,
+  PokemonType,
+  Theme,
+  WebviewMessage,
+} from '../common/types';
+import { availableColors, normalizeColor } from '../panel/pokemon-collection';
+import {
+  EXTRA_POKEMON_KEY_COLORS,
+  EXTRA_POKEMON_KEY_NAMES,
+  EXTRA_POKEMON_KEY_TYPES,
+} from '../common/storage-keys';
+import {
+  isDevRecordVisible,
+  promptForDevUsername,
+  promptForGithubUsername,
+  setConfiguredDevUsername,
+  setConfiguredGithubUsername,
+  TrainerCardPanel,
+} from './trainer-card-panel';
+import { getConfiguredTrainerCardStyle } from './trainer-card-style-config';
+import { getConfiguredCrystalPalette } from './crystal-palette-config';
+import { PokeGearPanel } from './pokegear-panel';
+import { clearDevCache, readTrainerProfile } from './trainer-storage';
+import { grantEarnedTrainerLevelStoneRewards } from './item-rewards';
+import { addItem } from './inventory-storage';
+import { ITEM_DEFINITIONS } from '../common/items';
+import { getNonce } from './webview-util';
+import { ActivityTracker } from './activity-tracker';
+import {
+  runShopifyAppBuild,
+  runShopifyAppDeploy,
+  runShopifyThemeCheck,
+  runShopifyThemePush,
+  showShopifyActionsQuickPick,
+} from './shopify-cli';
+import {
+  DailyChallengesExplorerViewProvider,
+  PokemonExplorerViewProvider,
+  TrainerExplorerViewProvider,
+} from './explorer-views';
+import { DailyChallengesService } from './daily-challenges-service';
+import { pokedevState } from './pokedev-state';
+import { pickPartnerPokemon } from './partner-picker';
+import { GitActivityTracker } from './git-activity';
+import { reactionHub } from './reaction-service';
+import { toastHub } from './toast-service';
+import {
+  evolvePartnerCommand,
+  reconcileStaleEvolutions,
+  relinkOrphanedProgression,
+  setEvolutionPanelNotifier,
+} from './evolution-flow';
+import {
+  createProgressionEvent,
+  ProgressionService,
+  showStatusMessage,
+} from './progression-service';
+import { resolvePartnerIdentity } from './trainer-partner';
+import {
+  DEFAULT_DISPLAY_SKIN_ID,
+  DISPLAY_SKINS,
+  isValidDisplaySkinId,
+} from '../common/display-skins';
+import {
+  DEFAULT_ENVIRONMENT_ID,
+  ENVIRONMENTS,
+  isValidEnvironmentId,
+} from '../common/environments';
+import {
+  DEFAULT_ROAMING_STYLE,
+  isValidRoamingStyle,
+  ROAMING_STYLES,
+} from '../common/roaming-style';
+import { TRAINER_CARD_STYLES } from '../common/trainer-card-style';
+import { CRYSTAL_PALETTES } from '../common/crystal-palette';
+
+const DEFAULT_POKEMON_SCALE = PokemonSize.medium;
+const DEFAULT_COLOR = PokemonColor.default;
+const DEFAULT_POKEMON_TYPE = getDefaultPokemonType();
+const DEFAULT_POSITION = ExtPosition.panel;
+const DEFAULT_THEME = Theme.none;
+
+class PokemonQuickPickItem implements vscode.QuickPickItem {
+  constructor(
+    public readonly name_: string,
+    public readonly type: string,
+    public readonly color: string,
+  ) {
+    this.name = name_;
+    this.label = name_;
+    this.description = `${color} ${type}`;
+  }
+
+  name: string;
+  label: string;
+  kind?: vscode.QuickPickItemKind | undefined;
+  description?: string | undefined;
+  detail?: string | undefined;
+  picked?: boolean | undefined;
+  alwaysShow?: boolean | undefined;
+  buttons?: readonly vscode.QuickInputButton[] | undefined;
+}
+
+let webviewViewProvider: PokemonWebviewViewProvider;
+
+function getConfiguredSize(): PokemonSize {
+  var size = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<PokemonSize>('pokemonSize', DEFAULT_POKEMON_SCALE);
+  if (ALL_SCALES.lastIndexOf(size) === -1) {
+    size = DEFAULT_POKEMON_SCALE;
+  }
+  return size;
+}
+
+function getConfiguredTheme(): Theme {
+  var theme = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<Theme>('theme', DEFAULT_THEME);
+  if (ALL_THEMES.lastIndexOf(theme) === -1) {
+    theme = DEFAULT_THEME;
+  }
+  return theme;
+}
+
+function getConfiguredThemeKind(): ColorThemeKind {
+  return vscode.window.activeColorTheme.kind;
+}
+
+function getConfiguredDisplaySkin(): string {
+  const skinId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('displaySkin', DEFAULT_DISPLAY_SKIN_ID);
+  return isValidDisplaySkinId(skinId) ? skinId : DEFAULT_DISPLAY_SKIN_ID;
+}
+
+function getConfiguredEnvironment(): string {
+  const environmentId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('environment', DEFAULT_ENVIRONMENT_ID);
+  return isValidEnvironmentId(environmentId)
+    ? environmentId
+    : DEFAULT_ENVIRONMENT_ID;
+}
+
+function getConfiguredRoamingStyle(): string {
+  const styleId = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<string>('roamingStyle', DEFAULT_ROAMING_STYLE);
+  return isValidRoamingStyle(styleId) ? styleId : DEFAULT_ROAMING_STYLE;
+}
+
+function getConfigurationPosition() {
+  return vscode.workspace
+    .getConfiguration('pokedev')
+    .get<ExtPosition>('position', DEFAULT_POSITION);
+}
+
+function getThrowWithMouseConfiguration(): boolean {
+  return vscode.workspace
+    .getConfiguration('pokedev')
+    .get<boolean>('throwBallWithMouse', true);
+}
+
+function getConfiguredShinyOdds(): number {
+  return vscode.workspace
+    .getConfiguration('pokedev')
+    .get<number>('shinyOdds', 8192);
+}
+
+function maybeMakeShiny(possibleColors: PokemonColor[]): PokemonColor {
+  if (possibleColors.includes(PokemonColor.shiny)) {
+    const shinyOdds = getConfiguredShinyOdds();
+    if (Math.floor(Math.random() * shinyOdds) === 0) {
+      return PokemonColor.shiny;
+    }
+  }
+  return possibleColors[0];
+}
+
+interface IDefaultPokemonConfig {
+  type: PokemonType;
+  name?: string;
+  shiny?: boolean;
+  pool?: PokemonType[];
+}
+
+/**
+ * Resolves a 'random' defaultPokemon entry to a concrete type, optionally
+ * constrained to `pool`. Falls back to the full types list if `pool` is
+ * empty or contains no valid entries (invalid entries are warned about, not
+ * treated as fatal).
+ */
+function resolveRandomPokemonType(pool?: PokemonType[]): PokemonType {
+  const allPokemon = getAllPokemon();
+
+  if (!pool || pool.length === 0) {
+    const [randomPokemonType] = getRandomPokemonConfigFrom(allPokemon);
+    return randomPokemonType;
+  }
+
+  // Normalize pool entries for case-insensitive matching
+  const normalizedPool = pool.map((entry) => entry.toLowerCase().trim());
+
+  const invalidPoolEntries = normalizedPool.filter(
+    (entry) => !allPokemon.includes(entry as PokemonType),
+  );
+  if (invalidPoolEntries.length > 0) {
+    console.warn(
+      `Invalid pokemon type(s) in defaultPokemon pool: ${invalidPoolEntries.join(', ')}`,
+    );
+  }
+
+  const validPoolEntries = normalizedPool.filter((entry) =>
+    allPokemon.includes(entry as PokemonType),
+  ) as PokemonType[];
+  if (validPoolEntries.length === 0) {
+    console.warn(
+      `No valid pokemon in defaultPokemon pool, falling back to random selection from all pokemon`,
+    );
+  }
+
+  // Fall back to the full pokemon list if the pool was empty or fully invalid
+  const candidateKeys =
+    validPoolEntries.length > 0 ? validPoolEntries : allPokemon;
+  const [randomPokemonType] = getRandomPokemonConfigFrom(candidateKeys);
+  return randomPokemonType;
+}
+
+function getConfiguredDefaultPokemon(): PokemonSpecification[] {
+  const defaultConfig = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<IDefaultPokemonConfig[]>('defaultPokemon', []);
+
+  const size = getConfiguredSize();
+  const result: PokemonSpecification[] = [];
+
+  for (const config of defaultConfig) {
+    // Validate that the pokemon type exists
+    if (config.type !== 'random' && !POKEMON_DATA[config.type]) {
+      console.warn(
+        `Invalid pokemon type in defaultPokemon config: ${config.type}`,
+      );
+      continue;
+    }
+
+    const resolvedType: PokemonType =
+      config.type === 'random'
+        ? resolveRandomPokemonType(config.pool)
+        : config.type;
+
+    const name = config.name || randomName();
+
+    /**
+     * If shiny is not specified, default color to maybeMakeShiny with the
+     * pokemon's available colors. If shiny is true, force shiny color. If
+     * shiny is false, force default color.
+     */
+    let color: PokemonColor;
+    if (config.shiny === undefined) {
+      color = maybeMakeShiny(availableColors(resolvedType));
+    } else if (config.shiny) {
+      color = PokemonColor.shiny;
+    } else {
+      color = DEFAULT_COLOR;
+    }
+
+    result.push(new PokemonSpecification(color, resolvedType, size, name));
+  }
+
+  return result;
+}
+
+function getSessionPokemonCollection(
+  context: vscode.ExtensionContext,
+): PokemonSpecification[] {
+  const savedCollection = PokemonSpecification.collectionFromMemento(
+    context,
+    getConfiguredSize(),
+  );
+
+  if (savedCollection.length > 0) {
+    return savedCollection;
+  }
+
+  return getConfiguredDefaultPokemon();
+}
+
+function getDefaultPokemonForFreshSession(
+  context: vscode.ExtensionContext,
+): PokemonSpecification[] {
+  const savedCollection = PokemonSpecification.collectionFromMemento(
+    context,
+    getConfiguredSize(),
+  );
+
+  if (savedCollection.length > 0) {
+    return [];
+  }
+
+  return getConfiguredDefaultPokemon();
+}
+
+export function shouldSpawnInitialCollection(
+  collection: PokemonSpecification[],
+): boolean {
+  return collection.length > 0;
+}
+
+async function spawnAndPersistCollection(
+  context: vscode.ExtensionContext,
+  panel: IPokemonPanel,
+  collection: PokemonSpecification[],
+): Promise<void> {
+  collection.forEach((item) => {
+    panel.spawnPokemon(item);
+  });
+
+  await storeCollectionAsMemento(context, collection);
+}
+
+function updatePanelThrowWithMouse(): void {
+  const panel = getPokemonPanel();
+  if (panel !== undefined) {
+    panel.setThrowWithMouse(getThrowWithMouseConfiguration());
+  }
+}
+
+/**
+ * Reveals the Explorer view, reporting whether it actually exists.
+ *
+ * `<viewId>.focus` is generated by VS Code only once the view is registered,
+ * which needs the `pokedev.position` context key to have been set AND no other
+ * extension to have claimed the same view id. A bare `executeCommand` throws a
+ * modal error at the user when either is untrue, which is a poor outcome for
+ * what is only ever a convenience.
+ */
+async function focusPokemonView(): Promise<boolean> {
+  try {
+    await vscode.commands.executeCommand('pokedevView.focus');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function updateExtensionPositionContext() {
+  await vscode.commands.executeCommand(
+    'setContext',
+    'pokedev.position',
+    getConfigurationPosition(),
+  );
+}
+
+export class PokemonSpecification {
+  color: PokemonColor;
+  type: PokemonType;
+  size: PokemonSize;
+  name: string;
+  generation: string;
+  originalSpriteSize: number;
+
+  constructor(
+    color: PokemonColor,
+    type: PokemonType,
+    size: PokemonSize,
+    name?: string,
+    generation?: string,
+  ) {
+    this.color = color;
+    this.type = type;
+    this.size = size;
+    if (!name) {
+      this.name = randomName();
+    } else {
+      this.name = name;
+    }
+    this.generation = generation || `gen${POKEMON_DATA[type].generation}`;
+    this.originalSpriteSize = POKEMON_DATA[type].originalSpriteSize || 32;
+  }
+
+  static fromConfiguration(): PokemonSpecification {
+    var color = vscode.workspace
+      .getConfiguration('pokedev')
+      .get<PokemonColor>('pokemonColor', DEFAULT_COLOR);
+    if (ALL_COLORS.lastIndexOf(color) === -1) {
+      color = DEFAULT_COLOR;
+    }
+    var type = vscode.workspace
+      .getConfiguration('pokedev')
+      .get<PokemonType>('pokemonType', DEFAULT_POKEMON_TYPE);
+
+    // Use POKEMON_DATA to validate the type
+    if (!POKEMON_DATA[type]) {
+      type = DEFAULT_POKEMON_TYPE;
+    }
+
+    return new PokemonSpecification(color, type, getConfiguredSize());
+  }
+
+  static collectionFromMemento(
+    context: vscode.ExtensionContext,
+    size: PokemonSize,
+  ): PokemonSpecification[] {
+    var contextTypes = context.globalState.get<PokemonType[]>(
+      EXTRA_POKEMON_KEY_TYPES,
+      [],
+    );
+    var contextColors = context.globalState.get<PokemonColor[]>(
+      EXTRA_POKEMON_KEY_COLORS,
+      [],
+    );
+    var contextNames = context.globalState.get<string[]>(
+      EXTRA_POKEMON_KEY_NAMES,
+      [],
+    );
+    var result: PokemonSpecification[] = [];
+    for (let index = 0; index < contextTypes.length; index++) {
+      result.push(
+        new PokemonSpecification(
+          contextColors?.[index] ?? DEFAULT_COLOR,
+          contextTypes[index],
+          size,
+          contextNames[index],
+        ),
+      );
+    }
+    return result;
+  }
+}
+
+/**
+ * Announces a collection change to every PokeDev surface.
+ *
+ * Called wherever the memento is rewritten, so the Explorer team list stays in
+ * step with spawning, removal and import without those code paths having to
+ * know the sidebar exists.
+ */
+function notifyCollectionChanged(): void {
+  pokedevState.notify('collection');
+}
+
+export async function storeCollectionAsMemento(
+  context: vscode.ExtensionContext,
+  collection: PokemonSpecification[],
+) {
+  var contextTypes = new Array(collection.length);
+  var contextColors = new Array(collection.length);
+  var contextNames = new Array(collection.length);
+  for (let index = 0; index < collection.length; index++) {
+    contextTypes[index] = collection[index].type;
+    contextColors[index] = collection[index].color;
+    contextNames[index] = collection[index].name;
+  }
+  await context.globalState.update(EXTRA_POKEMON_KEY_TYPES, contextTypes);
+  await context.globalState.update(EXTRA_POKEMON_KEY_COLORS, contextColors);
+  await context.globalState.update(EXTRA_POKEMON_KEY_NAMES, contextNames);
+  context.globalState.setKeysForSync([
+    EXTRA_POKEMON_KEY_TYPES,
+    EXTRA_POKEMON_KEY_COLORS,
+    EXTRA_POKEMON_KEY_NAMES,
+  ]);
+  notifyCollectionChanged();
+}
+
+let spawnPokemonStatusBar: vscode.StatusBarItem;
+
+/**
+ * Progression singletons.
+ *
+ * Held at module scope so `deactivate()` can flush banked coding time on the
+ * way out; VS Code gives an extension one chance to persist on shutdown.
+ */
+let progressionService: ProgressionService | undefined;
+let activityTracker: ActivityTracker | undefined;
+let gitActivityTracker: GitActivityTracker | undefined;
+
+interface IPokemonInfo {
+  type: PokemonType;
+  name: string;
+  color: PokemonColor;
+}
+
+function waitForPokemonList(webview: vscode.Webview): Promise<IPokemonInfo[]> {
+  return new Promise((resolve) => {
+    const disposable = webview.onDidReceiveMessage(
+      (message: WebviewMessage) => {
+        if (message.command !== 'list-pokemon') {
+          return;
+        }
+        disposable.dispose();
+        const pokemonList: IPokemonInfo[] = [];
+        message.text.split('\n').forEach((pokemon) => {
+          if (!pokemon) {
+            return;
+          }
+          var parts = pokemon.split(',');
+          pokemonList.push({
+            type: parts[0] as PokemonType,
+            name: parts[1],
+            color: parts[2] as PokemonColor,
+          });
+        });
+        resolve(pokemonList);
+      },
+    );
+  });
+}
+
+function getPokemonPanel(): IPokemonPanel | undefined {
+  if (
+    getConfigurationPosition() === ExtPosition.explorer &&
+    webviewViewProvider
+  ) {
+    return webviewViewProvider;
+  } else if (PokemonPanel.currentPanel) {
+    return PokemonPanel.currentPanel;
+  } else {
+    return undefined;
+  }
+}
+
+function getWebview(): vscode.Webview | undefined {
+  if (
+    getConfigurationPosition() === ExtPosition.explorer &&
+    webviewViewProvider
+  ) {
+    return webviewViewProvider.getWebview();
+  } else if (PokemonPanel.currentPanel) {
+    return PokemonPanel.currentPanel.getWebview();
+  }
+}
+
+export function activate(context: vscode.ExtensionContext) {
+  // Reset the Pokemon translations cache at startup to load the correct language
+  localize.resetPokemonTranslationsCache();
+
+  // Repairs any persistent Pokemon whose progression already proves an
+  // evolution should have happened, but whose persisted species never
+  // actually changed, THEN reunites any progression record that got
+  // orphaned by that same bug (or its own earlier, incomplete fix) with the
+  // collection entry it actually belongs to. Sequenced, not parallel: the
+  // second pass looks at the CURRENT species of every entry, which the first
+  // pass may have just corrected. Not awaited by the rest of activation: both
+  // only ever touch `globalState` and broadcast `pokedevState.notify` when
+  // they change anything, which every view already re-renders from.
+  void reconcileStaleEvolutions(context)
+    .then(() => relinkOrphanedProgression(context))
+    .catch((error) => {
+      console.error('PokeDev: evolution reconciliation failed', error);
+    });
+
+  // Catches a Trainer already above a stone-reward milestone the moment this
+  // feature ships (or one who somehow missed a mid-session grant) - safe on
+  // every activation since `grantEarnedTrainerLevelStoneRewards` persists
+  // each reward's claim before granting it, so an already-claimed one is
+  // never granted again. Not awaited by the rest of activation, matching the
+  // reconciliation call above.
+  void grantEarnedTrainerLevelStoneRewards(
+    context,
+    readTrainerProfile(context, Date.now()).trainerLevel,
+  )
+    .then((granted) => {
+      if (granted.length > 0) {
+        pokedevState.notify('inventory');
+      }
+    })
+    .catch((error) => {
+      console.error('PokeDev: startup item-reward grant failed', error);
+    });
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.start', async () => {
+      if (
+        getConfigurationPosition() === ExtPosition.explorer &&
+        webviewViewProvider &&
+        (await focusPokemonView())
+      ) {
+        // Nothing more to do: the Explorer view is showing.
+      } else {
+        const spec = PokemonSpecification.fromConfiguration();
+        PokemonPanel.createOrShow(
+          context.extensionUri,
+          spec.color,
+          spec.type,
+          spec.size,
+          spec.generation,
+          spec.originalSpriteSize,
+          getConfiguredTheme(),
+          getConfiguredThemeKind(),
+          getThrowWithMouseConfiguration(),
+        );
+
+        if (PokemonPanel.currentPanel) {
+          const collection = getSessionPokemonCollection(context);
+          await spawnAndPersistCollection(
+            context,
+            PokemonPanel.currentPanel,
+            collection,
+          );
+        }
+      }
+    }),
+  );
+
+  spawnPokemonStatusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100,
+  );
+  spawnPokemonStatusBar.command = 'pokedev.spawn-pokemon';
+  context.subscriptions.push(spawnPokemonStatusBar);
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(updateStatusBar),
+  );
+  context.subscriptions.push(
+    vscode.window.onDidChangeTextEditorSelection(updateStatusBar),
+  );
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(updateExtensionPositionContext),
+  );
+  updateStatusBar();
+
+  const spec = PokemonSpecification.fromConfiguration();
+  webviewViewProvider = new PokemonWebviewViewProvider(
+    context,
+    context.extensionUri,
+    spec.color,
+    spec.type,
+    spec.size,
+    spec.generation,
+    spec.originalSpriteSize,
+    getConfiguredTheme(),
+    getConfiguredThemeKind(),
+    getThrowWithMouseConfiguration(),
+  );
+  updateExtensionPositionContext().catch((e) => {
+    console.error(e);
+  });
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      PokemonWebviewViewProvider.viewType,
+      webviewViewProvider,
+    ),
+  );
+
+  /* ------------------- compact Explorer sidebar views ------------------- */
+
+  // Two glanceable HUDs beside the file tree. They are additional surfaces:
+  // the walking-sprite playground above and the full Trainer Card panel are
+  // both untouched.
+  const trainerExplorerView = new TrainerExplorerViewProvider(context);
+  const pokemonExplorerView = new PokemonExplorerViewProvider(context);
+  const dailyChallengesExplorerView = new DailyChallengesExplorerViewProvider(
+    context,
+  );
+  context.subscriptions.push(
+    trainerExplorerView,
+    pokemonExplorerView,
+    dailyChallengesExplorerView,
+  );
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      TrainerExplorerViewProvider.viewType,
+      trainerExplorerView,
+      // The views are cheap to rebuild from the services, so let VS Code
+      // reclaim their DOM while collapsed rather than holding it resident.
+      { webviewOptions: { retainContextWhenHidden: false } },
+    ),
+    vscode.window.registerWebviewViewProvider(
+      PokemonExplorerViewProvider.viewType,
+      pokemonExplorerView,
+      { webviewOptions: { retainContextWhenHidden: false } },
+    ),
+    vscode.window.registerWebviewViewProvider(
+      DailyChallengesExplorerViewProvider.viewType,
+      dailyChallengesExplorerView,
+      { webviewOptions: { retainContextWhenHidden: false } },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.delete-pokemon', async () => {
+      const panel = getPokemonPanel();
+      if (panel === undefined) {
+        await createPokemonPlayground(context);
+        return;
+      }
+      const webview = getWebview();
+      if (!webview) {
+        return;
+      }
+      const listPromise = waitForPokemonList(webview);
+      panel.listPokemon();
+      const pokemonList = await listPromise;
+
+      if (!pokemonList.length) {
+        await vscode.window.showErrorMessage(
+          vscode.l10n.t('There are no pokemon to remove.'),
+        );
+        return;
+      }
+      const pokemon = await vscode.window.showQuickPick<PokemonQuickPickItem>(
+        pokemonList.map((val) => {
+          return new PokemonQuickPickItem(val.name, val.type, val.color);
+        }),
+        {
+          placeHolder: vscode.l10n.t('Select the pokemon to remove.'),
+        },
+      );
+      if (pokemon) {
+        panel.deletePokemon(pokemon.name);
+        // Rebuilt from canonical storage, NOT from `pokemonList` above: that
+        // list is only what the webview happens to have reported for the
+        // QuickPick, and persisting it verbatim would silently overwrite
+        // every OTHER Pokemon's canonical state (species included) with
+        // whatever the panel last reported for it - see the fixed bug where
+        // this let a stale client snapshot revert an evolution that had
+        // already been correctly persisted.
+        const collection = PokemonSpecification.collectionFromMemento(
+          context,
+          getConfiguredSize(),
+        ).filter((item) => item.name !== pokemon.name);
+        await storeCollectionAsMemento(context, collection);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.remove-all-pokemon', async () => {
+      const panel = getPokemonPanel();
+      if (panel !== undefined) {
+        panel.resetPokemon();
+        await storeCollectionAsMemento(context, []);
+      } else {
+        await createPokemonPlayground(context);
+        await vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            "A Pokemon Playground has been created. You can now use the 'Remove All Pokemon' Command to remove all Pokemon.",
+          ),
+        );
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.roll-call', async () => {
+      const panel = getPokemonPanel();
+      if (panel !== undefined) {
+        panel.rollCall();
+      } else {
+        await createPokemonPlayground(context);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.configure-keybindings',
+      async () => {
+        const items: Array<vscode.QuickPickItem & { commandId: string }> = [
+          {
+            label: vscode.l10n.t('Spawn additional pokemon'),
+            description: 'pokedev.spawn-pokemon',
+            commandId: 'pokedev.spawn-pokemon',
+          },
+          {
+            label: vscode.l10n.t('Spawn random pokemon'),
+            description: 'pokedev.spawn-random-pokemon',
+            commandId: 'pokedev.spawn-random-pokemon',
+          },
+          {
+            label: vscode.l10n.t('Remove pokemon'),
+            description: 'pokedev.delete-pokemon',
+            commandId: 'pokedev.delete-pokemon',
+          },
+          {
+            label: vscode.l10n.t('Remove all pokemon'),
+            description: 'pokedev.remove-all-pokemon',
+            commandId: 'pokedev.remove-all-pokemon',
+          },
+        ];
+
+        const picked = await vscode.window.showQuickPick(items, {
+          placeHolder: vscode.l10n.t(
+            'Select a command to configure its keybinding',
+          ),
+          matchOnDescription: true,
+        });
+        if (!picked) {
+          return;
+        }
+        await vscode.commands.executeCommand(
+          'workbench.action.openGlobalKeybindings',
+          picked.commandId,
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-pokemon-language',
+      async () => {
+        const config = vscode.workspace.getConfiguration('pokedev');
+        const currentLanguage = config.get<string>('pokemonLanguage', 'auto');
+
+        // Language display names and flags (official Pokemon languages only)
+        /* eslint-disable @typescript-eslint/naming-convention */
+        const languageLabels: {
+          [key: string]: { label: string; description: string };
+        } = {
+          auto: {
+            label: '$(globe) Auto',
+            description: vscode.l10n.t('Use VS Code language'),
+          },
+          'en-US': {
+            label: '🇺🇸 English (US)',
+            description: vscode.l10n.t('English names'),
+          },
+          'fr-FR': {
+            label: '🇫🇷 Français (FR)',
+            description: vscode.l10n.t('French names'),
+          },
+          'de-DE': {
+            label: '🇩🇪 Deutsch (DE)',
+            description: vscode.l10n.t('German names'),
+          },
+          'ja-JP': {
+            label: '🇯🇵 日本語 (JP)',
+            description: vscode.l10n.t('Japanese names'),
+          },
+        } as { [key: string]: { label: string; description: string } };
+        /* eslint-enable @typescript-eslint/naming-convention */
+
+        const languageOptions: Array<vscode.QuickPickItem & { value: string }> =
+          [
+            {
+              label: languageLabels['auto'].label,
+              description: languageLabels['auto'].description,
+              detail:
+                currentLanguage === 'auto'
+                  ? vscode.l10n.t('Current')
+                  : undefined,
+              value: 'auto',
+            },
+            ...localize.SUPPORTED_LOCALES.map((locale) => ({
+              label: languageLabels[locale]?.label || locale,
+              description: languageLabels[locale]?.description || locale,
+              detail:
+                currentLanguage === locale
+                  ? vscode.l10n.t('Current')
+                  : undefined,
+              value: locale,
+            })),
+          ];
+
+        const picked = await vscode.window.showQuickPick(languageOptions, {
+          placeHolder: vscode.l10n.t('Select language for Pokemon names'),
+        });
+
+        if (!picked) {
+          return;
+        }
+
+        // Update configuration persistently
+        await config.update(
+          'pokemonLanguage',
+          picked.value,
+          vscode.ConfigurationTarget.Global,
+        );
+
+        // Reset translation cache to force reload
+        localize.resetPokemonTranslationsCache();
+
+        // Preload translations with the new language
+        // This ensures the cache is immediately available
+        const testPokemon: PokemonType = 'bulbasaur';
+        localize.getLocalizedPokemonName(testPokemon);
+
+        await vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Pokemon language changed to {0}. The change will persist after restart.',
+            picked.label,
+          ),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-display-border',
+      async () => {
+        const currentSkin = getConfiguredDisplaySkin();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          DISPLAY_SKINS.map((skin) => ({
+            label: skin.label,
+            description: skin.description,
+            detail:
+              skin.id === currentSkin ? vscode.l10n.t('Current') : undefined,
+            value: skin.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a PokéDev display border'),
+        });
+
+        if (!picked || picked.value === currentSkin) {
+          return;
+        }
+
+        // Cosmetic and user-specific, not tied to any one workspace: picking
+        // a border in one project should carry over to every other project.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'displaySkin',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `updateDisplaySkin` postMessage; nothing else to do here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.change-environment', async () => {
+      const currentEnvironment = getConfiguredEnvironment();
+
+      const options: Array<vscode.QuickPickItem & { value: string }> =
+        ENVIRONMENTS.map((environment) => ({
+          label: environment.label,
+          description: environment.description,
+          detail:
+            environment.id === currentEnvironment
+              ? vscode.l10n.t('Current')
+              : undefined,
+          value: environment.id,
+        }));
+
+      const picked = await vscode.window.showQuickPick(options, {
+        placeHolder: vscode.l10n.t('Select a PokéDev environment'),
+      });
+
+      if (!picked || picked.value === currentEnvironment) {
+        return;
+      }
+
+      // Cosmetic and user-specific, not tied to any one workspace - same
+      // reasoning as `pokedev.displaySkin`.
+      await vscode.workspace
+        .getConfiguration('pokedev')
+        .update('environment', picked.value, vscode.ConfigurationTarget.Global);
+      // The onDidChangeConfiguration handler above does the live
+      // `updateEnvironment` postMessage; nothing else to do here.
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-roaming-style',
+      async () => {
+        const currentStyle = getConfiguredRoamingStyle();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          ROAMING_STYLES.map((style) => ({
+            label: style.label,
+            description: style.description,
+            detail:
+              style.id === currentStyle ? vscode.l10n.t('Current') : undefined,
+            value: style.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a PokéDev roaming style'),
+        });
+
+        if (!picked || picked.value === currentStyle) {
+          return;
+        }
+
+        // Cosmetic/behavior and user-specific, not tied to any one
+        // workspace - same reasoning as `pokedev.displaySkin`/
+        // `pokedev.environment`.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'roamingStyle',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `updateRoamingStyle` postMessage; nothing else to do here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-trainer-card-style',
+      async () => {
+        const currentStyle = getConfiguredTrainerCardStyle();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          TRAINER_CARD_STYLES.map((style) => ({
+            label: style.label,
+            description: style.description,
+            detail:
+              style.id === currentStyle ? vscode.l10n.t('Current') : undefined,
+            value: style.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a Trainer Card style'),
+          title: vscode.l10n.t('Trainer Card Style'),
+        });
+
+        if (!picked || picked.value === currentStyle) {
+          return;
+        }
+
+        // Cosmetic and user-specific, not tied to any one workspace - same
+        // reasoning as `pokedev.displaySkin`/`pokedev.environment`. Data
+        // (profile/party/partner/badges) is untouched either way - see
+        // `src/common/trainer-card-style.ts`.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'trainerCard.style',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler above does the live
+        // `notifyProgressionChanged` push; nothing else to do here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.change-crystal-palette',
+      async () => {
+        const currentPalette = getConfiguredCrystalPalette();
+
+        const options: Array<vscode.QuickPickItem & { value: string }> =
+          CRYSTAL_PALETTES.map((palette) => ({
+            label: palette.label,
+            description: palette.description,
+            detail:
+              palette.id === currentPalette
+                ? vscode.l10n.t('Current')
+                : undefined,
+            value: palette.id,
+          }));
+
+        const picked = await vscode.window.showQuickPick(options, {
+          placeHolder: vscode.l10n.t('Select a Crystal palette'),
+          title: vscode.l10n.t('Crystal Palette'),
+        });
+
+        if (!picked || picked.value === currentPalette) {
+          return;
+        }
+
+        // Cosmetic and user-specific, same reasoning as
+        // `pokedev.trainerCard.style` right above - only matters when that
+        // style is `crystal`, never touches Trainer/Party/progression data.
+        await vscode.workspace
+          .getConfiguration('pokedev')
+          .update(
+            'crystalPalette',
+            picked.value,
+            vscode.ConfigurationTarget.Global,
+          );
+        // The onDidChangeConfiguration handler below does the live
+        // `pokedevState.notify('crystalPalette')` push; nothing else to do
+        // here.
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.export-pokemon-list', async () => {
+      const pokemonCollection = PokemonSpecification.collectionFromMemento(
+        context,
+        getConfiguredSize(),
+      );
+      const pokemonJson = JSON.stringify(pokemonCollection, null, 2);
+      const fileName = `pokemonCollection-${Date.now()}.json`;
+      if (!vscode.workspace.workspaceFolders) {
+        await vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'You must have a folder or workspace open to export pokemonCollection.',
+          ),
+        );
+        return;
+      }
+      const filePath = vscode.Uri.joinPath(
+        vscode.workspace.workspaceFolders[0].uri,
+        fileName,
+      );
+      const newUri = vscode.Uri.file(fileName).with({
+        scheme: 'untitled',
+        path: filePath.fsPath,
+      });
+      await vscode.workspace.openTextDocument(newUri).then(async (doc) => {
+        await vscode.window.showTextDocument(doc).then(async (editor) => {
+          await editor.edit((edit) => {
+            edit.insert(new vscode.Position(0, 0), pokemonJson);
+          });
+        });
+      });
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.import-pokemon-list', async () => {
+      const options: vscode.OpenDialogOptions = {
+        canSelectMany: false,
+        openLabel: 'Open pokemonCollection.json',
+        filters: {
+          json: ['json'],
+        },
+      };
+      const fileUri = await vscode.window.showOpenDialog(options);
+
+      if (fileUri && fileUri[0]) {
+        console.log('Selected file: ' + fileUri[0].fsPath);
+        try {
+          const fileContents = await vscode.workspace.fs.readFile(fileUri[0]);
+          const pokemonToLoad = JSON.parse(
+            String.fromCharCode.apply(null, Array.from(fileContents)),
+          );
+
+          // load the pokemon into the collection
+          var collection = PokemonSpecification.collectionFromMemento(
+            context,
+            getConfiguredSize(),
+          );
+          // fetch just the pokemon types
+          const panel = getPokemonPanel();
+          for (let i = 0; i < pokemonToLoad.length; i++) {
+            const pokemon = pokemonToLoad[i];
+            const pokemonSpec = new PokemonSpecification(
+              normalizeColor(pokemon.color, pokemon.type),
+              pokemon.type,
+              pokemon.size,
+              pokemon.name,
+            );
+            collection.push(pokemonSpec);
+            if (panel !== undefined) {
+              panel.spawnPokemon(pokemonSpec);
+            }
+          }
+          await storeCollectionAsMemento(context, collection);
+        } catch (e: any) {
+          await vscode.window.showErrorMessage(
+            vscode.l10n.t('Failed to import pokemon: {0}', e?.message),
+          );
+        }
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.spawn-pokemon', async () => {
+      const panel = getPokemonPanel();
+      if (
+        getConfigurationPosition() === ExtPosition.explorer &&
+        webviewViewProvider
+      ) {
+        await focusPokemonView();
+      }
+      if (panel) {
+        // Dynamic QuickPick: show only generations by default; reveal Pokémon matches when typing
+        const generationItems: Array<
+          vscode.QuickPickItem & {
+            isGeneration: true;
+            gen: PokemonGeneration;
+          }
+        > = Object.values(PokemonGeneration)
+          .filter((gen) => typeof gen === 'number')
+          .map((gen) => ({
+            label: `$(folder) ${vscode.l10n.t('Generation {0}', gen)}`,
+            description: vscode.l10n.t('Browse Gen {0} Pokemon', gen),
+            isGeneration: true as const,
+            gen: gen as PokemonGeneration,
+          }));
+
+        const allPokemonOptions: Array<
+          vscode.QuickPickItem & { value: PokemonType; isGeneration: false }
+        > = Object.entries(POKEMON_DATA).map(([type, config]) => ({
+          label: localize.getLocalizedPokemonName(type as PokemonType),
+          value: type as PokemonType,
+          description: `#${config.id.toString().padStart(4, '0')} - Gen ${config.generation}`,
+          isGeneration: false as const,
+        }));
+
+        const qp = vscode.window.createQuickPick<
+          vscode.QuickPickItem & {
+            isGeneration?: boolean;
+            gen?: PokemonGeneration;
+            value?: PokemonType;
+          }
+        >();
+        qp.placeholder = vscode.l10n.t(
+          'Select a generation or start typing to search for a Pokemon...',
+        );
+        qp.matchOnDescription = true;
+
+        const setGenerationOnlyItems = () => {
+          qp.items = [
+            {
+              label: vscode.l10n.t('Generations'),
+              kind: vscode.QuickPickItemKind.Separator,
+            },
+            ...generationItems,
+          ];
+        };
+
+        const setWithSearchResults = (query: string) => {
+          const q = query.toLowerCase().trim();
+          const results = allPokemonOptions.filter(
+            (opt) =>
+              opt.label.toLowerCase().includes(q) ||
+              (opt.description?.toLowerCase().includes(q) ?? false),
+          );
+          qp.items = [
+            {
+              label: vscode.l10n.t('Generations'),
+              kind: vscode.QuickPickItemKind.Separator,
+            },
+            ...generationItems,
+            {
+              label: vscode.l10n.t('Results'),
+              kind: vscode.QuickPickItemKind.Separator,
+            },
+            ...results,
+          ];
+        };
+
+        setGenerationOnlyItems();
+
+        let selectedPokemonType:
+          | { label: string; value: PokemonType }
+          | undefined;
+
+        const disposables: vscode.Disposable[] = [];
+
+        disposables.push(
+          qp.onDidChangeValue((val) => {
+            if (val && val.trim().length > 0) {
+              setWithSearchResults(val);
+            } else {
+              setGenerationOnlyItems();
+            }
+          }),
+        );
+
+        disposables.push(
+          qp.onDidAccept(async () => {
+            const sel = qp.selectedItems[0] as any;
+            if (!sel) {
+              qp.hide();
+              return;
+            }
+            if (sel.isGeneration) {
+              // Don't hide the first quick pick yet - dispose it manually
+              const pokemonInGeneration = getPokemonByGeneration(
+                sel.gen as PokemonGeneration,
+              );
+              const pokemonOptions = pokemonInGeneration.map((type) => ({
+                label: localize.getLocalizedPokemonName(type),
+                value: type,
+                description: `#${POKEMON_DATA[type].id
+                  .toString()
+                  .padStart(4, '0')}`,
+              }));
+
+              // Manually dispose the first quick pick to prevent race condition
+              disposables.forEach((d) => d.dispose());
+              qp.dispose();
+
+              const picked = await vscode.window.showQuickPick(pokemonOptions, {
+                placeHolder: vscode.l10n.t('Select a Pokemon'),
+              });
+              if (picked) {
+                selectedPokemonType = picked;
+
+                // Handle the rest of the flow
+                const possibleColors = availableColors(
+                  selectedPokemonType.value,
+                );
+
+                const name = await vscode.window.showInputBox({
+                  placeHolder: vscode.l10n.t('Leave blank for a random name'),
+                  prompt: vscode.l10n.t('Name your Pokemon'),
+                  value: randomName(),
+                });
+
+                if (name === undefined) {
+                  console.log('Cancelled Spawning Pokemon - No Name Entered');
+                  return;
+                }
+
+                const spec = new PokemonSpecification(
+                  maybeMakeShiny(possibleColors),
+                  selectedPokemonType.value,
+                  getConfiguredSize(),
+                  name,
+                );
+
+                panel.spawnPokemon(spec);
+                var collection = PokemonSpecification.collectionFromMemento(
+                  context,
+                  getConfiguredSize(),
+                );
+                collection.push(spec);
+                await storeCollectionAsMemento(context, collection);
+              }
+            } else {
+              selectedPokemonType = sel as any;
+              qp.hide();
+            }
+          }),
+        );
+
+        const closed = new Promise<void>((resolve) => {
+          disposables.push(
+            qp.onDidHide(() => {
+              disposables.forEach((d) => d.dispose());
+              qp.dispose();
+              resolve();
+            }),
+          );
+        });
+
+        qp.show();
+        await closed;
+
+        if (!selectedPokemonType) {
+          console.log('Cancelled Spawning Pokemon - No Selection');
+          return;
+        }
+
+        if (!selectedPokemonType) {
+          console.log('Cancelled Spawning Pokemon - No Pokemon Selected');
+          return;
+        }
+
+        // Rest of the existing code
+        const possibleColors = availableColors(selectedPokemonType.value);
+
+        const name = await vscode.window.showInputBox({
+          placeHolder: vscode.l10n.t('Leave blank for a random name'),
+          prompt: vscode.l10n.t('Name your Pokemon'),
+          value: randomName(),
+        });
+
+        if (name === undefined) {
+          console.log('Cancelled Spawning Pokemon - No Name Entered');
+          return;
+        }
+
+        const spec = new PokemonSpecification(
+          maybeMakeShiny(possibleColors),
+          selectedPokemonType.value,
+          getConfiguredSize(),
+          name,
+        );
+
+        panel.spawnPokemon(spec);
+        var collection = PokemonSpecification.collectionFromMemento(
+          context,
+          getConfiguredSize(),
+        );
+        collection.push(spec);
+        await storeCollectionAsMemento(context, collection);
+      } else {
+        await createPokemonPlayground(context);
+        await vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            "A Pokemon Playground has been created. You can now use the 'Spawn Additional Pokemon' Command to add more Pokemon.",
+          ),
+        );
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.spawn-random-pokemon',
+      async () => {
+        const panel = getPokemonPanel();
+        if (
+          getConfigurationPosition() === ExtPosition.explorer &&
+          webviewViewProvider
+        ) {
+          await focusPokemonView();
+        }
+        if (panel) {
+          var [randomPokemonType, randomPokemonConfig] =
+            getRandomPokemonConfig();
+          const spec = new PokemonSpecification(
+            maybeMakeShiny(randomPokemonConfig.possibleColors),
+            randomPokemonType,
+            getConfiguredSize(),
+            randomPokemonConfig.name,
+          );
+
+          panel.spawnPokemon(spec);
+          var collection = PokemonSpecification.collectionFromMemento(
+            context,
+            getConfiguredSize(),
+          );
+          collection.push(spec);
+          await storeCollectionAsMemento(context, collection);
+        } else {
+          await createPokemonPlayground(context);
+          await vscode.window.showInformationMessage(
+            vscode.l10n.t(
+              "A Pokemon Playground has been created. You can now use the 'Remove All Pokemon' Command to remove all Pokemon.",
+            ),
+          );
+        }
+      },
+    ),
+  );
+
+  // Listening to configuration changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(
+      (e: vscode.ConfigurationChangeEvent): void => {
+        if (
+          e.affectsConfiguration('pokedev.pokemonColor') ||
+          e.affectsConfiguration('pokedev.pokemonType') ||
+          e.affectsConfiguration('pokedev.pokemonSize') ||
+          e.affectsConfiguration('pokedev.theme') ||
+          e.affectsConfiguration('workbench.colorTheme')
+        ) {
+          const spec = PokemonSpecification.fromConfiguration();
+          const panel = getPokemonPanel();
+          if (panel) {
+            panel.updatePokemonColor(spec.color);
+            panel.updatePokemonSize(spec.size);
+            panel.updatePokemonType(spec.type);
+            panel.updateTheme(getConfiguredTheme(), getConfiguredThemeKind());
+            panel.update();
+          }
+        }
+
+        if (e.affectsConfiguration('pokedev.position')) {
+          void updateExtensionPositionContext();
+        }
+
+        if (e.affectsConfiguration('pokedev.throwBallWithMouse')) {
+          updatePanelThrowWithMouse();
+        }
+
+        if (e.affectsConfiguration('pokedev.displaySkin')) {
+          getPokemonPanel()?.updateDisplaySkin(getConfiguredDisplaySkin());
+        }
+
+        if (e.affectsConfiguration('pokedev.environment')) {
+          getPokemonPanel()?.updateEnvironment(getConfiguredEnvironment());
+        }
+
+        if (e.affectsConfiguration('pokedev.roamingStyle')) {
+          getPokemonPanel()?.updateRoamingStyle(getConfiguredRoamingStyle());
+        }
+
+        if (
+          e.affectsConfiguration('pokedev.trainerCard.showDevRecord') ||
+          e.affectsConfiguration('pokedev.trainerCard.showCodingTime') ||
+          e.affectsConfiguration('pokedev.trainerCard.style')
+        ) {
+          // The card is open often enough that requiring a reopen to see a
+          // visibility/style change take effect would feel broken.
+          TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+        }
+
+        if (e.affectsConfiguration('pokedev.trainerCard.style')) {
+          // ONE persisted preference drives both Trainer Card surfaces (see
+          // `src/common/trainer-card-style.ts`) - this is what makes the
+          // compact Explorer HUD (which reacts to any `pokedevState`
+          // change, see `PokedevExplorerViewProvider`'s constructor) pick
+          // up the new skin live, the same way the full card just did
+          // above via `notifyProgressionChanged`.
+          pokedevState.notify('trainerCardStyle');
+        }
+
+        if (e.affectsConfiguration('pokedev.crystalPalette')) {
+          // Mirrors `pokedev.trainerCard.style` directly above: the full
+          // card needs an explicit push (its view model reads the resolved
+          // palette fresh on every rebuild), and `pokedevState.notify`
+          // covers the compact Explorer HUD and PokeGear, both of which
+          // already subscribe to it for the same reason.
+          TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+          pokedevState.notify('crystalPalette');
+        }
+        if (e.affectsConfiguration('pokedev.pokemonLanguage')) {
+          // Reset the Pokemon translations cache when the language changes
+          localize.resetPokemonTranslationsCache();
+          // Update the panel to reflect the new language
+          const panel = getPokemonPanel();
+          if (panel) {
+            panel.update();
+          }
+        }
+      },
+    ),
+  );
+
+  // Live "auto" follow: VS Code/Cursor can switch appearance (a manual
+  // toggle, an OS-level light/dark schedule) without any `pokedev.*` setting
+  // changing at all, so `onDidChangeConfiguration` above can never catch
+  // this on its own - a separate listener is required. No polling: this
+  // only fires the same way `onDidChangeConfiguration` does, on the actual
+  // VS Code event. Skipped entirely when the preference is a manual
+  // day/night override, since the resolved palette cannot change in that
+  // case and pushing anyway would just be a wasted re-render on every
+  // surface.
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveColorTheme(() => {
+      if (getConfiguredCrystalPalette() !== 'auto') {
+        return;
+      }
+      TrainerCardPanel.currentPanel?.notifyProgressionChanged();
+      pokedevState.notify('crystalPalette');
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.openTrainerCard', () => {
+      TrainerCardPanel.createOrShow(context);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.openPokeGear', () => {
+      PokeGearPanel.createOrShow(context);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.configure-github-trainer',
+      async () => {
+        const username = await promptForGithubUsername();
+        if (username === undefined) {
+          return;
+        }
+        await setConfiguredGithubUsername(username);
+        TrainerCardPanel.createOrShow(context);
+        // The card may already be open on a stale username; pull the new one.
+        await TrainerCardPanel.currentPanel?.refresh();
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.refresh-github-profile',
+      async () => {
+        if (!TrainerCardPanel.currentPanel) {
+          TrainerCardPanel.createOrShow(context);
+          return;
+        }
+        await TrainerCardPanel.currentPanel.refresh();
+      },
+    ),
+  );
+
+  /* -------------------------------- DEV badges ------------------------------- */
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.connect-dev-profile', async () => {
+      const username = await promptForDevUsername();
+      if (username === undefined) {
+        return;
+      }
+      await setConfiguredDevUsername(username);
+      TrainerCardPanel.createOrShow(context);
+      // The card may already be open on a stale username; pull the new one.
+      await TrainerCardPanel.currentPanel?.refreshDevBadges();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.refresh-dev-badges', async () => {
+      if (!TrainerCardPanel.currentPanel) {
+        TrainerCardPanel.createOrShow(context);
+        return;
+      }
+      await TrainerCardPanel.currentPanel.refreshDevBadges();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.disconnect-dev-profile',
+      async () => {
+        if (TrainerCardPanel.currentPanel) {
+          await TrainerCardPanel.currentPanel.disconnectDev();
+        } else {
+          await setConfiguredDevUsername('');
+          await clearDevCache(context);
+        }
+        showStatusMessage(vscode.l10n.t('DEV profile disconnected.'));
+      },
+    ),
+  );
+
+  /* ----------------------------- progression ----------------------------- */
+
+  const progression = new ProgressionService(context);
+  progressionService = progression;
+
+  // The panel is only reachable from this module, so evolution is handed a
+  // notifier rather than importing anything back out of here - importing
+  // extension.ts from a module it imports would form a require cycle over its
+  // top-level constants.
+  setEvolutionPanelNotifier((payload) => {
+    getPokemonPanel()?.evolvePokemon(payload);
+  });
+
+  const tracker = new ActivityTracker(context, progression);
+  tracker.start();
+  activityTracker = tracker;
+  context.subscriptions.push(tracker);
+
+  const gitTracker = new GitActivityTracker(context, progression);
+  // Not awaited here: the Git extension may take a moment to activate, and
+  // nothing else in activation depends on commit tracking being ready. Daily
+  // Challenges below is the one thing that DOES want to know once it
+  // resolves, so it keeps the promise rather than firing-and-forgetting it.
+  const gitReady = gitTracker.start();
+  gitActivityTracker = gitTracker;
+  context.subscriptions.push(gitTracker);
+
+  /* --------------------------- daily challenges --------------------------- */
+
+  // Waits for the Git tracker's own resolution before Daily Challenges'
+  // first generation of the day, so a workspace that already has a
+  // repository open is not mistakenly denied today's Git challenge by a
+  // startup race - see `DailyChallengesService.start`. This never re-detects
+  // saves, commits or coding time itself; it only listens to
+  // `progression.onDidApplyProgression`, the same events `activityTracker`
+  // and `gitTracker` already produce.
+  const dailyChallenges = new DailyChallengesService(
+    context,
+    progression,
+    gitTracker,
+  );
+  context.subscriptions.push(dailyChallenges);
+  void gitReady.then(() => dailyChallenges.start());
+
+  /* ------------------------------- reactions ------------------------------ */
+
+  // The reaction hub only ever raises events; this is the one place that
+  // turns one into a `postMessage` to whichever surface currently shows the
+  // world, so the hub itself never needs to know a webview exists.
+  context.subscriptions.push(
+    reactionHub.onDidReact((event) => {
+      const webview = getWebview();
+      if (!webview) {
+        return;
+      }
+      void webview.postMessage({
+        command: 'pokemon-reaction',
+        ...event,
+      });
+    }),
+  );
+
+  context.subscriptions.push(
+    toastHub.onDidToast((event) => {
+      const webview = getWebview();
+      if (!webview) {
+        return;
+      }
+      void webview.postMessage({
+        command: 'pokemon-toast',
+        ...event,
+      });
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.toggle-dev-record', async () => {
+      const next = !isDevRecordVisible();
+      await vscode.workspace
+        .getConfiguration('pokedev')
+        .update(
+          'trainerCard.showDevRecord',
+          next,
+          vscode.ConfigurationTarget.Global,
+        );
+      showStatusMessage(
+        next
+          ? vscode.l10n.t('Dev Record shown on the Trainer Card.')
+          : vscode.l10n.t('Dev Record hidden on the Trainer Card.'),
+      );
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.set-partner', async () => {
+      if (await pickPartnerPokemon(context)) {
+        progression.notifyCard();
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.evolve-partner', async () => {
+      await evolvePartnerCommand(context, progression);
+    }),
+  );
+
+  /* ------------------------------ shopify dev actions ----------------------- */
+  // Each of these just runs the real Shopify CLI through a managed VS Code
+  // task - see the module doc on `shopify-cli.ts` for why that alone is
+  // enough to make detection, XP and Friendship all reuse the existing Dev
+  // Actions pipeline with no special-casing here.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.shopify-actions', async () => {
+      await showShopifyActionsQuickPick();
+    }),
+    vscode.commands.registerCommand('pokedev.shopify-theme-check', async () => {
+      await runShopifyThemeCheck();
+    }),
+    vscode.commands.registerCommand('pokedev.shopify-theme-push', async () => {
+      await runShopifyThemePush();
+    }),
+    vscode.commands.registerCommand('pokedev.shopify-app-build', async () => {
+      await runShopifyAppBuild();
+    }),
+    vscode.commands.registerCommand('pokedev.shopify-app-deploy', async () => {
+      await runShopifyAppDeploy();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.debug-add-trainer-xp',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        await progression.applyEvent({
+          ...createProgressionEvent('debug-grant', Date.now(), {
+            grant: 'trainer',
+          }),
+          trainerXp: DEBUG_XP_GRANT,
+          pokemonXp: 0,
+        });
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Trainer XP.', DEBUG_XP_GRANT),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.debug-add-partner-xp',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        await progression.applyEvent({
+          ...createProgressionEvent('debug-grant', Date.now(), {
+            grant: 'partner',
+          }),
+          trainerXp: 0,
+          pokemonXp: DEBUG_XP_GRANT,
+        });
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Partner XP.', DEBUG_XP_GRANT),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.debug-grant-5-exp', async () => {
+      if (!areDebugCommandsEnabled()) {
+        return;
+      }
+      const partner = resolvePartnerIdentity(context);
+      if (!partner) {
+        void vscode.window.showWarningMessage(
+          vscode.l10n.t('No partner Pokémon to grant EXP to.'),
+        );
+        return;
+      }
+      const accepted = await progression.applyEvent({
+        ...createProgressionEvent('debug-grant', Date.now(), {
+          grant: 'partner-small',
+        }),
+        trainerXp: 0,
+        pokemonXp: DEBUG_SMALL_XP_GRANT,
+      });
+      if (accepted) {
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Partner EXP.', DEBUG_SMALL_XP_GRANT),
+        );
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'pokedev.debug-add-friendship',
+      async () => {
+        if (!areDebugCommandsEnabled()) {
+          return;
+        }
+        // A direct Friendship grant, not an XP event: Friendship is not XP,
+        // and this bypasses the ledger entirely (same reasoning as
+        // `grantFlatTrainerXp`) so it is never rate-limited or logged as
+        // activity - it exists purely to make evolution QA practical without
+        // waiting on real coding time.
+        const granted = await progression.grantFriendshipToPartner(
+          DEBUG_FRIENDSHIP_GRANT,
+        );
+        if (!granted) {
+          void vscode.window.showWarningMessage(
+            vscode.l10n.t('No partner Pokémon to grant Friendship to.'),
+          );
+          return;
+        }
+        showStatusMessage(
+          vscode.l10n.t('Granted {0} Friendship.', DEBUG_FRIENDSHIP_GRANT),
+        );
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pokedev.debug-give-stone', async () => {
+      if (!areDebugCommandsEnabled()) {
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        ITEM_DEFINITIONS.map((definition) => ({
+          label: definition.name,
+          description: definition.description,
+          id: definition.id,
+        })),
+        {
+          placeHolder: vscode.l10n.t(
+            'Select an evolution stone to give yourself',
+          ),
+        },
+      );
+      if (!picked) {
+        return;
+      }
+      await addItem(context, picked.id, 1);
+      pokedevState.notify('inventory');
+      showStatusMessage(
+        vscode.l10n.t('Added 1 {0} to your Bag.', picked.label),
+      );
+    }),
+  );
+
+  if (vscode.window.registerWebviewPanelSerializer) {
+    vscode.window.registerWebviewPanelSerializer(TrainerCardPanel.viewType, {
+      async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+        TrainerCardPanel.revive(webviewPanel, context);
+      },
+    });
+  }
+
+  if (vscode.window.registerWebviewPanelSerializer) {
+    vscode.window.registerWebviewPanelSerializer(PokeGearPanel.viewType, {
+      async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+        PokeGearPanel.revive(webviewPanel, context);
+      },
+    });
+  }
+
+  if (vscode.window.registerWebviewPanelSerializer) {
+    // Make sure we register a serializer in activation event
+    vscode.window.registerWebviewPanelSerializer(PokemonPanel.viewType, {
+      async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
+        // Reset the webview options so we use latest uri for `localResourceRoots`.
+        webviewPanel.webview.options = getWebviewOptions(context.extensionUri);
+        const spec = PokemonSpecification.fromConfiguration();
+        PokemonPanel.revive(
+          webviewPanel,
+          context.extensionUri,
+          spec.color,
+          spec.type,
+          spec.size,
+          spec.generation,
+          spec.originalSpriteSize,
+          getConfiguredTheme(),
+          getConfiguredThemeKind(),
+          getThrowWithMouseConfiguration(),
+        );
+
+        if (PokemonPanel.currentPanel) {
+          const collection = getDefaultPokemonForFreshSession(context);
+          if (shouldSpawnInitialCollection(collection)) {
+            await spawnAndPersistCollection(
+              context,
+              PokemonPanel.currentPanel,
+              collection,
+            );
+          }
+        }
+      },
+    });
+  }
+}
+
+function updateStatusBar(): void {
+  spawnPokemonStatusBar.text = `$(squirrel)`;
+  spawnPokemonStatusBar.tooltip = vscode.l10n.t('Spawn Pokemon');
+  spawnPokemonStatusBar.show();
+}
+
+/** How much a single debug grant is worth. */
+const DEBUG_XP_GRANT = 100;
+
+/** Small debug grant for manually testing in-world toasts. */
+const DEBUG_SMALL_XP_GRANT = 5;
+
+/** How much a single Friendship debug grant is worth. Friendship is slow to
+ * earn through real activity, so this is deliberately large enough to reach
+ * an evolution threshold in a couple of clicks for QA. */
+const DEBUG_FRIENDSHIP_GRANT = 50;
+
+/**
+ * Debug commands are hidden from the palette by a `when` clause, but the
+ * setting is re-checked here too: a keybinding or `executeCommand` bypasses
+ * the palette entirely, and these must never fire on a default install.
+ */
+function areDebugCommandsEnabled(): boolean {
+  const enabled = vscode.workspace
+    .getConfiguration('pokedev')
+    .get<boolean>('enableDebugCommands', false);
+  if (!enabled) {
+    void vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        'PokeDev debug commands are disabled. Enable "pokedev.enableDebugCommands" to use them.',
+      ),
+    );
+  }
+  return enabled;
+}
+
+/**
+ * Persists anything held in memory before the host tears the extension down.
+ *
+ * Only active coding time is at risk: XP is written as it is earned, but time
+ * is banked between ticks so the profile is not rewritten every minute for no
+ * reason. Returning the promise gives VS Code the chance to await the write.
+ */
+export function deactivate(): Thenable<void> | undefined {
+  activityTracker?.dispose();
+  activityTracker = undefined;
+  gitActivityTracker?.dispose();
+  gitActivityTracker = undefined;
+
+  const pending = progressionService?.flush();
+  progressionService?.dispose();
+  progressionService = undefined;
+  return pending;
+}
+
+export function spawnPokemonDeactivate() {
+  spawnPokemonStatusBar.dispose();
+}
+
+function getWebviewOptions(
+  extensionUri: vscode.Uri,
+): vscode.WebviewOptions & vscode.WebviewPanelOptions {
+  return {
+    // Enable javascript in the webview
+    enableScripts: true,
+    // And restrict the webview to only loading content from our extension's `media` directory.
+    localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
+  };
+}
+
+interface IPokemonPanel {
+  // throwBall(): void;
+  resetPokemon(): void;
+  spawnPokemon(spec: PokemonSpecification): void;
+  deletePokemon(pokemonName: string): void;
+  listPokemon(): void;
+  rollCall(): void;
+  themeKind(): vscode.ColorThemeKind;
+  throwBallWithMouse(): boolean;
+  updatePokemonColor(newColor: PokemonColor): void;
+  updatePokemonType(newType: PokemonType): void;
+  updatePokemonSize(newSize: PokemonSize): void;
+  updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind): void;
+  updateDisplaySkin(skinId: string): void;
+  updateEnvironment(environmentId: string): void;
+  updateRoamingStyle(styleId: string): void;
+  update(): void;
+  setThrowWithMouse(newThrowWithMouse: boolean): void;
+  evolvePokemon(payload: {
+    name: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+  }): void;
+}
+
+class PokemonWebviewContainer implements IPokemonPanel {
+  protected _extensionUri: vscode.Uri;
+  protected _disposables: vscode.Disposable[] = [];
+  protected _pokemonColor: PokemonColor;
+  protected _pokemonType: PokemonType;
+  protected _pokemonSize: PokemonSize;
+  protected _pokemonGeneration: string;
+  protected _pokemonOriginalSpriteSize: number;
+  protected _theme: Theme;
+  protected _themeKind: vscode.ColorThemeKind;
+  protected _throwBallWithMouse: boolean;
+
+  constructor(
+    extensionUri: vscode.Uri,
+    color: PokemonColor,
+    type: PokemonType,
+    size: PokemonSize,
+    generation: string,
+    originalSpriteSize: number,
+    theme: Theme,
+    themeKind: ColorThemeKind,
+    throwBallWithMouse: boolean,
+  ) {
+    this._extensionUri = extensionUri;
+    this._pokemonColor = color;
+    this._pokemonType = type;
+    this._pokemonSize = size;
+    this._pokemonGeneration = generation;
+    this._pokemonOriginalSpriteSize = originalSpriteSize;
+    this._theme = theme;
+    this._themeKind = themeKind;
+    this._throwBallWithMouse = throwBallWithMouse;
+  }
+
+  public pokemonColor(): PokemonColor {
+    return normalizeColor(this._pokemonColor, this._pokemonType);
+  }
+
+  public pokemonType(): PokemonType {
+    return this._pokemonType;
+  }
+
+  public pokemonSize(): PokemonSize {
+    return this._pokemonSize;
+  }
+
+  public pokemonGeneration(): string {
+    return this._pokemonGeneration;
+  }
+
+  public pokemonOriginalSpriteSize(): number {
+    return this._pokemonOriginalSpriteSize;
+  }
+
+  public theme(): Theme {
+    return this._theme;
+  }
+
+  public themeKind(): vscode.ColorThemeKind {
+    return this._themeKind;
+  }
+
+  public throwBallWithMouse(): boolean {
+    return this._throwBallWithMouse;
+  }
+
+  public updatePokemonColor(newColor: PokemonColor) {
+    this._pokemonColor = newColor;
+  }
+
+  public updatePokemonType(newType: PokemonType) {
+    this._pokemonType = newType;
+  }
+
+  public updatePokemonSize(newSize: PokemonSize) {
+    this._pokemonSize = newSize;
+  }
+
+  public updatePokemonGeneration(newGeneration: string) {
+    this._pokemonGeneration = newGeneration;
+  }
+
+  public updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind) {
+    this._theme = newTheme;
+    this._themeKind = themeKind;
+  }
+
+  public setThrowWithMouse(newThrowWithMouse: boolean): void {
+    this._throwBallWithMouse = newThrowWithMouse;
+    void this.getWebview().postMessage({
+      command: 'throw-with-mouse',
+      enabled: newThrowWithMouse,
+    });
+  }
+
+  /**
+   * Live-switches the display border with no webview reload: unlike
+   * `updateTheme`/`update()` (which re-render the whole HTML document), this
+   * is a plain `postMessage` the client applies by restyling the existing
+   * `.pokedev-display`/`.pokedev-screen` elements in place, so the Pokemon
+   * roster, positions and animation state are never touched.
+   */
+  public updateDisplaySkin(skinId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-display-skin',
+      text: skinId,
+    });
+  }
+
+  /**
+   * Live-switches the background environment scene with no webview reload -
+   * same reasoning as `updateDisplaySkin`, and entirely independent of it:
+   * the environment is a plain background image behind the Pokemon, the
+   * display skin is the bezel above everything. Switching one never touches
+   * the other, and neither ever touches the Pokemon roster/positions/state.
+   */
+  public updateEnvironment(environmentId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-environment',
+      text: environmentId,
+    });
+  }
+
+  /**
+   * Live-switches roaming strategy with no webview reload - same reasoning
+   * as `updateDisplaySkin`/`updateEnvironment`. The client converts existing
+   * Pokemon positions in place (`applyRoamingStyle` in `panel/main.ts`);
+   * nothing about the Pokemon roster, XP, Friendship or any other
+   * progression is touched here or there.
+   */
+  public updateRoamingStyle(styleId: string): void {
+    void this.getWebview().postMessage({
+      command: 'set-roaming-style',
+      text: styleId,
+    });
+  }
+
+  public throwBall() {
+    void this.getWebview().postMessage({
+      command: 'throw-ball',
+    });
+  }
+
+  public resetPokemon(): void {
+    void this.getWebview().postMessage({
+      command: 'reset-pokemon',
+    });
+  }
+
+  public evolvePokemon(payload: {
+    name: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+  }): void {
+    void this.getWebview().postMessage({
+      command: 'evolve-pokemon',
+      ...payload,
+    });
+  }
+
+  public spawnPokemon(spec: PokemonSpecification) {
+    void this.getWebview().postMessage({
+      command: 'spawn-pokemon',
+      type: spec.type,
+      color: spec.color,
+      name: spec.name,
+      generation: spec.generation,
+      originalSpriteSize: spec.originalSpriteSize,
+    });
+    void this.getWebview().postMessage({
+      command: 'set-size',
+      size: spec.size,
+    });
+  }
+
+  public listPokemon() {
+    void this.getWebview().postMessage({ command: 'list-pokemon' });
+  }
+
+  public rollCall(): void {
+    void this.getWebview().postMessage({ command: 'roll-call' });
+  }
+
+  public deletePokemon(pokemonName: string) {
+    void this.getWebview().postMessage({
+      command: 'delete-pokemon',
+      name: pokemonName,
+    });
+  }
+
+  protected getWebview(): vscode.Webview {
+    throw new Error('Not implemented');
+  }
+
+  protected _update() {
+    const webview = this.getWebview();
+    webview.html = this._getHtmlForWebview(webview);
+  }
+
+  // #TODO: verify if this is needed
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  public update() {}
+
+  protected _getHtmlForWebview(webview: vscode.Webview) {
+    // Local path to main script run in the webview
+    const scriptPathOnDisk = vscode.Uri.joinPath(
+      this._extensionUri,
+      'media',
+      'main-bundle.js',
+    );
+
+    // And the uri we use to load this script in the webview
+    const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
+
+    // Local path to css styles
+    const styleResetPath = vscode.Uri.joinPath(
+      this._extensionUri,
+      'media',
+      'reset.css',
+    );
+    const stylesPathMainPath = vscode.Uri.joinPath(
+      this._extensionUri,
+      'media',
+      'pokemon.css',
+    );
+    const silkScreenFontPath = webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this._extensionUri,
+        'media',
+        'Silkscreen-Regular.ttf',
+      ),
+    );
+
+    // Uri to load styles into webview
+    const stylesResetUri = webview.asWebviewUri(styleResetPath);
+    const stylesMainUri = webview.asWebviewUri(stylesPathMainPath);
+
+    // Get path to resource on disk
+    const basePokemonUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media'),
+    );
+
+    // Use a nonce to only allow specific scripts to be run
+    const nonce = getNonce();
+
+    return `<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+				<!--
+					Use a content security policy to only allow loading images from https or from our extension directory,
+					and only allow scripts that have a specific nonce.
+				-->
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${
+          webview.cspSource
+        } 'nonce-${nonce}'; img-src ${
+          webview.cspSource
+        } https:; script-src 'nonce-${nonce}';
+                font-src ${webview.cspSource};">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<link href="${stylesResetUri}" rel="stylesheet" nonce="${nonce}">
+				<link href="${stylesMainUri}" rel="stylesheet" nonce="${nonce}">
+                <style nonce="${nonce}">
+                @font-face {
+                    font-family: 'silkscreen';
+                    src: url('${silkScreenFontPath}') format('truetype');
+                }
+                </style>
+				<title>VS Code Pokemon</title>
+			</head>
+			<body>
+                <div class="pokedev-display" id="pokedevDisplay">
+                    <div class="pokedev-screen" id="pokedevScreen">
+                        <img class="pokedev-environment" id="pokedevEnvironment" alt="">
+                        <canvas id="pokemonCanvas"></canvas>
+                        <div id="pokemonContainer"></div>
+                        <div id="foreground"></div>
+                    </div>
+                    <img class="pokedev-display-overlay" id="pokedevOverlay" alt="">
+                </div>
+                <script nonce="${nonce}" src="${scriptUri}"></script>
+                <script nonce="${nonce}">
+                    pokemonApp.pokemonPanelApp(
+                        "${basePokemonUri}",
+                        "${this.theme()}",
+                        ${this.themeKind()},
+                        "${this.pokemonColor()}",
+                        "${this.pokemonSize()}",
+                        "${this.pokemonType()}",
+                        "${this.throwBallWithMouse()}",
+                        "${this.pokemonGeneration()}",
+                        "${this.pokemonOriginalSpriteSize()}",
+                        "${getConfiguredDisplaySkin()}",
+                        "${getConfiguredEnvironment()}",
+                        "${getConfiguredRoamingStyle()}",
+                    );
+                </script>
+            </body>
+			</html>`;
+  }
+}
+
+function handleWebviewMessage(message: WebviewMessage) {
+  switch (message.command) {
+    case 'alert':
+      void vscode.window.showErrorMessage(message.text);
+      return;
+    case 'info':
+      void vscode.window.showInformationMessage(message.text);
+      return;
+  }
+}
+
+/**
+ * Manages pokemon coding webview panels
+ */
+class PokemonPanel extends PokemonWebviewContainer implements IPokemonPanel {
+  /**
+   * Track the currently panel. Only allow a single panel to exist at a time.
+   */
+  public static currentPanel: PokemonPanel | undefined;
+
+  public static readonly viewType = 'pokedevPanel';
+
+  private readonly _panel: vscode.WebviewPanel;
+
+  public static createOrShow(
+    extensionUri: vscode.Uri,
+    pokemonColor: PokemonColor,
+    pokemonType: PokemonType,
+    pokemonSize: PokemonSize,
+    pokemonGeneration: string,
+    pokemonOriginalSpriteSize: number,
+    theme: Theme,
+    themeKind: ColorThemeKind,
+    throwBallWithMouse: boolean,
+  ) {
+    const column = vscode.window.activeTextEditor
+      ? vscode.window.activeTextEditor.viewColumn
+      : undefined;
+    // If we already have a panel, show it.
+    if (PokemonPanel.currentPanel) {
+      if (
+        pokemonColor === PokemonPanel.currentPanel.pokemonColor() &&
+        pokemonType === PokemonPanel.currentPanel.pokemonType() &&
+        pokemonSize === PokemonPanel.currentPanel.pokemonSize() &&
+        pokemonGeneration === PokemonPanel.currentPanel.pokemonGeneration()
+      ) {
+        PokemonPanel.currentPanel._panel.reveal(column);
+        return;
+      } else {
+        PokemonPanel.currentPanel.updatePokemonColor(pokemonColor);
+        PokemonPanel.currentPanel.updatePokemonType(pokemonType);
+        PokemonPanel.currentPanel.updatePokemonSize(pokemonSize);
+        PokemonPanel.currentPanel.update();
+      }
+    }
+
+    // Otherwise, create a new panel.
+    const panel = vscode.window.createWebviewPanel(
+      PokemonPanel.viewType,
+      vscode.l10n.t('Pokemon Panel'),
+      vscode.ViewColumn.Two,
+      getWebviewOptions(extensionUri),
+    );
+
+    PokemonPanel.currentPanel = new PokemonPanel(
+      panel,
+      extensionUri,
+      pokemonColor,
+      pokemonType,
+      pokemonSize,
+      pokemonGeneration,
+      pokemonOriginalSpriteSize,
+      theme,
+      themeKind,
+      throwBallWithMouse,
+    );
+  }
+
+  public resetPokemon() {
+    void this.getWebview().postMessage({ command: 'reset-pokemon' });
+  }
+
+  public listPokemon() {
+    void this.getWebview().postMessage({ command: 'list-pokemon' });
+  }
+
+  public rollCall(): void {
+    void this.getWebview().postMessage({ command: 'roll-call' });
+  }
+
+  public deletePokemon(pokemonName: string): void {
+    void this.getWebview().postMessage({
+      command: 'delete-pokemon',
+      name: pokemonName,
+    });
+  }
+
+  public static revive(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    pokemonColor: PokemonColor,
+    pokemonType: PokemonType,
+    pokemonSize: PokemonSize,
+    pokemonGeneration: string,
+    pokemonOriginalSpriteSize: number,
+    theme: Theme,
+    themeKind: ColorThemeKind,
+    throwBallWithMouse: boolean,
+  ) {
+    PokemonPanel.currentPanel = new PokemonPanel(
+      panel,
+      extensionUri,
+      pokemonColor,
+      pokemonType,
+      pokemonSize,
+      pokemonGeneration,
+      pokemonOriginalSpriteSize,
+      theme,
+      themeKind,
+      throwBallWithMouse,
+    );
+  }
+
+  private constructor(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    color: PokemonColor,
+    type: PokemonType,
+    size: PokemonSize,
+    generation: string,
+    originalSpriteSize: number,
+    theme: Theme,
+    themeKind: ColorThemeKind,
+    throwBallWithMouse: boolean,
+  ) {
+    super(
+      extensionUri,
+      color,
+      type,
+      size,
+      generation,
+      originalSpriteSize,
+      theme,
+      themeKind,
+      throwBallWithMouse,
+    );
+
+    this._panel = panel;
+
+    // Set the webview's initial html content
+    this._update();
+
+    // Listen for when the panel is disposed
+    // This happens when the user closes the panel or when the panel is closed programmatically
+    this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+    // Update the content based on view changes
+    this._panel.onDidChangeViewState(
+      () => {
+        this.update();
+      },
+      null,
+      this._disposables,
+    );
+
+    // Handle messages from the webview
+    this._panel.webview.onDidReceiveMessage(
+      handleWebviewMessage,
+      null,
+      this._disposables,
+    );
+  }
+
+  public dispose() {
+    PokemonPanel.currentPanel = undefined;
+
+    // Clean up our resources
+    this._panel.dispose();
+
+    while (this._disposables.length) {
+      const x = this._disposables.pop();
+      if (x) {
+        x.dispose();
+      }
+    }
+  }
+
+  public update() {
+    if (this._panel.visible) {
+      this._update();
+    }
+  }
+
+  getWebview(): vscode.Webview {
+    return this._panel.webview;
+  }
+}
+
+class PokemonWebviewViewProvider extends PokemonWebviewContainer {
+  public static readonly viewType = 'pokedevView';
+
+  private _webviewView?: vscode.WebviewView;
+  private _context: vscode.ExtensionContext;
+
+  constructor(
+    context: vscode.ExtensionContext,
+    extensionUri: vscode.Uri,
+    color: PokemonColor,
+    type: PokemonType,
+    size: PokemonSize,
+    generation: string,
+    originalSpriteSize: number,
+    theme: Theme,
+    themeKind: ColorThemeKind,
+    throwBallWithMouse: boolean,
+  ) {
+    super(
+      extensionUri,
+      color,
+      type,
+      size,
+      generation,
+      originalSpriteSize,
+      theme,
+      themeKind,
+      throwBallWithMouse,
+    );
+    this._context = context;
+  }
+
+  async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
+    this._webviewView = webviewView;
+
+    webviewView.webview.options = getWebviewOptions(this._extensionUri);
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+    // No immediate seed call here: doing that unconditionally on every
+    // resolve raced the client's own `recoverState()` and could spawn a
+    // visual duplicate of every Pokemon the client was about to restore from
+    // its own webview state. Instead, the client always reports what it
+    // already has via `request-canonical-collection` (see the doc comment
+    // on `_reconcileWithCanonicalCollection`), and this only ever spawns
+    // whatever that report is missing.
+    webviewView.webview.onDidReceiveMessage(
+      (message: WebviewMessage) => {
+        if (message.command === 'request-canonical-collection') {
+          void this._reconcileWithCanonicalCollection(message.text);
+          return;
+        }
+        handleWebviewMessage(message);
+      },
+      null,
+      this._disposables,
+    );
+  }
+
+  /**
+   * Brings this webview's rendering up to date with the user's REAL, saved
+   * Pokemon collection.
+   *
+   * This webview's own persisted state (`vscode.getState()`/`setState()` in
+   * `panel/main.ts`) is a separate thing from that collection, and can drift
+   * behind it in ways that have nothing to do with the user doing anything
+   * wrong: an extension update or a cleared webview state resets the
+   * former but never the latter, and this state is per-webview - a Pokemon
+   * spawned, evolved, or removed while a DIFFERENT window's copy of this
+   * view was the one open never reaches this one on its own. Without this,
+   * such a webview quietly keeps rendering whatever it last had, forever,
+   * even after the user's real collection has moved on.
+   *
+   * `existingNamesText` is newline-joined Pokemon names the CLIENT reports
+   * already having, sent unconditionally on every load - so this only ever
+   * fills in what is actually missing, never re-spawning (and therefore
+   * never visually duplicating) something the client already restored
+   * itself.
+   */
+  private async _reconcileWithCanonicalCollection(
+    existingNamesText: string,
+  ): Promise<void> {
+    let canonicalCollection: PokemonSpecification[];
+    try {
+      canonicalCollection = PokemonSpecification.collectionFromMemento(
+        this._context,
+        getConfiguredSize(),
+      );
+    } catch (error) {
+      // A single malformed entry must not leave a webview permanently
+      // empty - `listPartnerCandidates` (the Explorer/Trainer Card path)
+      // already tolerates this defensively; this path historically has not.
+      console.error(
+        'PokeDev: could not read the saved Pokemon collection',
+        error,
+      );
+      return;
+    }
+
+    if (canonicalCollection.length === 0) {
+      // Nothing saved yet anywhere - a genuinely fresh install. Seed from
+      // the configured defaults, exactly as a brand-new session always has,
+      // and persist them so they become the real collection from now on.
+      const defaults = getConfiguredDefaultPokemon();
+      if (defaults.length > 0) {
+        await spawnAndPersistCollection(this._context, this, defaults);
+      }
+      return;
+    }
+
+    // The real collection already exists and is already correct - only
+    // this webview's rendering of it can be behind, so canonical storage is
+    // never rewritten here.
+    const existingNames = existingNamesText
+      .split('\n')
+      .filter((name) => name.length > 0);
+    const canonicalNames = new Set(
+      canonicalCollection.map((item) => item.name),
+    );
+
+    for (const item of canonicalCollection) {
+      if (existingNames.indexOf(item.name) === -1) {
+        this.spawnPokemon(item);
+      }
+    }
+
+    // The reverse gap: a Pokemon this webview is still rendering that is no
+    // longer in canonical storage at all - a ghost left over from before
+    // this reconciliation existed (deleted from one window's copy of this
+    // view while a different window's copy, with its own separate webview
+    // state, never heard about it). Removing it here is safe specifically
+    // because canonical storage, not this webview, is authoritative: a name
+    // absent from it is never a real Pokemon this session simply has not
+    // learned about yet.
+    for (const name of existingNames) {
+      if (!canonicalNames.has(name)) {
+        this.deletePokemon(name);
+      }
+    }
+  }
+
+  update() {
+    this._update();
+  }
+
+  getWebview(): vscode.Webview {
+    if (this._webviewView === undefined) {
+      throw new Error(
+        vscode.l10n.t(
+          'Panel not active, make sure the pokemon view is visible before running this command.',
+        ),
+      );
+    } else {
+      return this._webviewView.webview;
+    }
+  }
+}
+
+async function createPokemonPlayground(context: vscode.ExtensionContext) {
+  const spec = PokemonSpecification.fromConfiguration();
+  PokemonPanel.createOrShow(
+    context.extensionUri,
+    spec.color,
+    spec.type,
+    spec.size,
+    spec.generation,
+    spec.originalSpriteSize,
+    getConfiguredTheme(),
+    getConfiguredThemeKind(),
+    getThrowWithMouseConfiguration(),
+  );
+  if (PokemonPanel.currentPanel) {
+    var collection = PokemonSpecification.collectionFromMemento(
+      context,
+      getConfiguredSize(),
+    );
+    collection.forEach((item) => {
+      PokemonPanel.currentPanel?.spawnPokemon(item);
+    });
+    await storeCollectionAsMemento(context, collection);
+  } else {
+    var collection = PokemonSpecification.collectionFromMemento(
+      context,
+      getConfiguredSize(),
+    );
+    collection.push(spec);
+    await storeCollectionAsMemento(context, collection);
+  }
+}

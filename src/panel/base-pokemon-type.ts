@@ -1,0 +1,520 @@
+import { POKEMON_DATA } from '../common/pokemon-data';
+import {
+  PokemonColor,
+  PokemonExtraSprite,
+  PokemonSize,
+  PokemonSpeed,
+  PokemonType,
+} from '../common/types';
+import { computeDepthZIndex } from './roaming/overworld-target';
+import { isOverworldRoaming } from './roaming/roaming-mode';
+import { ISequenceTree } from './sequences';
+import {
+  States,
+  IState,
+  resolveState,
+  PokemonInstanceState,
+  isStateAboveGround,
+  BallState,
+  ChaseState,
+  HorizontalDirection,
+  FrameResult,
+  IPokemonType,
+} from './states';
+import { getWorldHeight } from './world-bounds';
+
+/**
+ * A sprite's rendered width/height in px for a given size setting.
+ *
+ * Standalone (not just `BasePokemonType.calculateSpriteWidth`, which
+ * delegates here) so callers that do not yet have a Pokemon instance - e.g.
+ * `main.ts` choosing an Overworld starting position before construction -
+ * can compute the same sprite-aware margin a live instance would.
+ */
+export function calculateSpriteWidth(
+  size: PokemonSize,
+  originalSpriteSize: number,
+): number {
+  switch (size) {
+    case PokemonSize.nano:
+      return originalSpriteSize;
+    case PokemonSize.small:
+      return originalSpriteSize * 1.5;
+    case PokemonSize.medium:
+      return originalSpriteSize * 2;
+    case PokemonSize.large:
+      return originalSpriteSize * 2.5;
+    default:
+      return originalSpriteSize;
+  }
+}
+
+export class InvalidStateError extends Error {
+  fromState: States;
+  pokemonType: string;
+
+  constructor(fromState: States, pokemonType: string) {
+    super(`Invalid state ${fromState} for pokemon type ${pokemonType}`);
+    this.fromState = fromState;
+    this.pokemonType = pokemonType;
+  }
+}
+
+export abstract class BasePokemonType implements IPokemonType {
+  label: string = 'base';
+  static count: number = 0;
+  sequence: ISequenceTree = {
+    startingState: States.sitIdle,
+    sequenceStates: [],
+  };
+  static possibleColors: PokemonColor[];
+  currentState: IState;
+  currentStateEnum: States;
+  holdState: IState | undefined;
+  holdStateEnum: States | undefined;
+  private el: HTMLImageElement;
+  private collision: HTMLDivElement;
+  private speech: HTMLImageElement;
+  private _left: number;
+  private _bottom: number;
+  pokemonRoot: string;
+  _floor: number;
+  /** The last Overworld (2D) resting `bottom` - see the doc comment on
+   * `PokemonInstanceState.overworldBottom`, which this backs. Kept
+   * separate from `_bottom`/`_floor` so a Classic <-> Overworld switch
+   * never has to choose between "preserve Classic's floor" and "preserve
+   * Overworld's last position" - both are always available. */
+  private _overworldBottom: number | undefined;
+  _friend: IPokemonType | undefined;
+  private _name: string;
+  private _baseSpeed: number;
+  private _size: PokemonSize;
+  private _generation: string;
+  private _originalSpriteSize: number;
+
+  constructor(
+    spriteElement: HTMLImageElement,
+    collisionElement: HTMLDivElement,
+    speechElement: HTMLImageElement,
+    size: PokemonSize,
+    left: number,
+    bottom: number,
+    pokemonRoot: string,
+    floor: number,
+    name: string,
+    speed: number,
+    generation: string,
+    originalSpriteSize: number,
+  ) {
+    this.el = spriteElement;
+    this.collision = collisionElement;
+    this.speech = speechElement;
+    this.pokemonRoot = pokemonRoot;
+    this._floor = floor;
+    this._left = left;
+    this._bottom = bottom;
+    this._originalSpriteSize = originalSpriteSize;
+    this.initSprite(size, left, bottom, originalSpriteSize);
+    this.currentStateEnum = this.sequence.startingState;
+    this.currentState = resolveState(this.currentStateEnum, this);
+
+    this._name = name;
+    this._size = size;
+    this._baseSpeed = this.randomizeSpeed(speed);
+    this._generation = generation;
+
+    // Increment the static count of the Pokemon class that the constructor belongs to
+    (this.constructor as typeof BasePokemonType).count += 1;
+  }
+
+  initSprite(
+    pokemonSize: PokemonSize,
+    left: number,
+    bottom: number,
+    originalSpriteSize: number,
+  ) {
+    const spriteSize = this.calculateSpriteWidth(
+      pokemonSize,
+      originalSpriteSize,
+    );
+
+    this.el.style.left = `${left}px`;
+    this.el.style.bottom = `${bottom}px`;
+    this.el.style.width = `${spriteSize}px`;
+    this.el.style.height = `${spriteSize}px`;
+
+    // Remove 'auto' since it gave issues with sizing
+    this.el.style.maxWidth = 'none';
+    this.el.style.maxHeight = 'none';
+
+    this.collision.style.left = `${left}px`;
+    this.collision.style.bottom = `${bottom}px`;
+    this.collision.style.width = `${spriteSize}px`;
+    this.collision.style.height = `${spriteSize}px`;
+
+    this.speech.style.left = `${left}px`;
+    this.speech.style.bottom = `${bottom + spriteSize}px`;
+    this.hideSpeechBubble();
+  }
+
+  get left(): number {
+    return this._left;
+  }
+
+  get bottom(): number {
+    return this._bottom;
+  }
+
+  private repositionAccompanyingElements() {
+    this.collision.style.left = `${this._left}px`;
+    this.collision.style.bottom = `${this._bottom}px`;
+    this.speech.style.left = `${this._left}px`;
+    this.speech.style.bottom = `${
+      this._bottom +
+      this.calculateSpriteWidth(this._size, this._originalSpriteSize)
+    }px`;
+  }
+
+  calculateSpriteWidth(size: PokemonSize, originalSpriteSize: number): number {
+    return calculateSpriteWidth(size, originalSpriteSize);
+  }
+
+  positionBottom(bottom: number): void {
+    this._bottom = bottom;
+    this.el.style.bottom = `${this._bottom}px`;
+
+    if (isOverworldRoaming()) {
+      // Remembered independently of Classic's floor, so switching back to
+      // Overworld later (even after Classic has moved `_bottom` to the
+      // floor) can restore this exact spot - see `_overworldBottom`'s doc
+      // comment.
+      this._overworldBottom = bottom;
+      this.el.style.zIndex = String(
+        computeDepthZIndex(bottom, getWorldHeight()),
+      );
+    } else {
+      // Falls back to the static `z-index: 2` rule in pokemon.css - clears
+      // any depth value a previous Overworld session left behind.
+      this.el.style.zIndex = '';
+    }
+
+    this.repositionAccompanyingElements();
+  }
+
+  /** The last Overworld resting position, if this Pokemon has ever been in
+   * Overworld mode - see `_overworldBottom`'s doc comment. */
+  get overworldBottom(): number | undefined {
+    return this._overworldBottom;
+  }
+
+  positionLeft(left: number): void {
+    this._left = left;
+    this.el.style.left = `${this._left}px`;
+    this.repositionAccompanyingElements();
+  }
+
+  get width(): number {
+    return this.el.width;
+  }
+
+  get floor(): number {
+    return this._floor;
+  }
+
+  get hello(): string {
+    // return the sound of the name of the animal
+    return ` says hello 👋!`;
+  }
+
+  getState(): PokemonInstanceState {
+    return {
+      currentStateEnum: this.currentStateEnum,
+      overworldBottom: this._overworldBottom,
+    };
+  }
+
+  get speed(): number {
+    const base = this._baseSpeed ?? 0;
+    switch (this._size) {
+      case PokemonSize.nano:
+        return base * 0.5; // much slower for nano
+      case PokemonSize.small:
+        return base * 0.75; // slower for small
+      case PokemonSize.medium:
+        return base * 1.0; // baseline
+      case PokemonSize.large:
+        return base * 1.25; // slightly faster for large
+      default:
+        return base;
+    }
+  }
+
+  randomizeSpeed(speed: number): number {
+    const min = speed * 0.7;
+    const max = speed * 1.3;
+    const newSpeed = Math.random() * (max - min) + min;
+    return newSpeed;
+  }
+
+  get isMoving(): boolean {
+    return this._baseSpeed !== PokemonSpeed.still;
+  }
+
+  recoverFriend(friend: IPokemonType) {
+    // Recover friends..
+    this._friend = friend;
+  }
+
+  recoverState(state: PokemonInstanceState) {
+    // TODO : Resolve a bug where if it was swiping before, it would fail
+    // because holdState is no longer valid.
+    this.currentStateEnum = state.currentStateEnum ?? States.sitIdle;
+    this.currentState = resolveState(this.currentStateEnum, this);
+    // Restored regardless of mode/ground state below - this is just
+    // remembered data, not a position change on its own.
+    this._overworldBottom = state.overworldBottom;
+
+    if (!isStateAboveGround(this.currentStateEnum)) {
+      // Reset the bottom of the sprite to the floor as the theme
+      // has likely changed - Classic mode only. Overworld's starting
+      // position is decided by `applyRoamingStyle`/spawn logic in
+      // `main.ts`, which runs after recovery and uses `overworldBottom`
+      // above when present, so this must not clobber it back to the floor.
+      if (!isOverworldRoaming()) {
+        this.positionBottom(this.floor);
+      }
+    }
+  }
+
+  get canSwipe() {
+    return !isStateAboveGround(this.currentStateEnum);
+  }
+
+  get canChase() {
+    return !isStateAboveGround(this.currentStateEnum) && this.isMoving;
+  }
+
+  showSpeechBubble(duration: number = 3000, friend: boolean = false) {
+    // Extract the media folder
+    const segments = this.pokemonRoot.split('/');
+    const basePath = segments.slice(0, segments.length - 3).join('/');
+
+    if (friend) {
+      this.speech.src = `${basePath}/heart.png`;
+    } else {
+      this.speech.src = `${basePath}/happy.png`;
+    }
+
+    this.speech.style.display = 'block';
+    setTimeout(() => {
+      this.hideSpeechBubble();
+    }, duration);
+  }
+
+  hideSpeechBubble() {
+    this.speech.style.display = 'none';
+  }
+
+  swipe() {
+    if (this.currentStateEnum === States.swipe) {
+      return;
+    }
+    this.holdState = this.currentState;
+    this.holdStateEnum = this.currentStateEnum;
+    this.currentStateEnum = States.swipe;
+    this.currentState = resolveState(this.currentStateEnum, this);
+    this.showSpeechBubble();
+  }
+
+  chase(ballState: BallState, canvas: HTMLCanvasElement) {
+    this.currentStateEnum = States.chase;
+    this.currentState = new ChaseState(this, ballState, canvas);
+  }
+
+  faceLeft() {
+    this.el.style.transform = 'scaleX(-1)';
+    // Also stamped as a custom property, not just the inline transform: a
+    // reaction's bounce/shake animation needs to compose ITS transform with
+    // the current facing direction, and a running CSS animation overrides
+    // even an inline `transform` for the properties it animates - so the
+    // facing has to be readable from somewhere an animation's keyframes can
+    // reference (see `.pokedev-bounce` / `.pokedev-shake` in pokemon.css).
+    this.el.style.setProperty('--pokedev-facing', '-1');
+  }
+
+  faceRight() {
+    this.el.style.transform = 'scaleX(1)';
+    this.el.style.setProperty('--pokedev-facing', '1');
+  }
+
+  /**
+   * Repoints this Pokemon at a different species, in place.
+   *
+   * In-place rather than despawn-and-respawn so the instance keeps its
+   * position, its friend link and its animation state - an evolution should
+   * look like a transformation, not like one Pokemon leaving and another
+   * arriving.
+   *
+   * `el.src` is cleared deliberately and is not optional. `setAnimation`
+   * early-returns when the current src already ends with the same
+   * `_<face>_8fps.gif`, which is exactly what happens across a species change:
+   * only the path PREFIX differs. Without this reset the sprite would keep
+   * rendering the old species until the animation happened to change frame
+   * type.
+   *
+   * Subclasses override `applySpeciesChange` to refresh whatever they cache
+   * about the species; everything shared lives here.
+   */
+  evolveTo(
+    pokemonType: PokemonType,
+    pokemonRoot: string,
+    generation: string,
+    originalSpriteSize: number,
+  ) {
+    this.label = pokemonType;
+    this.pokemonRoot = pokemonRoot;
+    this._generation = generation;
+    this._originalSpriteSize = originalSpriteSize;
+    this.applySpeciesChange(pokemonType);
+
+    // See above: this reset is what makes the new sprite actually load.
+    this.el.src = '';
+
+    // An evolved form is frequently a different sprite size (32 -> 64), so the
+    // element box has to be recomputed or the new sprite renders wrong.
+    this.initSprite(this._size, this._left, this._bottom, originalSpriteSize);
+    this.setAnimation(
+      this.currentState.spriteLabel,
+      POKEMON_DATA[pokemonType]?.extraSprites?.includes(
+        PokemonExtraSprite.leftFacing,
+      ),
+    );
+  }
+
+  /**
+   * Hook for subclasses to re-read whatever they cache about the species.
+   *
+   * Abstract rather than a no-op default: a subclass that caches species data
+   * and forgets to refresh it would evolve the sprite but keep the old cry,
+   * generation and Pokedex number, which is exactly the kind of half-applied
+   * change that is painful to notice later.
+   */
+  protected abstract applySpeciesChange(pokemonType: PokemonType): void;
+
+  setAnimation(face: string, hasLeftFacingSprite: boolean | undefined) {
+    const validFace =
+      !hasLeftFacingSprite && face === 'walk_left' ? 'walk' : face;
+
+    if (this.el.src.endsWith(`_${validFace}_8fps.gif`)) {
+      return;
+    }
+    this.el.src = `${this.pokemonRoot}_${validFace}_8fps.gif`;
+  }
+
+  chooseNextState(fromState: States): States {
+    // Work out next state
+    var possibleNextStates: States[] | undefined = undefined;
+    for (var i = 0; i < this.sequence.sequenceStates.length; i++) {
+      if (this.sequence.sequenceStates[i].state === fromState) {
+        possibleNextStates = this.sequence.sequenceStates[i].possibleNextStates;
+      }
+    }
+    if (!possibleNextStates) {
+      throw new InvalidStateError(fromState, this.label);
+    }
+    // randomly choose the next state
+    const idx = Math.floor(Math.random() * possibleNextStates.length);
+    return possibleNextStates[idx];
+  }
+
+  nextFrame() {
+    const hasLeftFacingSprite = POKEMON_DATA[
+      this.label
+    ]?.extraSprites?.includes(PokemonExtraSprite.leftFacing);
+
+    if (!hasLeftFacingSprite) {
+      if (this.currentState.horizontalDirection === HorizontalDirection.left) {
+        this.faceLeft();
+      } else if (
+        this.currentState.horizontalDirection === HorizontalDirection.right
+      ) {
+        this.faceRight();
+      }
+    } else {
+      this.faceRight();
+    }
+    this.setAnimation(this.currentState.spriteLabel, hasLeftFacingSprite);
+
+    // What's my buddy doing?
+    if (
+      this.hasFriend &&
+      this.currentStateEnum !== States.chaseFriend &&
+      this.isMoving
+    ) {
+      if (
+        this.friend?.isPlaying &&
+        !isStateAboveGround(this.currentStateEnum)
+      ) {
+        this.currentState = resolveState(States.chaseFriend, this);
+        this.currentStateEnum = States.chaseFriend;
+        return;
+      }
+    }
+
+    var frameResult = this.currentState.nextFrame();
+    if (frameResult === FrameResult.stateComplete) {
+      // If recovering from swipe..
+      if (this.holdState && this.holdStateEnum) {
+        this.currentState = this.holdState;
+        this.currentStateEnum = this.holdStateEnum;
+        this.holdState = undefined;
+        this.holdStateEnum = undefined;
+        return;
+      }
+
+      var nextState = this.chooseNextState(this.currentStateEnum);
+      this.currentState = resolveState(nextState, this);
+      this.currentStateEnum = nextState;
+    } else if (frameResult === FrameResult.stateCancel) {
+      if (this.currentStateEnum === States.chase) {
+        var nextState = this.chooseNextState(States.idleWithBall);
+        this.currentState = resolveState(nextState, this);
+        this.currentStateEnum = nextState;
+      } else if (this.currentStateEnum === States.chaseFriend) {
+        var nextState = this.chooseNextState(States.idleWithBall);
+        this.currentState = resolveState(nextState, this);
+        this.currentStateEnum = nextState;
+      }
+    }
+  }
+
+  get hasFriend(): boolean {
+    return this._friend !== undefined;
+  }
+
+  get friend(): IPokemonType | undefined {
+    return this._friend;
+  }
+
+  get name(): string {
+    return this._name;
+  }
+
+  makeFriendsWith(friend: IPokemonType): boolean {
+    this._friend = friend;
+    console.log(this.name, ": I'm now friends ❤️ with ", friend.name);
+    return true;
+  }
+
+  get isPlaying(): boolean {
+    return (
+      this.isMoving &&
+      (this.currentStateEnum === States.runRight ||
+        this.currentStateEnum === States.runLeft)
+    );
+  }
+
+  get emoji(): string {
+    return '🐶';
+  }
+}

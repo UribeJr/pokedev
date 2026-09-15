@@ -1,0 +1,122 @@
+/*
+ * PokeDev design tokens.
+ *
+ * Extracted from trainer-card.css so the full Trainer Card and the compact
+ * Explorer views share one palette rather than three drifting copies. Every
+ * surface links this first, then its own stylesheet.
+ *
+ * The card FACE uses a fixed retro palette so it reads the same in every
+ * theme; surrounding chrome, buttons and inputs use --vscode-* variables so
+ * light, dark and high-contrast all stay legible.
+ */
+
+:root {
+	/* Geometry */
+	--tc-shell-max: 1040px;
+	--tc-gap: 12px;
+	--tc-radius: 10px;
+	--tc-ball: url('pokeball_sprite_sheet.png');
+
+	/* Card face palette (base tier). */
+	--tc-face-top: #2f6bb5;
+	--tc-face-bottom: #16386a;
+	--tc-face-edge: #0c2447;
+	--tc-edge-light: rgba(255, 255, 255, 0.22);
+	--tc-ink: #f4f7ff;
+	--tc-ink-dim: #a9c2ea;
+	--tc-slot: rgba(6, 17, 36, 0.42);
+	--tc-surface: rgba(6, 17, 36, 0.3);
+	--tc-rule: rgba(255, 255, 255, 0.16);
+	--tc-accent: #ffd75f;
+	--tc-xp-from: #ffe89a;
+	--tc-xp-to: #f5b52a;
+	--tc-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+}
+
+/*
+ * The "Crystal" Trainer Card skin's palette - shared by ALL THREE surfaces
+ * the `pokedev.trainerCard.style` preference controls (PokeGear included,
+ * which forces Crystal unconditionally - see pokegear-types.ts): the full
+ * landscape card (`.tc-card.tc-skin-crystal` in media/trainer-card.css), the
+ * compact Explorer HUD (`.tc-skin-crystal .pd-card` in media/explorer.css),
+ * and PokeGear's own card face (`.tc-card.tc-skin-crystal.pg-card`). Defined
+ * here, once, on the bare skin class (no `.tc-card`/`.pd-card` co-selector)
+ * so no stylesheet keeps its own copy - see each stylesheet's own
+ * `.tc-skin-crystal` rules for the STRUCTURAL differences (border-radius,
+ * box-shadow) that are specific to each surface's own markup and therefore
+ * cannot be shared the same way.
+ *
+ * Off-white card, black ink, a single restrained red accent - deliberately
+ * NOT a blue background, which would be a shallow "PokeDev but blue" reskin
+ * rather than an actual Crystal one. The real in-game Trainer Card palette
+ * is resolved by SGB/GBC hardware palette-index logic (`SCGB_TRAINER_CARD`
+ * in `engine/menus/trainer_card.asm`), not one static color table - the
+ * same caveat `PALETTE_RAMPS` documents in build-crystal-environments.py.
+ *
+ * DAY / NIGHT
+ * -----------
+ * This block is CRYSTAL DAY - the original, approved, unmodified palette.
+ * It is also the fallback/default: an element carrying `.tc-skin-crystal`
+ * with no `data-crystal-palette` attribute at all (a stale cached webview,
+ * a bug) still renders correctly as Day rather than breaking. The
+ * `[data-crystal-palette="night"]` block right below OVERRIDES these same
+ * custom properties for CRYSTAL NIGHT - same structure, same components,
+ * a different Game-Boy-Color-appropriate palette, exactly like how Gold/
+ * Silver/Crystal itself re-palettes the whole world between day and night
+ * without changing a single sprite or menu layout. The resolved palette
+ * (`day`/`night`) is computed host-side by
+ * `src/extension/crystal-palette-config.ts` from the `pokedev.crystalPalette`
+ * setting (`auto`/`day`/`night`) and written onto each surface's card root
+ * as `data-crystal-palette` - see `card-presentation.ts`'s `crystalPaletteAttribute`
+ * and each webview's own render function for where it's actually set.
+ */
+.tc-skin-crystal {
+	--tc-face-top: #f2efe0;
+	/* Same as --tc-face-top: the base `.tc-card`'s diagonal gradient
+	 * background collapses to a flat GBC-style fill with no code
+	 * duplicated - no gradients anywhere in this skin. */
+	--tc-face-bottom: #f2efe0;
+	--tc-face-edge: #1a1a1a;
+	--tc-edge-light: transparent;
+	--tc-ink: #1a1a1a;
+	--tc-ink-dim: #6b6456;
+	--tc-slot: #ddd6c2;
+	--tc-surface: #e9e3d0;
+	--tc-rule: #b9b092;
+	--tc-accent: #a52822;
+	--tc-xp-from: #1a1a1a;
+	--tc-xp-to: #1a1a1a;
+	--tc-shadow: none;
+	--tc-radius: 0;
+}
+
+/*
+ * CRYSTAL NIGHT.
+ *
+ * Not an inversion and not a generic dark-mode charcoal: the same "ink on
+ * paper" relationship Day uses (`--tc-ink`/`--tc-face-edge` share ONE value,
+ * `--tc-xp-from`/`--tc-xp-to` share ONE value - flat fills, never a
+ * gradient) just flips which end of the palette is the "paper" - a deep
+ * blue-black card face with a pale moonlit-cream ink/border/fill, plus one
+ * dark-navy step up for panels/slots so nested surfaces read as depth
+ * differences rather than a flat black wall. The red accent is the same
+ * family as Day, brightened only enough to stay visible against a near-
+ * black face (Day's `#a52822` on `#f2efe0` is a ~6.8:1 contrast; unchanged,
+ * it would fall to ~2.8:1 on this background).
+ */
+.tc-skin-crystal[data-crystal-palette='night'] {
+	--tc-face-top: #141726;
+	--tc-face-bottom: #141726;
+	--tc-face-edge: #d9d3ba;
+	--tc-edge-light: transparent;
+	--tc-ink: #d9d3ba;
+	--tc-ink-dim: #8e98b8;
+	--tc-slot: #1f2440;
+	--tc-surface: #242a4d;
+	--tc-rule: #3c4568;
+	--tc-accent: #d9463e;
+	--tc-xp-from: #d9d3ba;
+	--tc-xp-to: #d9d3ba;
+	--tc-shadow: none;
+	--tc-radius: 0;
+}

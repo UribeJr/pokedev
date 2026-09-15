@@ -1,0 +1,575 @@
+/**
+ * Watches the editor and turns real work into progression events.
+ *
+ * The guiding rule is that XP should track effort, not keystrokes. Nothing
+ * here awards anything per character typed or per save; each source has an
+ * explicit reason to believe something was actually accomplished:
+ *
+ *   - a save only counts if the file's contents genuinely changed
+ *   - coding time only accrues while the window is focused and recently used
+ *   - a task only counts if it exited zero
+ *
+ * This class owns the listeners and the one interval; it never writes state.
+ * Everything it observes becomes a `ProgressionEvent` handed to
+ * `ProgressionService`, which is the only writer.
+ */
+import * as vscode from 'vscode';
+import {
+  countsAsActivity,
+  hasDocumentChanged,
+  idleTimeoutForMode,
+  isIgnoredPath,
+  normalizeProgressionMode,
+  SaveRecord,
+  shouldAccrueCodingTime,
+  shouldAwardBatch,
+} from '../progression/activity-rules';
+import {
+  buildTaskIdentity,
+  classifyTaskAsDevAction,
+} from '../progression/dev-action-classifier';
+import {
+  devActionCooldownKey,
+  shouldAcceptDevAction,
+} from '../progression/dev-action-rules';
+import { DevActionSource } from '../progression/dev-action-types';
+import {
+  FRIENDSHIP_CODING_CHUNK_MS,
+  FRIENDSHIP_GAIN_CODING_CHUNK,
+} from '../progression/friendship-rules';
+import {
+  ActivitySource,
+  ProgressionMode,
+} from '../progression/progression-types';
+import { classifyShopifyTask } from '../progression/shopify-dev-action-classifier';
+import {
+  shopifyDevActionCooldownKey,
+  shopifyDevActionCooldownMs,
+} from '../progression/shopify-dev-action-rules';
+import { ShopifyDevActionSource } from '../progression/shopify-dev-action-types';
+import {
+  BATCH_WINDOW_MS,
+  CODING_CHUNK_MS,
+  CODING_TICK_MS,
+  computeWorkBatchAward,
+  TASK_COOLDOWN_MS,
+} from '../progression/xp-rules';
+import {
+  isDevActionsEnabled,
+  taskToClassifiable,
+} from './dev-action-capabilities';
+import {
+  readDevActionCooldowns,
+  rememberDevActionAccepted,
+} from './dev-action-storage';
+import {
+  createProgressionEvent,
+  ProgressionService,
+} from './progression-service';
+import {
+  isShopifyDevActionsEnabled,
+  taskToClassifiableShopify,
+} from './shopify-task-bridge';
+import { resolvePartnerIdentity } from './trainer-partner';
+
+export class ActivityTracker implements vscode.Disposable {
+  private readonly _disposables: vscode.Disposable[] = [];
+
+  /**
+   * Timer handle typed structurally.
+   *
+   * This file compiles into the Node extension (`lib: es6` + @types/node,
+   * where this is a `Timeout`) and into the web extension (`lib: WebWorker`,
+   * where it is a `number`). `ReturnType` is the only spelling that is correct
+   * in both.
+   */
+  private _ticker: ReturnType<typeof setInterval> | undefined;
+
+  /** Last qualifying save per document, keyed by uri. */
+  private readonly _lastSave = new Map<string, SaveRecord>();
+
+  /**
+   * Files changed since the pending batch opened, and the debounce timer.
+   *
+   * A batch stays open while saves keep arriving and closes once they stop, so
+   * an agent writing thirty files produces one award rather than thirty.
+   */
+  private readonly _pendingBatch = new Set<string>();
+  private _batchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** When the last batch was actually paid, for the global cooldown. */
+  private _lastBatchAwardAt: number | undefined;
+
+  /** Last rewarded run per task name. */
+  private readonly _lastTask = new Map<string, number>();
+
+  /** Epoch ms of the last meaningful editor interaction. */
+  private _lastActivity = Date.now();
+
+  /** Active coding banked toward the next chunk payout. */
+  private _chunkProgressMs = 0;
+
+  /**
+   * Qualifying coding time banked toward the next partnered-coding
+   * Friendship bonus, for the CURRENT partner only.
+   *
+   * Deliberately a separate accumulator from `_chunkProgressMs` above: that
+   * one tracks "how much coding time has this session banked" (a 10-minute
+   * XP cadence that keeps accruing across a partner switch), while this one
+   * tracks "how long has the SAME Pokemon been partner while coding
+   * qualified" (a slower 30-minute Friendship cadence that must reset to
+   * zero on a partner switch - see `_friendshipCodingTick`).
+   */
+  private _friendshipChunkProgressMs = 0;
+
+  /** Partner nickname as of the last friendship-coding tick, so a switch can
+   * be detected and the accumulator above reset. `undefined` covers both "no
+   * partner" and "not yet observed". */
+  private _friendshipPartnerNickname: string | undefined;
+
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _service: ProgressionService,
+  ) {}
+
+  public start(): void {
+    // Signals that the user is genuinely working. Each is tagged with what
+    // produced it, because `progression.mode` decides which sources to trust:
+    // VS Code reports an agent's edit and a human keystroke as the same
+    // document-change event, so only the selection kind can tell them apart.
+    //
+    // Window focus is checked separately at tick time, so none of this can
+    // accrue while the editor is hidden.
+    this._disposables.push(
+      vscode.workspace.onDidChangeTextDocument(() =>
+        this._touch('document-change'),
+      ),
+      vscode.window.onDidChangeTextEditorSelection((event) => {
+        // `Keyboard` and `Mouse` are the only kinds a person can produce;
+        // programmatic edits arrive as `Command` or with no kind at all.
+        const human =
+          event.kind === vscode.TextEditorSelectionChangeKind.Keyboard ||
+          event.kind === vscode.TextEditorSelectionChangeKind.Mouse;
+        this._touch(human ? 'human-input' : 'document-change');
+      }),
+      vscode.window.onDidChangeActiveTextEditor(() =>
+        this._touch('editor-switch'),
+      ),
+      vscode.window.onDidChangeWindowState((state) => {
+        if (state.focused) {
+          // Returning to the window is not itself work, but it does mean the
+          // idle clock should restart from now rather than from whenever the
+          // user last typed before leaving. This is a deliberate human act in
+          // every mode, so it is not filtered.
+          this._lastActivity = Date.now();
+        }
+      }),
+    );
+
+    this._disposables.push(
+      vscode.workspace.onDidSaveTextDocument((doc) => {
+        this._onSave(doc);
+      }),
+    );
+
+    this._disposables.push(
+      vscode.tasks.onDidEndTaskProcess((event) => {
+        void this._onTaskEnd(event);
+      }),
+    );
+
+    this._ticker = setInterval(() => {
+      void this._onTick();
+    }, CODING_TICK_MS);
+  }
+
+  public dispose(): void {
+    if (this._ticker !== undefined) {
+      clearInterval(this._ticker);
+      this._ticker = undefined;
+    }
+    if (this._batchTimer !== undefined) {
+      clearTimeout(this._batchTimer);
+      this._batchTimer = undefined;
+    }
+    for (const disposable of this._disposables) {
+      disposable.dispose();
+    }
+    this._disposables.length = 0;
+  }
+
+  /** Reads the configured working style. Cheap; VS Code caches settings. */
+  private _mode(): ProgressionMode {
+    return normalizeProgressionMode(
+      vscode.workspace
+        .getConfiguration('pokedev')
+        .get<string>('progression.mode', 'auto'),
+    );
+  }
+
+  private _touch(source: ActivitySource): void {
+    if (!countsAsActivity(this._mode(), source)) {
+      return;
+    }
+    this._lastActivity = Date.now();
+  }
+
+  /* ------------------------------ saving ------------------------------- */
+
+  /**
+   * Collects a changed file into the pending work batch.
+   *
+   * Nothing is paid here. Saves arrive in bursts - a formatter touching
+   * several files, an agent writing a whole feature - and paying per file
+   * would make XP track how much surface a change happened to cover rather
+   * than that a piece of work got done. The batch closes and pays once saves
+   * stop arriving.
+   */
+  private _onSave(doc: vscode.TextDocument): void {
+    if (!this._isEligibleDocument(doc)) {
+      return;
+    }
+
+    // A save is a deliberate act in any mode, so it always counts as activity.
+    this._touch('human-input');
+
+    const key = doc.uri.toString();
+    const fingerprint = fingerprintOf(doc);
+    if (!hasDocumentChanged(this._lastSave.get(key), fingerprint)) {
+      return;
+    }
+
+    this._lastSave.set(key, { at: Date.now(), fingerprint });
+    // A Set, so re-saving the same file inside one window still counts once.
+    this._pendingBatch.add(vscode.workspace.asRelativePath(doc.uri));
+
+    // Each new save pushes the deadline out, so a long burst stays one batch.
+    if (this._batchTimer !== undefined) {
+      clearTimeout(this._batchTimer);
+    }
+    this._batchTimer = setTimeout(() => {
+      this._batchTimer = undefined;
+      void this._flushBatch();
+    }, BATCH_WINDOW_MS);
+  }
+
+  /** Closes the pending batch and pays for it, if the cooldown allows. */
+  private async _flushBatch(): Promise<void> {
+    if (this._pendingBatch.size === 0) {
+      return;
+    }
+    const files = Array.from(this._pendingBatch);
+    this._pendingBatch.clear();
+
+    const now = Date.now();
+    if (!shouldAwardBatch(this._lastBatchAwardAt, now)) {
+      return;
+    }
+    this._lastBatchAwardAt = now;
+
+    const award = computeWorkBatchAward(files.length);
+    await this._service.applyEvent({
+      type: 'work-batch',
+      trainerXp: award.trainerXp,
+      pokemonXp: award.pokemonXp,
+      timestamp: now,
+      metadata: {
+        fileCount: files.length,
+        // Enough to recognise the change in the log without storing a
+        // potentially enormous file list.
+        files: files.slice(0, 5),
+      },
+    });
+  }
+
+  private _isEligibleDocument(doc: vscode.TextDocument): boolean {
+    if (doc.uri.scheme !== 'file' || doc.isUntitled) {
+      return false;
+    }
+    // Outside any open folder: scratch files elsewhere on disk are not this
+    // project's work.
+    if (!vscode.workspace.getWorkspaceFolder(doc.uri)) {
+      return false;
+    }
+
+    return !isIgnoredPath(doc.uri.path);
+  }
+
+  /* --------------------------- active coding --------------------------- */
+
+  /**
+   * One tick of the coding clock.
+   *
+   * Time only accrues when the window is focused AND there has been real
+   * interaction recently, so leaving the editor open on a second monitor
+   * overnight earns nothing. XP is paid in whole chunks; the remainder carries
+   * forward rather than being discarded.
+   */
+  private async _onTick(): Promise<void> {
+    if (!ProgressionService.isEnabled()) {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      !shouldAccrueCodingTime(
+        vscode.window.state.focused,
+        this._lastActivity,
+        now,
+        idleTimeoutForMode(this._mode()),
+      )
+    ) {
+      // Still flush: time banked before going idle should not wait for the
+      // next active tick to reach disk.
+      await this._service.flush();
+      return;
+    }
+
+    this._service.addCodingTime(CODING_TICK_MS);
+    this._chunkProgressMs += CODING_TICK_MS;
+
+    while (this._chunkProgressMs >= CODING_CHUNK_MS) {
+      this._chunkProgressMs -= CODING_CHUNK_MS;
+      await this._service.applyEvent(
+        createProgressionEvent('active-coding', now, {
+          minutes: Math.round(CODING_CHUNK_MS / 60000),
+        }),
+      );
+    }
+
+    await this._friendshipCodingTick();
+    await this._service.flush();
+  }
+
+  /**
+   * The partnered-coding-time Friendship bonus: every
+   * `FRIENDSHIP_CODING_CHUNK_MS` of qualifying coding time spent with the
+   * SAME Pokemon as partner throughout earns `FRIENDSHIP_GAIN_CODING_CHUNK`.
+   *
+   * Only ever called from a tick that already passed `shouldAccrueCodingTime`
+   * (see `_onTick`), so this never needs to re-check focus/idle itself - it
+   * only adds its own, slower cadence and its own partner-continuity rule on
+   * top of time `_onTick` already decided qualifies.
+   *
+   * A partner switch resets the accumulator to zero rather than crediting the
+   * new partner with time it was not actually there for, or the old partner
+   * with time after it stopped being partner - "based on actual tracked
+   * time," not a guess.
+   */
+  private async _friendshipCodingTick(): Promise<void> {
+    const nickname = resolvePartnerIdentity(this._context)?.nickname;
+    if (nickname !== this._friendshipPartnerNickname) {
+      this._friendshipPartnerNickname = nickname;
+      this._friendshipChunkProgressMs = 0;
+    }
+    if (nickname === undefined) {
+      return;
+    }
+
+    this._friendshipChunkProgressMs += CODING_TICK_MS;
+    if (this._friendshipChunkProgressMs < FRIENDSHIP_CODING_CHUNK_MS) {
+      return;
+    }
+    this._friendshipChunkProgressMs -= FRIENDSHIP_CODING_CHUNK_MS;
+    await this._service.grantFriendshipToPartner(FRIENDSHIP_GAIN_CODING_CHUNK);
+  }
+
+  /* ------------------------------- tasks ------------------------------- */
+
+  /**
+   * Classifies and awards a successful task, and raises the `confused`
+   * reaction for a reliably-failed Build/Test-group one.
+   *
+   * Every branch uses only the task process's real exit code plus static,
+   * already-declared task metadata (its name, its npm script, its own
+   * configured command line). There is deliberately no terminal output
+   * parsing anywhere in this system: scanning for words like "failed" would
+   * be both trivially farmable/false-positive prone and wrong for most
+   * toolchains. An `exitCode` of `undefined` (the process was killed rather
+   * than exiting) is not a reliable failure signal either way, so it is
+   * ignored.
+   *
+   * Success first tries the Dev Action classifier
+   * (`progression/dev-action-classifier.ts`), which is NOT restricted to the
+   * Build/Test groups - VS Code only auto-assigns those groups to npm scripts
+   * literally named "build"/"test", so a lint or typecheck script is
+   * ordinarily ungrouped and would otherwise never be seen at all. Exactly
+   * one action is ever emitted per completion: a classified task emits its
+   * specific type and returns; only an UNCLASSIFIED Build/Test-group task
+   * falls through to the original generic `task-success` bucket, unchanged
+   * from before Dev Actions existed.
+   */
+  private async _onTaskEnd(event: vscode.TaskProcessEndEvent): Promise<void> {
+    const task = event.execution.task;
+    const group = task.group;
+
+    if (event.exitCode !== 0) {
+      // Failure reactions keep their original, narrower scope: only a
+      // Build/Test-group task failing raises `confused`. Widening this to
+      // every task would make an unrelated (and often noisier, e.g. a
+      // work-in-progress lint) failure produce a reaction nobody asked for.
+      if (
+        event.exitCode !== undefined &&
+        (group === vscode.TaskGroup.Build || group === vscode.TaskGroup.Test)
+      ) {
+        this._service.reactToTaskFailure(task.name);
+      }
+      return;
+    }
+
+    // Tried BEFORE the generic classifier: a task named "shopify app build"
+    // would otherwise match the generic `BUILD_PATTERN` and be misclassified
+    // as a plain build-success, undercutting it and never reaching the
+    // Shopify-specific reward at all.
+    if (await this._tryAwardShopifyDevAction(task)) {
+      return;
+    }
+
+    if (await this._tryAwardDevAction(task)) {
+      return;
+    }
+
+    if (group !== vscode.TaskGroup.Build && group !== vscode.TaskGroup.Test) {
+      return;
+    }
+
+    const name = task.name;
+    const now = Date.now();
+    const previous = this._lastTask.get(name);
+    if (previous !== undefined && now - previous < TASK_COOLDOWN_MS) {
+      return;
+    }
+    this._lastTask.set(name, now);
+
+    await this._service.applyEvent(
+      createProgressionEvent('task-success', now, { task: name }),
+    );
+  }
+
+  /**
+   * Attempts to classify and award `task` as a Dev Action. Returns whether it
+   * was (successfully classified, whether or not the cooldown ultimately
+   * allowed a reward) - the caller uses this to decide whether the task
+   * still needs to fall through to the generic bucket.
+   */
+  private async _tryAwardDevAction(task: vscode.Task): Promise<boolean> {
+    if (!isDevActionsEnabled()) {
+      return false;
+    }
+    const classifiable = taskToClassifiable(task);
+    const devAction = classifyTaskAsDevAction(classifiable);
+    if (!devAction) {
+      return false;
+    }
+
+    const now = Date.now();
+    const identity = buildTaskIdentity(classifiable);
+    const key = devActionCooldownKey(devAction, identity);
+    const cooldowns = readDevActionCooldowns(this._context);
+    if (!shouldAcceptDevAction(cooldowns[key], now)) {
+      // Classified, but still cooling down: the task ran and this WAS a
+      // build/test/etc, so it must not also fall through to the generic
+      // bucket and earn a second, smaller reward for the same completion.
+      return true;
+    }
+    await rememberDevActionAccepted(this._context, key, now);
+
+    const source: DevActionSource = {
+      taskName: task.name,
+      taskDefinitionType: task.definition.type,
+      workspaceFolder: workspaceFolderNameOf(task),
+    };
+    await this._service.applyEvent(
+      createProgressionEvent(devAction, now, { source }),
+    );
+    return true;
+  }
+
+  /**
+   * Attempts to classify and award `task` as a Shopify Dev Action. Mirrors
+   * `_tryAwardDevAction` exactly - same "classified but still cooling down
+   * still counts as handled" rule, same cooldown-then-remember-then-apply
+   * order - reusing the identical cooldown storage
+   * (`dev-action-storage.ts`/`DEV_ACTION_COOLDOWNS_KEY`) rather than a second
+   * store, per the key strings already being namespaced by
+   * `shopifyDevActionCooldownKey`.
+   *
+   * Whether this task was created by `executeShopifyManagedTask`
+   * (`shopify-cli.ts`) or hand-authored in `tasks.json` makes no difference
+   * here: both arrive as an ordinary `vscode.Task` through this same one
+   * listener, which is what makes a managed command's own task incapable of
+   * ever earning a second, separate reward - see the module doc on
+   * `shopify-cli.ts`.
+   */
+  private async _tryAwardShopifyDevAction(task: vscode.Task): Promise<boolean> {
+    if (!isShopifyDevActionsEnabled()) {
+      return false;
+    }
+    const classifiable = taskToClassifiableShopify(task);
+    const shopifyAction = classifyShopifyTask(classifiable);
+    if (!shopifyAction) {
+      return false;
+    }
+
+    const now = Date.now();
+    const identity = buildTaskIdentity(classifiable);
+    const workspaceFolder = workspaceFolderNameOf(task);
+    const key = shopifyDevActionCooldownKey(
+      shopifyAction,
+      identity,
+      workspaceFolder,
+    );
+    const cooldowns = readDevActionCooldowns(this._context);
+    if (
+      !shouldAcceptDevAction(
+        cooldowns[key],
+        now,
+        shopifyDevActionCooldownMs(shopifyAction),
+      )
+    ) {
+      return true;
+    }
+    await rememberDevActionAccepted(this._context, key, now);
+
+    const source: ShopifyDevActionSource = {
+      taskName: task.name,
+      taskDefinitionType: task.definition.type,
+      workspaceFolder,
+    };
+    await this._service.applyEvent(
+      createProgressionEvent(shopifyAction, now, { source }),
+    );
+    return true;
+  }
+}
+
+/** Best-effort, display-only workspace folder name for the activity log -
+ * never used for balance or eligibility decisions. */
+function workspaceFolderNameOf(task: vscode.Task): string | undefined {
+  const scope = task.scope;
+  return scope !== undefined &&
+    scope !== vscode.TaskScope.Global &&
+    scope !== vscode.TaskScope.Workspace
+    ? scope.name
+    : undefined;
+}
+
+/**
+ * A cheap stand-in for "has this document's content changed".
+ *
+ * `version` alone is not enough: it advances on edits that were later undone,
+ * so a type-then-undo-then-save loop would read as new work every time.
+ * Hashing the text would be correct but means materialising the whole document
+ * on every save.
+ *
+ * `offsetAt` of the final position gives the document's character count
+ * without building a string, which - together with the line count and the
+ * length of the last line - separates any realistic pair of edits. A same-size
+ * edit that also preserves both line counts is possible in principle (swapping
+ * two characters); the cost of missing it is one unawarded point of XP.
+ */
+function fingerprintOf(doc: vscode.TextDocument): string {
+  const lastLine = doc.lineAt(Math.max(doc.lineCount - 1, 0));
+  const length = doc.offsetAt(lastLine.range.end);
+  return `${length}:${doc.lineCount}:${lastLine.text.length}`;
+}

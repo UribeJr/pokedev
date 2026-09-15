@@ -1,0 +1,2148 @@
+/*
+ * Trainer Card styling.
+ *
+ * Deliberately does NOT reuse media/pokemon.css: that file sets
+ * `* { user-select: none }` (which would make the username uncopyable) and
+ * `body { overflow: hidden }` (which would clip a tall card).
+ *
+ * The card FACE uses a fixed retro palette so it reads the same in every
+ * theme; the surrounding chrome, buttons and inputs use --vscode-* variables
+ * so light, dark and high-contrast all stay legible.
+ *
+ * Every decorative flourish here is pure CSS — bevels, pixel texture, checker
+ * backdrop, corner brackets, XP notches. The card's CSP forbids `data:` images
+ * and outside hosts, so no new art files are needed.
+ */
+
+/*
+ * Palette and geometry live in media/pokedev-tokens.css, which every PokeDev
+ * surface links before its own stylesheet. Kept there so the Trainer Card and
+ * the compact Explorer views cannot drift apart.
+ */
+
+body {
+	margin: 0;
+	padding: 16px;
+	color: var(--vscode-foreground);
+	font-size: var(--vscode-font-size);
+	font-family: var(--vscode-font-family);
+	background-color: var(--vscode-editor-background);
+}
+
+.tc-shell {
+	max-width: var(--tc-shell-max);
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.tc-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* ------------------------------- card frame ------------------------------ */
+
+.tc-card {
+	position: relative;
+	overflow: hidden;
+	border-radius: var(--tc-radius);
+	border: 2px solid var(--tc-face-edge);
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	/* Outer drop shadow, inner highlight, inner bottom shade = a real bevel. */
+	box-shadow:
+		var(--tc-shadow),
+		inset 0 0 0 1px var(--tc-edge-light),
+		inset 0 -3px 0 rgba(0, 0, 0, 0.28);
+	animation: tc-card-in 240ms ease-out both;
+}
+
+/* Fine horizontal scanlines over the whole face. */
+.tc-card::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background-image: repeating-linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.045) 0 1px,
+		transparent 1px 3px
+	);
+}
+
+/* Onboarding / error carry less content and should not stretch. */
+.tc-card-compact {
+	max-width: 460px;
+	margin: 0 auto;
+	width: 100%;
+}
+
+/* Card tiers, following the in-game colour progression. V1 is always base. */
+.tc-card.tc-tier-copper {
+	--tc-face-top: #b9743a;
+	--tc-face-bottom: #7a421b;
+	--tc-face-edge: #4c2811;
+	--tc-ink-dim: #f0d3b6;
+}
+
+.tc-card.tc-tier-silver {
+	--tc-face-top: #8d97a6;
+	--tc-face-bottom: #565f6d;
+	--tc-face-edge: #343a44;
+	--tc-ink-dim: #e2e7ef;
+}
+
+.tc-card.tc-tier-gold {
+	--tc-face-top: #cfa227;
+	--tc-face-bottom: #8a670d;
+	--tc-face-edge: #574006;
+	--tc-ink-dim: #f7e6ae;
+}
+
+/* -------------------------------- head bar ------------------------------- */
+
+.tc-card-head {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 9px 13px;
+	background: rgba(0, 0, 0, 0.26);
+	border-bottom: 2px solid var(--tc-face-edge);
+	box-shadow: inset 0 -1px 0 var(--tc-edge-light);
+}
+
+.tc-brand {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 1px;
+	color: var(--tc-accent);
+	text-transform: uppercase;
+	flex: none;
+}
+
+.tc-brand::after {
+	content: '·';
+	margin: 0 0 0 6px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-title {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tc-idno {
+	margin-left: auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.5px;
+	color: var(--tc-ink-dim);
+	flex: none;
+}
+
+/*
+ * The landscape composition: identity spans both right-column rows, BADGES
+ * and PARTY stack in the right column, and the footer row (Trainer XP +
+ * compact Partner box) spans the full width underneath. This is the whole
+ * reason the card reads as ONE physical object instead of a stack of
+ * full-width sections.
+ */
+.tc-card-body {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+	grid-template-areas:
+		'identity badges'
+		'identity party'
+		'footer footer';
+	column-gap: 16px;
+	row-gap: 10px;
+	padding: 12px 14px;
+}
+
+/* ------------------------------ pokeball art ----------------------------- */
+
+/*
+ * All of these share media/pokeball_sprite_sheet.png — a 64x384 vertical strip
+ * of six 64x64 cells.
+ *
+ * The catch: frame 0's ball art is only 14x14 pixels sitting at offset (25,25)
+ * inside its cell (measured off the sheet's alpha channel). Scaling the whole
+ * cell down to an 18px element therefore renders a ~4px dot. So instead the
+ * background is scaled UP and offset so that a tight window onto the art fills
+ * the element:
+ *
+ *   scale     = size / crop
+ *   bg-size   = (64 x 384) * scale
+ *   bg-offset = -(inset * scale)
+ *
+ * --tc-ball-crop is the window in sheet pixels and --tc-ball-inset its
+ * top-left corner, so a larger crop leaves more breathing room around the art.
+ */
+.tc-ball,
+.tc-onboard-ball,
+.tc-partner-ball {
+	--tc-ball-crop: 16;
+	--tc-ball-inset: 24;
+	display: inline-block;
+	flex: none;
+	width: var(--tc-ball-size);
+	height: var(--tc-ball-size);
+	background-image: var(--tc-ball);
+	background-repeat: no-repeat;
+	background-size:
+		calc(var(--tc-ball-size) * 64 / var(--tc-ball-crop))
+		calc(var(--tc-ball-size) * 384 / var(--tc-ball-crop));
+	background-position:
+		calc(-1 * var(--tc-ball-size) * var(--tc-ball-inset) / var(--tc-ball-crop))
+		calc(-1 * var(--tc-ball-size) * var(--tc-ball-inset) / var(--tc-ball-crop));
+	image-rendering: pixelated;
+}
+
+.tc-ball {
+	--tc-ball-size: 16px;
+}
+
+.tc-onboard-ball {
+	--tc-ball-size: 40px;
+}
+
+.tc-partner-ball {
+	--tc-ball-size: 30px;
+}
+
+.tc-ball-faded {
+	filter: grayscale(1) brightness(0.75);
+	opacity: 0.5;
+}
+
+/* --------------------------------- hero ---------------------------------- */
+
+/*
+ * The identity column: portrait, then identity text, then a slim stats row -
+ * see `grid-area: identity` in `.tc-card-body`, which stretches this column
+ * to match the combined height of the BADGES + PARTY rows beside it.
+ *
+ * In Trainer Sprite mode, `.tc-portrait-sprite` is a FLEXIBLE child
+ * (`flex: 1 1 auto`) rather than a fixed size: it grows to consume whatever
+ * height is actually left over in the column after the fixed-size identity
+ * text and stats row, which is exactly the "dead space" this treatment
+ * exists to use. Identity text and the stats row stay `flex: none` (sized to
+ * their own content), so they naturally end up pushed to the bottom of the
+ * column - no separate anchoring needed.
+ */
+.tc-hero {
+	grid-area: identity;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	min-height: 0;
+}
+
+/*
+ * The GitHub-avatar / empty-state frame: small and fixed, a traditional
+ * portrait treatment. `.tc-portrait-sprite` below overrides this into a
+ * large flexible frame for Trainer Sprite mode - the two are deliberately
+ * different container sizes, not just different images in the same box, so
+ * a GitHub photo is never stretched into oversized "character art".
+ *
+ * A real `<button>` (see `renderHero`), so this resets the usual button
+ * chrome away in favour of the existing framed-portrait look.
+ */
+.tc-portrait {
+	position: relative;
+	width: 76px;
+	height: 76px;
+	flex: none;
+	margin: 0;
+	padding: 0;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background-color: var(--tc-slot);
+	/* Checker backdrop so a transparent avatar still reads as framed. */
+	background-image: linear-gradient(
+			45deg,
+			rgba(0, 0, 0, 0.16) 25%,
+			transparent 25% 75%,
+			rgba(0, 0, 0, 0.16) 75%
+		),
+		linear-gradient(
+			45deg,
+			rgba(0, 0, 0, 0.16) 25%,
+			transparent 25% 75%,
+			rgba(0, 0, 0, 0.16) 75%
+		);
+	background-size: 12px 12px;
+	background-position:
+		0 0,
+		6px 6px;
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.tc-portrait:hover {
+	box-shadow:
+		inset 0 0 0 1px var(--tc-edge-light),
+		0 0 0 2px var(--tc-accent);
+}
+
+.tc-portrait:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 2px;
+}
+
+/*
+ * The large character-art frame. Bounded rather than fixed: it fills the
+ * identity column's leftover height (roughly 1.6-2.4x the old fixed 76px
+ * portrait, depending on how much BADGES/PARTY content there is beside it),
+ * capped so it can never force the column - and therefore the whole card -
+ * taller than the right side already is.
+ */
+.tc-portrait-sprite {
+	width: 100%;
+	height: auto;
+	flex: 1 1 auto;
+	min-height: 120px;
+	max-height: 184px;
+}
+
+/*
+ * Decorative corner brackets on the two diagonal corners.
+ *
+ * drop-shadow, not box-shadow: these are border-only elements, so a box-shadow
+ * would trace their square box instead of the L shape. The shadow is what keeps
+ * them legible over a bright or busy avatar photo.
+ */
+.tc-portrait::before,
+.tc-portrait::after {
+	content: '';
+	position: absolute;
+	width: 10px;
+	height: 10px;
+	pointer-events: none;
+	z-index: 1;
+	filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.95));
+}
+
+.tc-portrait::before {
+	top: 3px;
+	left: 3px;
+	border-top: 2px solid var(--tc-accent);
+	border-left: 2px solid var(--tc-accent);
+}
+
+.tc-portrait::after {
+	bottom: 3px;
+	right: 3px;
+	border-bottom: 2px solid var(--tc-accent);
+	border-right: 2px solid var(--tc-accent);
+}
+
+.tc-portrait-empty::before {
+	/* Keep the bracket, add the placeholder glyph via the container. */
+	border-color: var(--tc-ink-dim);
+}
+
+.tc-portrait-empty::after {
+	border-color: var(--tc-ink-dim);
+}
+
+.tc-portrait-glyph {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 26px;
+	color: var(--tc-ink-dim);
+	line-height: 1;
+}
+
+/* reset.css sets img { max-width: 100%; height: auto } — override for the frame. */
+.tc-avatar {
+	width: 76px;
+	height: 76px;
+	max-width: none;
+	display: block;
+	object-fit: cover;
+	image-rendering: auto;
+}
+
+/*
+ * A Trainer Sprite is pixel art, and generations ship at different native
+ * resolutions (56-80px source, all roughly square). Rather than a fixed
+ * size per generation, this fills whatever box `.tc-portrait-sprite` ends up
+ * being and lets `object-fit: contain` do the normalizing: the full sprite
+ * is always shown, uncropped and undistorted, at whatever size the taller
+ * dimension of the frame allows - `pixelated` keeps it crisp at any scale
+ * rather than smoothed like the GitHub avatar's cover-fit photo treatment.
+ */
+.tc-avatar-sprite {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	image-rendering: pixelated;
+	padding: 10px;
+	box-sizing: border-box;
+}
+
+.tc-identity {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.tc-trainer-name {
+	font-size: 16px;
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: 0.2px;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-handle {
+	font-size: 12px;
+	color: var(--tc-ink-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-class-chip {
+	align-self: flex-start;
+	margin-top: 3px;
+	max-width: 100%;
+	padding: 4px 9px;
+	border: 1px solid var(--tc-accent);
+	border-radius: 3px;
+	background: rgba(255, 215, 95, 0.12);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-bio {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.tc-location {
+	margin: 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-location::before {
+	content: '⌖ ';
+	color: var(--tc-accent);
+}
+
+/*
+ * Trainer Level (+ optional Coding Time) as slim rows within the identity
+ * column, rather than an isolated square "dashboard" plate. Pinned to the
+ * bottom of `.tc-hero` via `margin-top: auto` so it reads as the identity
+ * area's closing stat line.
+ */
+.tc-identity-stats {
+	/*
+	 * `margin-top: auto` still anchors this to the bottom of the column in
+	 * GitHub-avatar/empty mode (a fixed-size portrait leaves real free space
+	 * behind). It becomes a no-op in Trainer Sprite mode: flexible-length
+	 * resolution for `.tc-portrait-sprite`'s `flex-grow` already consumes all
+	 * the free space before auto-margin alignment runs, so the two modes need
+	 * no separate rule here - the sprite frame growing IS what keeps this row
+	 * pinned to the bottom in that mode.
+	 */
+	flex: none;
+	margin-top: auto;
+	padding-top: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	border-top: 1px dashed var(--tc-rule);
+}
+
+.tc-identity-stat-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.tc-identity-stat-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tc-identity-stat-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 12px;
+	color: var(--tc-accent);
+	white-space: nowrap;
+	flex: none;
+}
+
+/* -------------------------------- sections ------------------------------- */
+
+/* Pixel-dashed divider between major blocks. */
+.tc-rule {
+	height: 2px;
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--tc-rule) 0 4px,
+		transparent 4px 8px
+	);
+}
+
+.tc-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.tc-section-title {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	font-weight: normal;
+	letter-spacing: 1.3px;
+	text-transform: uppercase;
+	color: var(--tc-accent);
+}
+
+.tc-section-subtitle {
+	margin: 4px 0 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+/* ------------------------------ record grids ----------------------------- */
+
+/*
+ * minmax(0, 1fr) rather than 1fr: a long value in a plain 1fr track can force
+ * the grid wider than its container and produce horizontal scroll.
+ */
+.tc-record-grid {
+	display: grid;
+	gap: 1px;
+	background: var(--tc-rule);
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 5px;
+	overflow: hidden;
+}
+
+.tc-record-grid-4 {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tc-record-cell {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 9px 6px 8px;
+	background: var(--tc-surface);
+	min-width: 0;
+}
+
+.tc-record-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 18px;
+	line-height: 1.1;
+	color: var(--tc-ink);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-record-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: center;
+	max-width: 100%;
+	/* Wrap rather than truncate: an ellipsised label reads as "P…", not POKÉDEX. */
+	overflow-wrap: break-word;
+	line-height: 1.35;
+}
+
+/* ------------------------------- specialties ----------------------------- */
+
+.tc-specialties {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.tc-spec-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.tc-spec {
+	display: grid;
+	grid-template-columns: minmax(0, 108px) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 9px;
+}
+
+.tc-spec-name {
+	font-size: 11px;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-spec-track {
+	height: 8px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+}
+
+.tc-spec-fill {
+	height: 100%;
+	background: linear-gradient(
+		to right,
+		var(--tc-xp-from),
+		var(--tc-xp-to)
+	);
+	transform-origin: left center;
+	animation: tc-bar-grow 620ms ease-out both;
+}
+
+.tc-spec-count {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	color: var(--tc-ink-dim);
+	min-width: 22px;
+	text-align: right;
+}
+
+/*
+ * DEV RECORD lives OUTSIDE the physical card (see `renderDevRecordPanel`) so
+ * the compact landscape card never resizes when it opens - its own smaller
+ * bordered face instead, echoing the card's palette without competing with
+ * it (no scanlines, no bevel).
+ */
+.tc-devrecord-panel {
+	max-width: var(--tc-shell-max);
+	margin: 0 auto;
+	padding: 12px 14px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: var(--tc-radius);
+	background: var(--tc-face-bottom);
+	color: var(--tc-ink);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+/* -------------------------------- badges --------------------------------- */
+
+.tc-section-badges {
+	grid-area: badges;
+	min-height: 0;
+}
+
+/*
+ * Large, so the artwork itself is the focus rather than a count or a slot
+ * grid. `auto-fill` wraps cleanly at any card width without ever forcing
+ * horizontal scroll; `minmax`'s upper bound keeps a two- or three-badge
+ * collection from stretching into oversized tiles on a wide card.
+ */
+.tc-badges-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(56px, 72px));
+	gap: 10px;
+}
+
+.tc-badge-tile {
+	position: relative;
+	aspect-ratio: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 7px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 8px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-badge-tile:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 2px;
+}
+
+.tc-badge-tile-img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+/* A broken/expired badge image leaves an intact, still-earned-looking tile. */
+.tc-badge-tile-broken {
+	opacity: 0.55;
+}
+
+.tc-badge-tile-broken::after {
+	content: '?';
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 20px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-devbadges-empty {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------------- party ---------------------------------- */
+
+.tc-section-party {
+	grid-area: party;
+	min-height: 0;
+}
+
+/*
+ * Classic 3x2 party grid. Bounded rather than `1fr` columns: the right
+ * column of the landscape card is much wider than a single party card needs
+ * to be, and `1fr` would stretch each slot into an oversized, sparse-looking
+ * box. `justify-content: start` keeps the whole grid left-aligned instead of
+ * spreading out to fill any leftover width.
+ */
+.tc-party-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(76px, 118px));
+	justify-content: start;
+	gap: 6px;
+}
+
+.tc-party-slot {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	min-width: 0;
+	min-height: 74px;
+	padding: 6px 4px 5px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 7px;
+	background: var(--tc-surface);
+	font-family: inherit;
+	text-align: center;
+	cursor: pointer;
+}
+
+button.tc-party-slot {
+	color: inherit;
+}
+
+.tc-party-slot:disabled {
+	cursor: default;
+}
+
+.tc-party-slot:hover:not(:disabled) {
+	border-color: var(--tc-accent);
+}
+
+.tc-party-slot:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+/* The one tasteful partner indicator: a highlighted border and glow, echoing
+ * the earned-badge treatment so the two "you have this" states read as one
+ * visual language across the card. */
+.tc-party-slot-partner {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.14);
+	box-shadow: 0 0 8px rgba(255, 215, 95, 0.3);
+}
+
+.tc-party-slot-empty {
+	border-style: dashed;
+	opacity: 0.45;
+	background: transparent;
+}
+
+.tc-party-sprite {
+	width: 34px;
+	height: 34px;
+	max-width: none;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+/* The occupied slot's chosen Poké Ball, bottom-left corner - small and
+ * deliberately subordinate to the Pokemon sprite above it. No backing plate:
+ * the sprite's own art (it ships with a dark outline) already reads clearly
+ * on its own, in every skin/palette - a neutral disc behind it made it
+ * harder to see, not easier. */
+.tc-party-ball {
+	position: absolute;
+	bottom: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	image-rendering: pixelated;
+	object-fit: contain;
+	pointer-events: none;
+}
+
+.tc-party-name {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 3px;
+	max-width: 100%;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-party-shiny {
+	flex: none;
+	font-size: 9px;
+	color: var(--tc-accent);
+}
+
+.tc-party-level {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 0.6px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-party-partner-badge {
+	position: absolute;
+	top: -6px;
+	right: -4px;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-face-edge);
+}
+
+.tc-party-empty-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------------- footer -------------------------------- */
+
+/*
+ * TRAINER XP as a strong horizontal footer, with the compact PARTNER box
+ * beside it — the full-width row that reinforces the landscape shape (see
+ * "Preferred Card Hierarchy"). Stacks under the narrow-width breakpoint.
+ */
+.tc-footer-row {
+	grid-area: footer;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+	gap: 10px;
+	align-items: stretch;
+}
+
+/*
+ * PARTNER: a compact detail box, not a second full-size panel — the
+ * highlighted PARTY slot already shows WHO the partner is; this exists so
+ * Partner level/XP stay visible without duplicating that job.
+ */
+.tc-partner-box {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+	padding: 7px 9px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-partner-box-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.tc-partner-frame {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 5px;
+	background-color: var(--tc-slot);
+	background-image: linear-gradient(
+		to bottom,
+		transparent 60%,
+		rgba(0, 0, 0, 0.22) 100%
+	);
+}
+
+.tc-partner-frame-empty {
+	border-style: dashed;
+	border-color: var(--tc-rule);
+	background-image: none;
+}
+
+.tc-partner-sprite {
+	width: 36px;
+	height: 36px;
+	max-width: none;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+.tc-partner-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.tc-partner-name {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+}
+
+.tc-partner-species {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-partner-shiny {
+	flex: none;
+	font-size: 10px;
+	color: var(--tc-accent);
+}
+
+.tc-partner-level {
+	display: block;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.6px;
+	color: var(--tc-ink-dim);
+}
+
+/* The Partner's chosen Poké Ball - no backing plate, see `.tc-party-ball`'s
+ * identical reasoning above - slightly larger since the Partner box has more
+ * room and this is the card's one dedicated "who is this" detail block. */
+.tc-partner-ball-icon {
+	display: block;
+	width: 22px;
+	height: 22px;
+	margin: 1px 0;
+	image-rendering: pixelated;
+	object-fit: contain;
+}
+
+.tc-partner-hearts {
+	display: block;
+	font-size: 10px;
+	letter-spacing: 1.5px;
+	color: #ff5f7e;
+}
+
+.tc-partner-xp {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+/*
+ * A slimmer echo of the trainer gauge. Same colour ramp so the two read as
+ * one system, half the height so the trainer bar stays the primary one.
+ */
+.tc-partner-xp-track {
+	position: relative;
+	flex: 1 1 auto;
+	height: 6px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 2px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.tc-partner-xp-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	transition: width 600ms ease-out;
+}
+
+.tc-partner-xp-value {
+	flex: 0 0 auto;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	color: var(--tc-ink-dim);
+	white-space: nowrap;
+}
+
+.tc-partner-empty {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1px;
+	line-height: 1.5;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: center;
+}
+
+/* ------------------------------- dev badges ------------------------------ */
+
+.tc-devbadges-actions {
+	display: flex;
+	gap: 10px;
+}
+
+/*
+ * Deliberately quieter than .tc-footer's .tc-button: these two actions live
+ * inside a section, not the card's primary controls, and should read as
+ * secondary text links rather than compete with Refresh/Change Trainer.
+ */
+.tc-devbadges-link {
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--tc-ink-dim);
+	font-size: 10px;
+	letter-spacing: 0.4px;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+.tc-devbadges-link:hover:not(:disabled) {
+	color: var(--tc-ink);
+}
+
+.tc-devbadges-link:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+.tc-devbadges-link:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tc-devbadges-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* Shared by the disconnected (Connect DEV) and hard-error states. */
+.tc-devbadges-connect {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.tc-devbadges-hint {
+	margin: 0;
+	max-width: 420px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------- trainer sprite picker ------------------------ */
+
+/*
+ * A lightweight modal overlay inside the SAME webview - no second panel, no
+ * host round trip to open/close. Only the final decision (a chosen sprite id,
+ * or a reset to the GitHub avatar) is ever posted to the host; everything
+ * else - which tab is active, which tile is previewed - is client-side UI
+ * state, per `panel/trainer-card/main.ts`.
+ */
+.tc-picker-backdrop {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	background: rgba(6, 17, 36, 0.72);
+	z-index: 100;
+}
+
+.tc-picker-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	width: min(560px, 100%);
+	max-height: 86vh;
+	overflow-y: auto;
+	padding: 16px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: var(--tc-radius);
+	background: linear-gradient(
+		168deg,
+		var(--tc-face-top) 0%,
+		var(--tc-face-bottom) 100%
+	);
+	color: var(--tc-ink);
+	box-shadow:
+		var(--tc-shadow),
+		inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-picker-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.tc-picker-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-picker-close {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	border-radius: 4px;
+	background: transparent;
+	color: var(--tc-ink);
+	font-size: 13px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.tc-picker-close:hover {
+	background: var(--vscode-button-secondaryBackground);
+}
+
+.tc-picker-close:focus-visible,
+.tc-picker-tab:focus-visible,
+.tc-picker-tile:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.tc-picker-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.tc-picker-tab {
+	flex: 1 1 auto;
+	padding: 6px 4px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 4px;
+	background: var(--tc-surface);
+	color: var(--tc-ink-dim);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.tc-picker-tab[aria-selected='true'] {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.16);
+	color: var(--tc-accent);
+}
+
+.tc-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+	gap: 8px;
+}
+
+.tc-picker-empty {
+	margin: 0;
+	font-size: 11px;
+	color: var(--tc-ink-dim);
+}
+
+.tc-picker-tile {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+	padding: 8px 5px 7px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 7px;
+	background: var(--tc-surface);
+	font-family: inherit;
+	color: inherit;
+	text-align: center;
+	cursor: pointer;
+}
+
+.tc-picker-tile:hover {
+	border-color: var(--tc-accent);
+}
+
+.tc-picker-tile-selected {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.16);
+	box-shadow: 0 0 8px rgba(255, 215, 95, 0.3);
+}
+
+.tc-picker-tile-sprite {
+	width: 48px;
+	height: 48px;
+	object-fit: contain;
+	image-rendering: pixelated;
+}
+
+.tc-picker-tile-name {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tc-picker-tile-game {
+	font-size: 8px;
+	color: var(--tc-ink-dim);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The one "you have this" indicator, matching the badge/party-slot visual
+ * language elsewhere on the card - never an emoji. */
+.tc-picker-tile-badge {
+	position: absolute;
+	top: -6px;
+	right: -4px;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tc-accent);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 7px;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var(--tc-face-edge);
+}
+
+.tc-picker-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--tc-rule);
+}
+
+.tc-picker-actions-hint {
+	margin: 0 auto 0 0;
+	font-size: 10px;
+	color: var(--tc-ink-dim);
+}
+
+/* --------------------------------- XP bar -------------------------------- */
+
+.tc-xp-panel {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 9px 12px 10px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+}
+
+.tc-xp-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.tc-xp-value {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	color: var(--tc-ink);
+	white-space: nowrap;
+}
+
+.tc-xp-track {
+	position: relative;
+	height: 14px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 3px;
+	background: var(--tc-slot);
+	overflow: hidden;
+	box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Pixel notches, so an empty bar still reads as a gauge rather than a void. */
+.tc-xp-track::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background-image: repeating-linear-gradient(
+		to right,
+		transparent 0 13px,
+		rgba(0, 0, 0, 0.3) 13px 14px
+	);
+}
+
+.tc-xp-fill {
+	height: 100%;
+	background: linear-gradient(to right, var(--tc-xp-from), var(--tc-xp-to));
+	box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+	transform-origin: left center;
+	transition: width 600ms ease-out;
+	animation: tc-bar-grow 700ms ease-out both;
+}
+
+/* --------------------------------- notices ------------------------------- */
+
+.tc-notices {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 8px 14px 10px;
+	background: rgba(0, 0, 0, 0.24);
+	border-top: 1px solid var(--tc-face-edge);
+}
+
+.tc-notice {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-ink-dim);
+}
+
+.tc-notice-warn {
+	color: var(--tc-accent);
+}
+
+/* ------------------------- onboarding / status boxes --------------------- */
+
+.tc-onboard {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 9px;
+	padding: 12px 6px 6px;
+	text-align: center;
+}
+
+.tc-onboard-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 14px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-onboard-hint {
+	margin: 0;
+	max-width: 330px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+.tc-onboard-form {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	width: 100%;
+	max-width: 300px;
+	margin-top: 4px;
+}
+
+.tc-input-label {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 8px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+	text-align: left;
+}
+
+.tc-input {
+	width: 100%;
+	padding: 7px 9px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.94);
+	color: #14213a;
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.tc-input::placeholder {
+	color: #7a879e;
+}
+
+.tc-input:focus {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.tc-inline-error {
+	margin: 0;
+	min-height: 16px;
+	font-size: 11px;
+	line-height: 1.4;
+	color: var(--tc-accent);
+	text-align: center;
+}
+
+/* Shared by loading and error. */
+.tc-status {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 12px;
+	border: 2px solid var(--tc-face-edge);
+	border-radius: 6px;
+	background: var(--tc-surface);
+	box-shadow: inset 0 0 0 1px var(--tc-edge-light);
+	text-align: center;
+}
+
+.tc-status-error {
+	border-color: var(--tc-accent);
+	background: rgba(255, 215, 95, 0.08);
+}
+
+.tc-status-heading {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	font-weight: normal;
+	letter-spacing: 1.1px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-status-message {
+	margin: 0;
+	max-width: 330px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--tc-ink-dim);
+}
+
+/* "LOADING TRAINER DATA" with an animated ellipsis. */
+.tc-status-dots {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 11px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var(--tc-ink);
+}
+
+.tc-status-dots::after {
+	content: '...';
+	display: inline-block;
+	width: 0;
+	overflow: hidden;
+	vertical-align: bottom;
+	animation: tc-dots 1.4s steps(4, end) infinite;
+}
+
+/* --------------------------------- footer -------------------------------- */
+
+/*
+ * Utility actions, visually demoted so they never compete with the card.
+ * Only .tc-button-primary (Create Trainer / Retry) reads as a real action.
+ */
+.tc-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px;
+}
+
+.tc-button {
+	position: relative;
+	padding: 5px 12px 5px 18px;
+	border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	border-radius: 4px;
+	background: transparent;
+	color: var(--vscode-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 11px;
+	cursor: pointer;
+}
+
+/* Menu-selection marker, the way a game cursor points at the active row. */
+.tc-button::before {
+	content: '▸';
+	position: absolute;
+	left: 7px;
+	opacity: 0;
+	color: var(--vscode-foreground);
+}
+
+.tc-button:hover:not(:disabled)::before,
+.tc-button:focus-visible::before {
+	opacity: 1;
+}
+
+.tc-button:hover:not(:disabled) {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+}
+
+.tc-button:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.tc-button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.tc-button-primary {
+	padding: 7px 14px;
+	border-color: transparent;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-size: 12px;
+}
+
+.tc-button-primary::before {
+	content: none;
+}
+
+.tc-button-primary:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+	color: var(--vscode-button-foreground);
+}
+
+/* -------------------------------- skeleton ------------------------------- */
+
+.tc-skeleton .tc-portrait::before,
+.tc-skeleton .tc-portrait::after {
+	border-color: var(--tc-rule);
+}
+
+.tc-shimmer {
+	background-color: var(--tc-slot);
+	background-image: linear-gradient(
+		100deg,
+		rgba(255, 255, 255, 0) 20%,
+		rgba(255, 255, 255, 0.16) 50%,
+		rgba(255, 255, 255, 0) 80%
+	);
+	background-size: 400% 100%;
+	border-radius: 4px;
+	animation: tc-shimmer 1.3s ease-in-out infinite;
+}
+
+.tc-shimmer-line {
+	height: 13px;
+}
+
+.tc-shimmer-line:nth-child(1) {
+	width: 62%;
+	height: 20px;
+}
+
+.tc-shimmer-line:nth-child(2) {
+	width: 38%;
+}
+
+.tc-shimmer-line:nth-child(3) {
+	width: 52%;
+}
+
+.tc-shimmer-line:nth-child(4) {
+	width: 80%;
+}
+
+.tc-shimmer-box {
+	height: 46px;
+	border-radius: 0;
+}
+
+/* ------------------------------- animations ------------------------------ */
+
+@keyframes tc-shimmer {
+	0% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0 50%;
+	}
+}
+
+@keyframes tc-card-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes tc-bar-grow {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes tc-dots {
+	to {
+		width: 1.7em;
+	}
+}
+
+/* -------------------------------- crystal skin ---------------------------- */
+
+/*
+ * The "Crystal" Trainer Card skin (`pokedev.trainerCard.style`) - presentation
+ * only. Every rule below is scoped under `.tc-skin-crystal` (applied by
+ * `cardClassName()` in panel/trainer-card/main.ts alongside the existing
+ * `.tc-tier-*` class - the same "override tokens via a modifier class" system
+ * already proven by the tier colours above), so the default `.tc-skin-pokedev`
+ * card is untouched byte-for-byte.
+ *
+ * The palette itself (`--tc-face-top`, `--tc-ink`, `--tc-accent`, etc.) is
+ * defined ONCE, on the bare `.tc-skin-crystal` class, in media/
+ * pokedev-tokens.css - shared with the compact Explorer HUD's own
+ * `.tc-skin-crystal .pd-card` in media/explorer.css. Only the STRUCTURAL
+ * rules below (this card's own border-radius/box-shadow/corners, which the
+ * Explorer HUD does not share the markup for) live here.
+ *
+ * A corner-spiral accent and a folded-corner accent (both adapted from real
+ * pret/pokecrystal window-frame art - see scripts/build-crystal-trainer-
+ * card.py's docstring) were part of this skin's first version but have
+ * since been removed: they read as visual clutter rather than authentic
+ * chrome, and this skin now uses plain square pixel borders on every
+ * corner, same as the rest of the card. `--tc-crystal-corner`/
+ * `--tc-crystal-fold` and the two generated PNGs they pointed at are no
+ * longer referenced anywhere.
+ */
+.tc-card.tc-skin-crystal {
+	/* Flat black double-ruled window edge (a thin border, a gap, another thin
+	 * border) instead of the base's soft bevel + drop shadow - the single
+	 * most recognizable Gen II window-border language, achieved without a new
+	 * image asset. */
+	box-shadow:
+		0 0 0 1px var(--tc-face-top),
+		0 0 0 4px var(--tc-face-edge);
+}
+
+/* No CRT scanlines - a modern arcade affectation, not a GBC one. The base
+ * `.tc-card::before` rule (above) draws them via `content: ''`; this
+ * suppresses that pseudo-element entirely for the Crystal skin rather than
+ * repurposing it into a decoration - Crystal's corners are plain, square
+ * pixel borders, same as every other edge on this card. */
+.tc-skin-crystal.tc-card::before {
+	content: none;
+}
+
+/* The head bar loses its translucent glass overlay (flat, not glass). No
+ * corner decoration of any kind - see the module doc above. */
+.tc-skin-crystal .tc-card-head {
+	background: transparent;
+}
+
+/* Square corners everywhere: rounded corners read as a modern dashboard, not
+ * a Game Boy Color window. */
+.tc-skin-crystal .tc-portrait,
+.tc-skin-crystal .tc-badge-tile,
+.tc-skin-crystal .tc-party-slot,
+.tc-skin-crystal .tc-record-grid,
+.tc-skin-crystal .tc-xp-track,
+.tc-skin-crystal .tc-xp-panel,
+.tc-skin-crystal .tc-spec-track,
+.tc-skin-crystal .tc-partner-box,
+.tc-skin-crystal .tc-partner-frame,
+.tc-skin-crystal .tc-partner-xp-track,
+.tc-skin-crystal .tc-class-chip,
+.tc-skin-crystal .tc-status,
+.tc-skin-crystal .tc-devrecord-panel,
+.tc-skin-crystal .tc-picker-panel,
+.tc-skin-crystal .tc-picker-tile,
+.tc-skin-crystal .tc-picker-tab,
+.tc-skin-crystal .tc-picker-close,
+.tc-skin-crystal .tc-input {
+	border-radius: 0;
+}
+
+/* Pixel-segment XP fills, not a gradient bar - see `--tc-xp-from`/
+ * `--tc-xp-to` above (both flat black in Day, flat pale cream in Night) and
+ * the notch overlay already built into `.tc-xp-track::after`, which reads
+ * as distinct GBC-style segments once the fill beneath it is a flat colour
+ * instead of a gradient. */
+.tc-skin-crystal .tc-xp-fill,
+.tc-skin-crystal .tc-spec-fill,
+.tc-skin-crystal .tc-partner-xp-fill {
+	box-shadow: none;
+}
+
+/* The notch overlay is hardcoded dark (`rgba(0,0,0,0.3)` in the base rule)
+ * because Day's track is a light tan (`--tc-slot`) - readable there without
+ * any override. Night's track is dark navy, where the same dark notches
+ * would vanish, so this swaps them for a light overlay instead. Same
+ * geometry, same technique, palette-appropriate contrast only. */
+.tc-skin-crystal[data-crystal-palette='night'] .tc-xp-track::after {
+	background-image: repeating-linear-gradient(
+		to right,
+		transparent 0 13px,
+		rgba(255, 255, 255, 0.16) 13px 14px
+	);
+}
+
+/*
+ * The "you have this" states (current partner, selected sprite/badge tile)
+ * lose their soft gold glow - not a GBC effect - in favour of the same
+ * cursor-arrow language `.tc-button` already uses elsewhere on this card
+ * (`content: '▸'`), the closest authentic equivalent to how a Game Boy menu
+ * points at the active row/selection.
+ */
+.tc-skin-crystal .tc-party-slot-partner,
+.tc-skin-crystal .tc-picker-tile-selected {
+	box-shadow: none;
+	background: var(--tc-slot);
+}
+
+.tc-skin-crystal .tc-party-slot-partner::before,
+.tc-skin-crystal .tc-picker-tile-selected::before {
+	content: '▸';
+	position: absolute;
+	top: 2px;
+	left: 3px;
+	color: var(--tc-accent);
+	font-size: 10px;
+	line-height: 1;
+}
+
+.tc-skin-crystal .tc-class-chip {
+	background: transparent;
+}
+
+/*
+ * BADGES, not dashboard tiles - the biggest single visual-polish target from
+ * this pass. Base PokeDev badges are large individually-boxed squares
+ * (56-72px, more visual weight than the Party sprites beside them); Crystal
+ * shrinks them close to `.tc-party-sprite`'s own 34px and strips the
+ * surrounding box down to a hairline mounting plate, so the artwork itself
+ * (unchanged - still real Dev Badge art, never replaced) reads as a row of
+ * small mounted badges rather than a row of icon cards. Higher specificity
+ * than the responsive breakpoints below (2 classes vs 1), so this applies
+ * at every viewport width without needing its own breakpoint overrides.
+ */
+.tc-skin-crystal .tc-badges-grid {
+	grid-template-columns: repeat(auto-fill, minmax(30px, 34px));
+	gap: 5px;
+}
+
+.tc-skin-crystal .tc-badge-tile {
+	padding: 2px;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+}
+
+.tc-skin-crystal .tc-badge-tile-broken::after {
+	font-size: 14px;
+}
+
+/*
+ * Trainer/profile metadata: `.tc-meta-rows` (built only for this skin - see
+ * `renderHero` in main.ts) reuses the exact same LABEL/value row already
+ * used for TRAINER/CODING TIME below it, so JOB/FROM read as the same kind
+ * of Trainer Card field rather than a second style invented for GitHub data.
+ * A bio can be a full sentence rather than a short value like "Lv. 18"
+ * though, so - unlike the stats row - the value here needs to be allowed to
+ * shrink and truncate rather than push the row wider than the column.
+ */
+.tc-meta-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin-top: 2px;
+}
+
+.tc-skin-crystal .tc-meta-rows .tc-identity-stat-value {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: right;
+}
+
+/*
+ * A small visual rule between BADGES and PARTY in the right column, so the
+ * two sections read as distinct regions rather than one continuous block -
+ * see the milestone's own "use empty space intentionally" guidance. Left
+ * unset for PokeDev, which already separates them with its own section gap.
+ */
+.tc-skin-crystal .tc-section-party {
+	padding-top: 8px;
+	border-top: 1px dashed var(--tc-rule);
+}
+
+/*
+ * A real, authentic Gen II detail: the actual Trainer Card's own BADGES
+ * label ends in a small arrow glyph ("  BADGES▶", see
+ * `TrainerCard_Page1_PrintDexCaught_GameTime` in engine/menus/
+ * trainer_card.asm), not a plain word. Applied to every section title
+ * (BADGES/PARTY/TRAINER XP/PARTNER all share `.tc-section-title` - see
+ * `sectionTitle()` in main.ts), echoing that exact convention consistently
+ * rather than reproducing it in just the one place it happens to appear in
+ * the original game.
+ */
+.tc-skin-crystal .tc-section-title::after {
+	content: ' \25b6';
+	font-size: 8px;
+	vertical-align: middle;
+}
+
+/* ------------------------------- responsive ------------------------------ */
+
+/*
+ * "Medium": the editor panel is narrower than a full desktop width but still
+ * comfortably wider than the collapse threshold below. The landscape
+ * composition holds - identity stays a left column, BADGES/PARTY stay on the
+ * right - just tightened: a narrower identity column, smaller badge tiles,
+ * and a party grid that gives up its minimum column width first.
+ */
+@media (max-width: 860px) {
+	.tc-card-body {
+		grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+		column-gap: 12px;
+	}
+
+	.tc-badges-grid {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 60px));
+		gap: 8px;
+	}
+
+	.tc-party-grid {
+		grid-template-columns: repeat(3, minmax(64px, 1fr));
+	}
+
+	.tc-footer-row {
+		grid-template-columns: minmax(0, 1fr) minmax(130px, 180px);
+	}
+}
+
+/*
+ * "Narrow": only below roughly 600-700px does the card give up on landscape
+ * and collapse to the classic vertical stack - identity, then BADGES, then
+ * PARTY, then the footer (XP above the compact Partner box). Still never a
+ * horizontal scroll.
+ */
+@media (max-width: 680px) {
+	.tc-card-body {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			'identity'
+			'badges'
+			'party'
+			'footer';
+	}
+
+	.tc-hero {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+
+	/*
+	 * The identity column no longer spans the height of BADGES + PARTY at
+	 * this breakpoint (everything stacks into single-row grid areas instead),
+	 * so there is no leftover height for `.tc-portrait-sprite` to flex into -
+	 * a smaller fixed size sits beside the identity text instead, per the
+	 * "smaller presentation is acceptable" narrow-width guidance.
+	 */
+	.tc-portrait-sprite {
+		width: 96px;
+		height: 96px;
+		flex: none;
+		min-height: 0;
+		max-height: none;
+	}
+
+	.tc-identity {
+		flex: 1 1 160px;
+	}
+
+	.tc-identity-stats {
+		flex-basis: 100%;
+		margin-top: 4px;
+		padding-top: 6px;
+	}
+
+	.tc-footer-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+@media (max-width: 440px) {
+	body {
+		padding: 10px;
+	}
+
+	/* Only the 4-column DEV RECORD needs collapsing. */
+	.tc-record-grid-4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-spec {
+		grid-template-columns: minmax(0, 84px) minmax(0, 1fr) auto;
+		gap: 6px;
+	}
+
+	.tc-footer .tc-button {
+		flex: 1 1 auto;
+	}
+
+	/* 2 columns rather than 3 - still never a horizontal scroll, and 3 rows
+	 * of 2 comfortably fits PARTY_SLOTS (6). */
+	.tc-party-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-badges-grid {
+		grid-template-columns: repeat(auto-fill, minmax(48px, 60px));
+		gap: 8px;
+	}
+
+	.tc-picker-tabs {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tc-picker-tab {
+		flex: 1 1 40%;
+	}
+}
+
+/* ------------------------------ motion / a11y ---------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.tc-card,
+	.tc-shimmer,
+	.tc-partner-xp-fill,
+	.tc-xp-fill,
+	.tc-spec-fill,
+	.tc-status-dots::after {
+		animation: none;
+	}
+
+	.tc-partner-xp-fill,
+	.tc-xp-fill {
+		transition: none;
+	}
+
+	.tc-status-dots::after {
+		width: 1.7em;
+	}
+}
+
+@media (forced-colors: active) {
+	.tc-card,
+	.tc-card-head,
+	.tc-notices {
+		background: Canvas;
+		color: CanvasText;
+		border-color: CanvasText;
+		box-shadow: none;
+	}
+
+	.tc-card::before,
+	.tc-xp-track::after {
+		content: none;
+	}
+
+	.tc-portrait,
+	.tc-record-grid,
+	.tc-record-cell,
+	.tc-xp-track,
+	.tc-xp-panel,
+	.tc-spec-track,
+	.tc-status,
+	.tc-partner-box,
+	.tc-partner-frame,
+	.tc-badge-tile,
+	.tc-party-slot,
+	.tc-devrecord-panel {
+		border: 1px solid CanvasText;
+		background: Canvas;
+		box-shadow: none;
+	}
+
+	.tc-record-grid {
+		gap: 0;
+	}
+
+	.tc-partner-xp-fill,
+	.tc-xp-fill,
+	.tc-spec-fill {
+		background: Highlight;
+	}
+
+	.tc-portrait::before,
+	.tc-portrait::after {
+		border-color: CanvasText;
+		filter: none;
+	}
+
+	.tc-brand,
+	.tc-title,
+	.tc-idno,
+	.tc-handle,
+	.tc-notice,
+	.tc-notice-warn,
+	.tc-section-title,
+	.tc-section-subtitle,
+	.tc-record-label,
+	.tc-record-value,
+	.tc-identity-stat-label,
+	.tc-identity-stat-value,
+	.tc-class-chip,
+	.tc-partner-empty,
+	.tc-trainer-name,
+	.tc-bio,
+	.tc-location,
+	.tc-devbadges-link,
+	.tc-devbadges-hint,
+	.tc-devbadges-empty,
+	.tc-party-name,
+	.tc-party-level,
+	.tc-party-empty-label {
+		color: CanvasText;
+	}
+
+	.tc-class-chip {
+		border-color: CanvasText;
+		background: Canvas;
+	}
+
+	.tc-input {
+		background: Field;
+		color: FieldText;
+		border-color: FieldText;
+	}
+}

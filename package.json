@@ -1,0 +1,731 @@
+{
+    "name": "pokedev",
+    "displayName": "PokéDev",
+    "description": "Pokémon that live in your editor, earn experience as you code, level up and evolve.",
+    "version": "6.2.0",
+    "author": "UribeJr",
+    "engines": {
+        "vscode": "^1.73.0"
+    },
+    "l10n": "./l10n",
+    "repository": {
+        "type": "github",
+        "url": "https://github.com/UribeJr/pokedev"
+    },
+    "homepage": "https://github.com/UribeJr/pokedev",
+    "bugs": "https://github.com/UribeJr/pokedev/issues",
+    "publisher": "uribejr",
+    "pricing": "Free",
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "pokemon",
+        "pokédev",
+        "pokedev",
+        "pets",
+        "pixelart",
+        "pixel",
+        "gamification",
+        "xp",
+        "productivity"
+    ],
+    "license": "MIT",
+    "icon": "icon.png",
+    "activationEvents": [
+        "onCommand:pokedev.start",
+        "onCommand:pokedev.spawn-pokemon",
+        "onCommand:pokedev.spawn-random-pokemon",
+        "onCommand:pokedev.delete-pokemon",
+        "onCommand:pokedev.remove-all-pokemon",
+        "onCommand:pokedev.roll-call",
+        "onCommand:pokedev.export-pokemon-list",
+        "onCommand:pokedev.import-pokemon-list",
+        "onCommand:pokedev.configure-keybindings",
+        "onCommand:pokedev.change-pokemon-language",
+        "onCommand:pokedev.openTrainerCard",
+        "onCommand:pokedev.configure-github-trainer",
+        "onCommand:pokedev.refresh-github-profile",
+        "onCommand:pokedev.toggle-dev-record",
+        "onCommand:pokedev.set-partner",
+        "onCommand:pokedev.evolve-partner",
+        "onWebviewPanel:pokedevPanel",
+        "onWebviewPanel:pokedevTrainerCard",
+        "onView:explorer",
+        "onView:pokedevView",
+        "onView:pokedev.pokemonView",
+        "onView:pokedev.trainerView",
+        "onView:pokedev.dailyChallengesView",
+        "onStartupFinished",
+        "onCommand:pokedev.focus-trainer-view",
+        "onCommand:pokedev.focus-pokemon-view"
+    ],
+    "main": "./out/extension/extension.js",
+    "browser": "./dist/web/extension-web.js",
+    "contributes": {
+        "views": {
+            "explorer": [
+                {
+                    "type": "webview",
+                    "id": "pokedevView",
+                    "name": "PokéDev",
+                    "when": "pokedev.position == 'explorer'",
+                    "icon": "media/icon/dark-add.svg"
+                },
+                {
+                    "type": "webview",
+                    "id": "pokedev.trainerView",
+                    "name": "PokéDev Trainer"
+                },
+                {
+                    "type": "webview",
+                    "id": "pokedev.dailyChallengesView",
+                    "name": "Daily Challenges"
+                },
+                {
+                    "type": "webview",
+                    "id": "pokedev.pokemonView",
+                    "name": "Party"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "pokedev.spawn-pokemon",
+                    "when": "view == pokedevView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pokedev.spawn-random-pokemon",
+                    "when": "view == pokedevView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pokedev.delete-pokemon",
+                    "when": "view == pokedevView",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "pokedev.openTrainerCard",
+                    "when": "view == pokedevView",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "pokedev.change-display-border",
+                    "when": "view == pokedevView",
+                    "group": "navigation@5"
+                },
+                {
+                    "command": "pokedev.change-environment",
+                    "when": "view == pokedevView",
+                    "group": "navigation@6"
+                },
+                {
+                    "command": "pokedev.change-roaming-style",
+                    "when": "view == pokedevView",
+                    "group": "navigation@7"
+                },
+                {
+                    "command": "pokedev.debug-grant-5-exp",
+                    "when": "view == pokedevView && config.pokedev.enableDebugCommands",
+                    "group": "navigation@8"
+                },
+                {
+                    "command": "pokedev.openTrainerCard",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pokedev.refresh-github-profile",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pokedev.change-trainer-card-style",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "pokedev.openPokeGear",
+                    "when": "view == pokedev.trainerView",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "pokedev.spawn-pokemon",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "pokedev.spawn-random-pokemon",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "pokedev.set-partner",
+                    "when": "view == pokedev.pokemonView",
+                    "group": "navigation@3"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "pokedev.debug-add-trainer-xp",
+                    "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-add-partner-xp",
+                    "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-grant-5-exp",
+                    "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-add-friendship",
+                    "when": "config.pokedev.enableDebugCommands"
+                },
+                {
+                    "command": "pokedev.debug-give-stone",
+                    "when": "config.pokedev.enableDebugCommands"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "pokedev.start",
+                "title": "Start pokemon coding session",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.export-pokemon-list",
+                "title": "Export pokemon list",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.import-pokemon-list",
+                "title": "Import pokemon list",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.spawn-pokemon",
+                "title": "Spawn additional pokemon",
+                "category": "PokéDev",
+                "icon": {
+                    "dark": "media/icon/dark-add.svg",
+                    "light": "media/icon/light-add.svg"
+                }
+            },
+            {
+                "command": "pokedev.spawn-random-pokemon",
+                "title": "Spawn random additional pokemon",
+                "category": "PokéDev",
+                "icon": {
+                    "dark": "media/icon/dark-random.svg",
+                    "light": "media/icon/light-random.svg"
+                }
+            },
+            {
+                "command": "pokedev.delete-pokemon",
+                "title": "Remove pokemon",
+                "category": "PokéDev",
+                "icon": {
+                    "dark": "media/icon/dark-trash.svg",
+                    "light": "media/icon/light-trash.svg"
+                }
+            },
+            {
+                "command": "pokedev.remove-all-pokemon",
+                "title": "Remove all pokemon",
+                "category": "PokéDev",
+                "icon": {
+                    "dark": "media/icon/dark-trash.svg",
+                    "light": "media/icon/light-trash.svg"
+                }
+            },
+            {
+                "command": "pokedev.roll-call",
+                "title": "Roll-call",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.configure-keybindings",
+                "title": "Configure keybindings",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.change-pokemon-language",
+                "title": "Change Pokemon language",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.change-display-border",
+                "title": "Change Display Border",
+                "category": "PokéDev",
+                "icon": "$(device-desktop)"
+            },
+            {
+                "command": "pokedev.change-environment",
+                "title": "Change Environment",
+                "category": "PokéDev",
+                "icon": "$(map)"
+            },
+            {
+                "command": "pokedev.change-roaming-style",
+                "title": "Change Roaming Style",
+                "category": "PokéDev",
+                "icon": "$(move)"
+            },
+            {
+                "command": "pokedev.change-trainer-card-style",
+                "title": "Change Trainer Card Style",
+                "category": "PokéDev",
+                "icon": "$(paintcan)"
+            },
+            {
+                "command": "pokedev.change-crystal-palette",
+                "title": "Change Crystal Palette",
+                "category": "PokéDev",
+                "icon": "$(color-mode)"
+            },
+            {
+                "command": "pokedev.openTrainerCard",
+                "title": "Open Trainer Card",
+                "category": "PokéDev",
+                "icon": {
+                    "dark": "media/icon/dark-trainer.svg",
+                    "light": "media/icon/light-trainer.svg"
+                }
+            },
+            {
+                "command": "pokedev.openPokeGear",
+                "title": "Open PokéGear",
+                "category": "PokéDev",
+                "icon": "$(device-mobile)"
+            },
+            {
+                "command": "pokedev.configure-github-trainer",
+                "title": "Configure GitHub Trainer",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.refresh-github-profile",
+                "title": "Refresh GitHub Profile",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.toggle-dev-record",
+                "title": "Toggle Dev Record on Trainer Card",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.connect-dev-profile",
+                "title": "Connect DEV Profile",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.refresh-dev-badges",
+                "title": "Refresh DEV Badges",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.disconnect-dev-profile",
+                "title": "Disconnect DEV Profile",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.set-partner",
+                "title": "Choose Partner Pokemon",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.evolve-partner",
+                "title": "Evolve Partner",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.debug-add-trainer-xp",
+                "title": "Add 100 Trainer XP",
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.debug-add-partner-xp",
+                "title": "Add 100 Partner XP",
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.debug-grant-5-exp",
+                "title": "Grant 5 Partner EXP",
+                "category": "PokéDev Debug",
+                "icon": {
+                    "dark": "media/icon/dark-circle-outline.svg",
+                    "light": "media/icon/light-circle-outline.svg"
+                }
+            },
+            {
+                "command": "pokedev.debug-add-friendship",
+                "title": "Add 50 Friendship to Partner",
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.debug-give-stone",
+                "title": "Give Evolution Stone...",
+                "category": "PokéDev Debug"
+            },
+            {
+                "command": "pokedev.focus-trainer-view",
+                "title": "Focus Trainer View",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.focus-pokemon-view",
+                "title": "Focus Pokémon View",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.shopify-actions",
+                "title": "Shopify Actions...",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.shopify-theme-check",
+                "title": "Shopify Theme Check",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.shopify-theme-push",
+                "title": "Shopify Theme Push",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.shopify-app-build",
+                "title": "Shopify App Build",
+                "category": "PokéDev"
+            },
+            {
+                "command": "pokedev.shopify-app-deploy",
+                "title": "Shopify App Deploy",
+                "category": "PokéDev"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "pokedev.spawn-pokemon",
+                "key": "alt+shift+w",
+                "mac": "alt+shift+w"
+            },
+            {
+                "command": "pokedev.spawn-random-pokemon",
+                "key": "alt+shift+q",
+                "mac": "alt+shift+q"
+            },
+            {
+                "command": "pokedev.delete-pokemon",
+                "key": "alt+shift+d",
+                "mac": "alt+shift+d"
+            },
+            {
+                "command": "pokedev.remove-all-pokemon",
+                "key": "alt+shift+backspace",
+                "mac": "alt+shift+backspace"
+            }
+        ],
+        "configuration": [
+            {
+                "title": "PokéDev",
+                "properties": {
+                    "pokedev.pokemonSize": {
+                        "type": "string",
+                        "enum": [
+                            "nano",
+                            "small",
+                            "medium",
+                            "large"
+                        ],
+                        "default": "medium",
+                        "description": "Pokemon size"
+                    },
+                    "pokedev.position": {
+                        "type": "string",
+                        "enum": [
+                            "panel",
+                            "explorer"
+                        ],
+                        "default": "explorer",
+                        "description": "VSCode pokemon webview position"
+                    },
+                    "pokedev.theme": {
+                        "type": "string",
+                        "enum": [
+                            "none",
+                            "forest",
+                            "castle",
+                            "beach"
+                        ],
+                        "default": "none",
+                        "description": "Background theme assets for your pokemon"
+                    },
+                    "pokedev.displaySkin": {
+                        "type": "string",
+                        "enum": [
+                            "none",
+                            "gbc-classic",
+                            "gbc-power",
+                            "gbc-minimal",
+                            "gbc-no-light"
+                        ],
+                        "default": "none",
+                        "scope": "application",
+                        "description": "Retro handheld display border around the PokéDev world"
+                    },
+                    "pokedev.environment": {
+                        "type": "string",
+                        "enum": [
+                            "none",
+                            "johto-route",
+                            "ilex-forest",
+                            "cave"
+                        ],
+                        "default": "none",
+                        "scope": "application",
+                        "description": "Background environment scene behind the PokéDev world"
+                    },
+                    "pokedev.roamingStyle": {
+                        "type": "string",
+                        "enum": [
+                            "overworld",
+                            "classic"
+                        ],
+                        "enumDescriptions": [
+                            "Pokémon wander throughout the full 2D PokéDev environment.",
+                            "Pokémon use the original floor-style horizontal pet movement."
+                        ],
+                        "default": "overworld",
+                        "scope": "application",
+                        "description": "How Pokémon roam the PokéDev world"
+                    },
+                    "pokedev.defaultPokemon": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "description": "Pokemon type (e.g., 'pikachu', 'charizard', 'bulbasaur'), or 'random' to spawn a random species"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "Custom name for the pokemon (optional)"
+                                },
+                                "shiny": {
+                                    "type": "boolean",
+                                    "description": "Force this pokemon to be shiny (true) or non-shiny (false). If omitted, uses pokedev.shinyOdds (optional)"
+                                },
+                                "pool": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "description": "When type is 'random', restrict the random selection to this list of pokemon species (e.g. ['pikachu', 'eevee', 'gengar']). Ignored for non-random types (optional)"
+                                }
+                            },
+                            "required": [
+                                "type"
+                            ]
+                        },
+                        "default": [],
+                        "description": "List of default pokemon to automatically spawn on startup. Each pokemon should have a 'type' (required, or 'random' to spawn a random species), and optionally 'name', 'shiny', and 'pool' (for random selection). Example: [{\"type\": \"pikachu\", \"name\": \"Sparky\"}, {\"type\": \"random\", \"pool\": [\"eevee\", \"gengar\", \"snorlax\"]}]"
+                    },
+                    "pokedev.shinyOdds": {
+                        "type": "number",
+                        "default": 8192,
+                        "minimum": 1,
+                        "description": "Odds (1 in N) for a Pokémon to be shiny. Lower = more shinies. Default is 8192."
+                    },
+                    "pokedev.pokemonLanguage": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "en-US",
+                            "fr-FR",
+                            "de-DE",
+                            "ja-JP"
+                        ],
+                        "default": "auto",
+                        "description": "Language for Pokemon names. 'auto' uses VS Code's language, or you can choose a specific language (e.g., 'fr-FR' for French, 'en-US' for English, 'de-DE' for German, 'ja-JP' for Japanese). Only official Pokemon languages are supported."
+                    },
+                    "pokedev.githubUsername": {
+                        "type": "string",
+                        "default": "",
+                        "scope": "application",
+                        "pattern": "^$|^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$",
+                        "patternErrorMessage": "Not a valid GitHub username.",
+                        "markdownDescription": "Your GitHub username, shown on the Trainer Card (**Pokemon Coding: Open Trainer Card**). Only public profile data is read; no authentication is used and no data leaves your machine except the request to GitHub."
+                    },
+                    "pokedev.devUsername": {
+                        "type": "string",
+                        "default": "",
+                        "scope": "application",
+                        "pattern": "^$|^[A-Za-z0-9_-]{1,32}$",
+                        "patternErrorMessage": "Not a valid DEV username.",
+                        "markdownDescription": "Your public DEV Community (dev.to) username, shown as **DEV BADGES** on the Trainer Card. Independent of your GitHub username. Only public badge data is read; no authentication is used and no data leaves your machine except the request to dev.to."
+                    },
+                    "pokedev.trainerCard.showDevRecord": {
+                        "type": "boolean",
+                        "default": true,
+                        "markdownDescription": "Show the **DEV RECORD** section on the Trainer Card: your public GitHub repositories, stars, followers, join year and top languages. Turn this off to keep the card to your in-editor progression only. GitHub data is still fetched and cached either way."
+                    },
+                    "pokedev.trainerCard.showCodingTime": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Show total coding time on the PokéDev Trainer Card. Coding time is always tracked internally regardless of this setting."
+                    },
+                    "pokedev.trainerCard.style": {
+                        "type": "string",
+                        "enum": [
+                            "pokedev",
+                            "crystal"
+                        ],
+                        "enumDescriptions": [
+                            "The original PokéDev Trainer Card design.",
+                            "A Pokémon Crystal-styled card: the game's window framing, GBC palette, and pixel UI language."
+                        ],
+                        "default": "pokedev",
+                        "scope": "application",
+                        "description": "Visual style of the Trainer Card. Your Trainer Card data is identical either way."
+                    },
+                    "pokedev.crystalPalette": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "day",
+                            "night"
+                        ],
+                        "enumDescriptions": [
+                            "Follows VS Code/Cursor's light or dark appearance - Crystal Night when the IDE is dark, Crystal Day when it is light.",
+                            "Always the original cream Crystal Day palette.",
+                            "Always the dark Crystal Night palette."
+                        ],
+                        "default": "auto",
+                        "scope": "application",
+                        "description": "Day/Night palette for the Crystal Trainer Card style. Only matters when \"pokedev.trainerCard.style\" is \"crystal\" - PokéGear always uses this same resolved palette too."
+                    },
+                    "pokedev.progression.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Earn Trainer and partner Pokémon experience from coding activity: saving changed files, active coding time, Git commits and successful build/test tasks."
+                    },
+                    "pokedev.progression.expShareEnabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Share Pokémon experience with the rest of your active party. The partner always keeps its full award; every other party Pokémon additionally gains 50% of it. Off by default so existing progression is unaffected."
+                    },
+                    "pokedev.progression.mode": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "manual",
+                            "agentic"
+                        ],
+                        "enumDescriptions": [
+                            "Both your own typing and edits made by an AI agent count as activity. Earns experience whichever way you work.",
+                            "Only your own keyboard and mouse input counts as activity, so watching an agent work accrues no coding time. Work batches and Git commits still earn normally.",
+                            "Any edit counts as activity, with a longer idle window (15 minutes instead of 5) to cover the pauses in a long agent run."
+                        ],
+                        "default": "auto",
+                        "markdownDescription": "How you work, which decides what counts as \"still active\" for **Coding Time**. Experience weights are shared across all three modes — they are already tuned so hand-written and agent-driven sessions earn at close to the same rate. This only governs the idle clock."
+                    },
+                    "pokedev.enableDebugCommands": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Show the PokeDev Debug commands for granting experience. Intended for testing progression and evolution; leave this off for normal use."
+                    },
+                    "pokedev.reactions.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Show brief, charming Pokémon reactions to meaningful coding events: saving changed files, Git commits, failed build/test tasks, and Pokémon level-ups."
+                    },
+                    "pokedev.toasts.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Show tiny in-world activity messages when Pokémon gain experience or level up."
+                    },
+                    "pokedev.devActions.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "markdownDescription": "Earn modest Trainer and partner Pokémon experience for verified successful development outcomes: builds, test runs, typechecks and lint runs. Detected only from VS Code task results (real exit codes and declared task metadata) - never from terminal text, command history, or output."
+                    },
+                    "pokedev.shopifyDevActions.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "markdownDescription": "Earn Trainer and partner Pokémon experience for verified successful Shopify CLI outcomes: a passing theme check, a theme push, an app build, or an app deploy. Detected only from VS Code task results (real exit codes and declared task metadata) - never from terminal text, command history, shop credentials, or CLI output. Running `shopify theme dev`/`app dev`, pulling, or logging in never earns anything."
+                    }
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile:panel": "webpack",
+        "compile:extension": "tsc -p ./tsconfig.extension.json",
+        "compile:test": "tsc -p ./tsconfig.test.json",
+        "compile:web": "webpack",
+        "compile": "npm run compile:panel && npm run compile:extension && npm run compile:test && npm run compile:web",
+        "typecheck": "tsc -p ./tsconfig.extension.json --noEmit && tsc -p ./tsconfig.test.json --noEmit",
+        "watch": "webpack && tsc -watch -p ./tsconfig.extension.json",
+        "watch:web": "webpack --watch",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "lint:fix": "eslint src --ext ts --fix",
+        "format:check": "prettier --check src",
+        "format": "prettier --write src",
+        "test": "node ./out/test/runTest.js",
+        "test:coverage": "COVERAGE=1 node ./out/test/runTest.js",
+        "test:web": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
+        "test:gifs": "node ./out/test/gifs.js",
+        "prepare": "husky",
+        "test:unit": "mocha --ui tdd out/test/suite/trainer.test.js out/test/suite/dev-badges.test.js out/test/suite/progression.test.js out/test/suite/reactions.test.js out/test/suite/daily-challenges.test.js out/test/suite/dev-actions.test.js out/test/suite/shopify-dev-actions.test.js out/test/suite/evolution-persistence.test.js out/test/suite/display-skins.test.js out/test/suite/friendship.test.js out/test/suite/environments.test.js out/test/suite/roaming.test.js out/test/suite/trainer-card-style.test.js out/test/suite/pokegear.test.js out/test/suite/evolution-stones.test.js out/test/suite/crystal-palette.test.js out/test/suite/pokeballs.test.js"
+    },
+    "devDependencies": {
+        "@rbarilani/remove-source-map-url-webpack-plugin": "^1.1.0",
+        "@types/glob": "^7.1.3",
+        "@types/jsdom": "^20.0.0",
+        "@types/mocha": "^9.1.1",
+        "@types/node": "^18.0.0",
+        "@types/vscode": "^1.73.0",
+        "@typescript-eslint/eslint-plugin": "^5.29.0",
+        "@typescript-eslint/parser": "^5.29.0",
+        "@vscode/l10n-dev": "^0.0.29",
+        "@vscode/test-web": "^0.0.50",
+        "eslint": "^8.18.0",
+        "eslint-config-prettier": "^9.1.2",
+        "eslint-plugin-prettier": "^5.5.4",
+        "eslint-plugin-unused-imports": "^2.0.0",
+        "glob": "^8.0.3",
+        "gulp": "^5.0.0",
+        "husky": "^9.1.7",
+        "jsdom": "^20.0.0",
+        "jsdom-global": "^3.0.2",
+        "mocha": "^10.0.0",
+        "nyc": "^15.1.0",
+        "path-browserify": "^1.0.1",
+        "prettier": "^3.3.3",
+        "process": "^0.11.10",
+        "source-map-support": "^0.5.21",
+        "ts-loader": "^9.3.0",
+        "ts-node": "^10.9.2",
+        "typescript": "^4.7.4",
+        "typescript-eslint": "^0.0.1-alpha.0",
+        "vscode-test": "^1.4.0",
+        "webpack": "5.95.0",
+        "webpack-cli": "^4.10.0"
+    },
+    "dependencies": {
+        "@vscode/l10n": "^0.0.10"
+    },
+    "lint-staged": {
+        "*.ts": [
+            "eslint --fix",
+            "prettier --write"
+        ]
+    }
+}
