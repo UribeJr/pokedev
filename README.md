@@ -4,6 +4,8 @@
 
 ![icon](https://github.com/UribeJr/pokedev/raw/main/icon.png)
 
+### The ultimate Pokémon developer extension
+
 ![Version](https://img.shields.io/badge/version-6.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.73.0-007ACC?logo=visualstudiocode&logoColor=white)
@@ -11,7 +13,8 @@
 </div>
 
 <p align="center">
-    Pokémon that live in your editor, earn experience as you code, level up and evolve ✨
+    A Pokémon partner that lives in your editor, levels up with your real work, and turns
+    coding into a session worth logging.
     <br>
     <br>
     <a href="https://github.com/UribeJr/pokedev/issues/new?assignees=&labels=feature&template=bug_report.md&title=">Report a Bug</a>
@@ -31,19 +34,26 @@
 
 PokéDev turns your editor into a living Pokémon world. Pick a partner, watch it
 roam a real Game Boy-style overworld, and earn XP for the coding you were
-already doing — saving, committing, running builds and tests. Level up, evolve,
-grow Friendship with your partner, check a retro GitHub Trainer Card, clear
-three Daily Challenges, and track it all from a PokéGear panel that never
-leaves your sidebar.
+already doing — saving, committing, running builds and tests, and (if you
+build for Shopify) shipping themes and apps. Level up, evolve with stones or
+Friendship, check a retro GitHub Trainer Card, clear Daily Challenges, and
+track it all from a PokéGear panel that never leaves your sidebar.
+
+This is a personal, actively-developed project — built and maintained by
+[UribeJr](https://github.com/UribeJr), not a fork, not a template, not
+anyone else's roadmap.
 
 ## ✨ Features at a glance
 
 - 🗺️ **World & Roaming** — a full 2D overworld with selectable environments and Game Boy Color display borders, or classic floor-style roaming
-- 🪪 **GitHub Trainer Card** — a retro trainer profile built from your public GitHub data, in a PokéDev or Pokémon Crystal skin
-- 📟 **PokéGear** — one panel, four tabs: Status, Activity, Badges, Party
-- ✅ **Daily Challenges** — three fresh challenges every day, driven by real coding activity
+- 🪪 **GitHub Trainer Card** — a retro trainer profile built from your public GitHub data, in a PokéDev or Pokémon Crystal (Day/Night) skin
+- 📟 **PokéGear** — one panel, five tabs: Status, Activity, Badges, Party, Bag
+- ✅ **Daily Challenges** — fresh challenges every day, driven by real coding activity — including Shopify-specific ones if you're in a theme/app project
 - 🏅 **Dev Badges** — your DEV Community badges, pulled into your Trainer Card and PokéGear
 - ⚙️ **Dev Actions** — successful builds, tests, lint and typecheck runs earn XP too
+- 🛍️ **Shopify Dev Actions** — verified `theme check`, `theme push`, `app build` and `app deploy` outcomes earn XP exactly like any other Dev Action
+- 💎 **Evolution Stones** — Fire, Water, Thunder, Leaf, Moon and Sun Stone evolve the species that really use them, tracked in a dedicated Bag
+- 🎾 **Poké Ball customization** — assign any of 38 real Poké Ball sprites to a Pokémon, purely cosmetic, persists through evolution
 - 📈 **Progression** — Trainer and Partner XP, levels, Generation 1–4 evolution, and a Friendship system that unlocks its own evolutions
 - 🧩 **Explorer sidebar views** — Trainer summary, Party and Daily Challenges without leaving your file tree
 
@@ -221,7 +231,7 @@ Outline and Timeline:
 - **PokéDev Trainer** — your avatar, name, Trainer level, a live XP bar, coding
   time and your current partner, with small actions for `Open Full Card`,
   `Refresh` and `Change Partner`.
-- **Daily Challenges** — today's three challenges and their progress, without
+- **Daily Challenges** — today's challenges and their progress, without
   opening PokéGear.
 - **Party** — everything in your collection with each one's level, the
   current partner clearly marked. Click any other Pokémon to make it your
@@ -311,6 +321,14 @@ is identical either way:
 - **Crystal** — a Pokémon Crystal-styled card: the game's window framing, GBC
   palette, and pixel UI language.
 
+When using Crystal, `pokedev.crystalPalette` (`auto`/`day`/`night`, default
+`auto`) picks between the original cream Crystal Day look and a dark Crystal
+Night palette, or run **`PokéDev: Change Crystal Palette`**. Auto follows your
+editor's own light/dark appearance live — no reload needed. The resolved
+palette applies everywhere Crystal renders: the full Trainer Card, the compact
+Explorer Trainer view, and PokéGear (which always uses Crystal) — never a
+separate preference per surface.
+
 <img src="docs/screenshots/trainer-card-crystal.png" alt="GitHub Trainer Card — Crystal style (screenshot coming soon)" width="500">
 
 ### Hiding the DEV RECORD
@@ -380,7 +398,7 @@ Card style setting.
 
 ## Daily Challenges
 
-Three fresh challenges appear every day — regenerated once per calendar day,
+Fresh challenges appear every day — regenerated once per calendar day,
 picked deterministically so everyone sees a fair, varied rotation rather than
 pure randomness. They're driven entirely by progression events you're already
 generating: saves, coding minutes, commits, and successful builds/tests/lint/
@@ -391,6 +409,9 @@ It, Partner Training, Level Up, Team Training, Underdog, Momentum, Green
 Light, Build Master, Test Trainer, Clean Check, and Ship Shape — each with its
 own escalating tiers. Completing one grants Trainer XP and a Friendship bump
 for your current partner, with a small toast to mark it.
+
+If your workspace looks like a Shopify theme or app project, five more show
+up — see [Shopify Dev Actions](#shopify-dev-actions) below.
 
 Check today's challenges from the Explorer's **Daily Challenges** section, or
 PokéGear's **Status**/**Activity** tabs.
@@ -419,6 +440,41 @@ only on a task's real, declared exit status via VS Code's own task API; no
 terminal output is ever read or scraped. Dev Actions also count toward Daily
 Challenges and give your partner a small Friendship bump. Turn them off with
 `pokedev.devActions.enabled`.
+
+## Shopify Dev Actions
+
+If you build Shopify themes or apps, PokéDev recognizes verified, successful
+Shopify CLI outcomes as Dev Actions too:
+
+- A passing `shopify theme check`
+- A successful `theme push`
+- An `app build`
+- An `app deploy`
+
+Each earns modest Trainer/partner XP and a Friendship bump exactly like a
+build or test pass. Routine commands that don't represent a shipped
+outcome — `theme dev`, `app dev`, `pull`, `auth login`, `version`, `help`,
+`list`, `info` — never earn anything.
+
+Run **`PokéDev: Shopify Actions...`** for a capability-aware picker (grouped
+THEME/APP) that runs Theme Check, Theme Push, App Build or App Deploy through
+a real, PokéDev-managed VS Code task — the same reliable success detection a
+hand-authored task already gets. Each is also exposed as its own command:
+**Shopify Theme Check**, **Shopify Theme Push**, **Shopify App Build**,
+**Shopify App Deploy**.
+
+Detection never scrapes terminal text or history, never reads your source
+code, and never touches Shopify credentials or shop domains — only a task's
+own exit code and declared metadata, plus a lightweight file-existence check
+(`shopify.app.toml`, `layout/theme.liquid`, etc.) to decide whether a
+workspace looks like a Shopify theme or app project at all. Turn it off with
+`pokedev.shopifyDevActions.enabled`.
+
+Five Daily Challenges are offered only in a workspace that looks like the
+right kind of Shopify project: **Theme Doctor** (2 successful theme checks),
+**Ship The Theme** (1 successful theme push), **App Builder** (2 successful
+app builds), **Deploy Day** (1 successful app deploy), and **Storefront
+Sprint** (3 accepted Shopify Dev Actions of any kind).
 
 ## Progression
 
@@ -486,6 +542,9 @@ feature start at **Lv. 5**. This is not one of the official growth-rate
 formulas; per-species growth rates are a later milestone.
 
 Level-ups appear briefly in the status bar rather than as notifications.
+Reaching Trainer Lv. 5, 10, 15, 20, 25 or 30 also grants one Evolution Stone
+the first time you reach it — a simple, deterministic way into the Bag, no
+random drops, no shop.
 
 ### Evolution
 
@@ -502,14 +561,22 @@ and history** — only its species and sprite change. A shiny stays shiny; if an
 evolved form had no shiny sprite the evolution is refused rather than quietly
 turning your shiny into an ordinary one.
 
-Generation 1–4 straightforward level-up evolutions are supported (165 lines,
-including gender and regional forms such as Nidoran, Shellos and Hippopotas),
-alongside Friendship-based evolutions once your partner reaches a high enough
-Friendship (see below). Evolutions needing conditions this version does not
-model — stones, trades, time of day, held items, known moves, and special
-cases like Wurmple and Tyrogue — are deliberately left out rather than
-approximated. Generation 5 is excluded because most of its species have no
-sprites in this repository yet.
+Generation 1–4 straightforward level-up evolutions are supported (including
+gender and regional forms such as Nidoran, Shellos and Hippopotas), alongside
+Friendship-based evolutions once your partner reaches a high enough Friendship
+(see below), and stone evolutions for the species that really use one in the
+games — Pikachu, Eevee's three stone branches, Gloom's Leaf/Sun split,
+Growlithe, Vulpix, Poliwhirl, Shellder, Staryu, Weepinbell, Clefairy,
+Jigglypuff and Sunkern, via Fire, Water, Thunder, Leaf, Moon and Sun Stone.
+Using a stone always evolves the same persistent Pokémon instance — nickname,
+XP, level, Friendship and Partner/Party status all preserved. Evolutions
+needing conditions this version does not model — trades, time of day, held
+items, known moves, and special cases like Wurmple and Tyrogue — are
+deliberately left out rather than approximated. Generation 5 is excluded
+because most of its species have no sprites in this repository yet.
+
+Manage your stones from PokéGear's **Bag** tab, or grant one for testing with
+**`PokéDev Debug: Give Evolution Stone...`**.
 
 ### Friendship
 
@@ -562,13 +629,15 @@ Friendship directly. They are hidden unless you set
 - **`PokéDev Debug: Add 100 Partner XP`**
 - **`PokéDev Debug: Grant 5 Partner EXP`**
 - **`PokéDev Debug: Add 50 Friendship to Partner`**
+- **`PokéDev Debug: Give Evolution Stone...`**
 
 ### Where it is stored
 
-Trainer progression, Pokémon progression, Friendship, and the recent-activity
-log live in the extension's global storage, alongside your Pokémon collection.
-Rewarded commit hashes are stored per workspace, since a commit belongs to a
-repository. None of it is sent anywhere, and none of it joins Settings Sync.
+Trainer progression, Pokémon progression, Friendship, your evolution stone
+inventory, and the recent-activity log live in the extension's global
+storage, alongside your Pokémon collection. Rewarded commit hashes are stored
+per workspace, since a commit belongs to a repository. None of it is sent
+anywhere, and none of it joins Settings Sync.
 
 Pokémon progression is keyed by nickname, which is how this extension already
 identifies individual Pokémon — that is also why it survives an evolution
@@ -647,7 +716,7 @@ exact filename shown, and it will appear automatically:
 - All sprites and game-derived pixel art are property of their original
   creators
 - This repository is a fan project and is **not affiliated with, endorsed by, or
-  sponsored by** Nintendo, The Pokémon Company, Game Freak, or DEV Community
+  sponsored by** Nintendo, The Pokémon Company, Game Freak, Shopify, or DEV Community
 - Pokémon and all related names and artwork are trademarks of Nintendo /
   Creatures Inc. / GAME FREAK inc. They are used here for non-commercial,
   personal, fan-project purposes only
