@@ -14,6 +14,30 @@
   </picture>
 </p>
 
+## Demo
+
+Live product captures (not placeholders):
+
+| Overworld in Explorer | Trainer Card | PokéGear |
+| :---: | :---: | :---: |
+| ![PokéDev overworld with GBC border and forest environment](src/pokedev-assets/explorer-pokemon-forrest.png) | ![PokéDev Trainer Card with party, badges, and partner XP](src/pokedev-assets/trainer-card.png) | ![PokéGear Status tab showing trainer XP, coding time, and partner](src/pokedev-assets/pokegear.png) |
+
+| Explorer Trainer | Party | Daily Challenges |
+| :---: | :---: | :---: |
+| ![Compact PokéDev Trainer view in Explorer](src/pokedev-assets/explorer-trainer-card.png) | ![Party list with Exp. Share and partner Wartortle](src/pokedev-assets/explorer-party.png) | ![Daily Challenges: Clean Check, Level Up, Ship Shape](src/pokedev-assets/explorer-challenges.png) |
+
+<p align="center">
+  <img alt="Cave environment with Pokémon roaming in the PokéDev world panel" src="src/pokedev-assets/explorer-pokemon-cave.png" width="320">
+  &nbsp;
+  <img alt="PokéGear Party tab with Poké Ball cosmetics picker" src="src/pokedev-assets/pokemon-selection.png" width="320">
+</p>
+
+<p align="center">
+  <img alt="Choose Trainer — Generation I portraits" src="src/pokedev-assets/choose-trainer-gen1.png" width="360">
+  &nbsp;
+  <img alt="Choose Trainer — Generation III portraits" src="src/pokedev-assets/chose-trainer-gen3.png" width="360">
+</p>
+
 ## Overview
 
 Coding sessions are long; most editor pets are just decoration. **PokéDev** turns your VS Code or Cursor sidebar into a living Pokémon world: pick a partner, watch it roam a 2D overworld (or classic floor pets), and earn real Trainer + Partner XP from saves, commits, coding time, and successful builds/tests — including Shopify theme/app outcomes when that is your workspace.
@@ -53,7 +77,7 @@ Built and maintained by [UribeJr](https://github.com/UribeJr) as a personal, act
 
 **Prerequisites:** Node.js + npm, [VS Code](https://code.visualstudio.com/) or [Cursor](https://cursor.com/) `^1.73.0`.
 
-PokéDev is **not** on the VS Marketplace yet. Install from a packaged `.vsix` (when you publish one to [Releases](https://github.com/UribeJr/pokedev/releases)) or build locally:
+PokéDev is **not** on the VS Marketplace / Open VSX yet, and there are **no GitHub Releases** with a packaged `.vsix` today. Build from source and run in the Extension Development Host (or package a VSIX locally):
 
 ### Build & run (Extension Development Host)
 
@@ -64,7 +88,7 @@ npm install
 npm run compile
 ```
 
-Then press **F5** in VS Code/Cursor to launch an Extension Development Host, or package a VSIX:
+Then press **F5** in VS Code/Cursor to launch an Extension Development Host, or package a VSIX yourself:
 
 ```bash
 npx @vscode/vsce package
@@ -79,7 +103,7 @@ code --install-extension pokedev-6.2.0.vsix    # or: cursor --install-extension 
 3. **`PokéDev: Open PokéGear`** for Status / Activity / Party / Bag
 4. Search settings for `pokedev` to tune size, position, roaming, progression mode, and more
 
-![Default PokéDev usage view](usage.png)
+![Default PokéDev usage view in the editor](usage.png)
 
 | Keybinding | Command |
 | --- | --- |
@@ -137,14 +161,15 @@ flowchart TB
 
 ```
 src/
-├── extension/     Activation, services, panels, Explorer views, Shopify bridge
-├── panel/         World rendering, roaming, reactions, Trainer Card / PokéGear UI
-├── progression/   XP ledger, evolution, Friendship, Dev / Shopify action rules
-├── trainer/       GitHub + DEV parsing, trainer class, profile types
-├── challenges/    Daily challenge catalog, RNG, progress
-├── pokegear/      Activity feed helpers / types
-├── common/        Pokémon data, environments, skins, storage keys
-└── test/          Integration + unit suites
+├── extension/        Activation, services, panels, Explorer views, Shopify bridge
+├── panel/            World rendering, roaming, reactions, Trainer Card / PokéGear UI
+├── progression/      XP ledger, evolution, Friendship, Dev / Shopify action rules
+├── trainer/          GitHub + DEV parsing, trainer class, profile types
+├── challenges/       Daily challenge catalog, RNG, progress
+├── pokegear/         Activity feed helpers / types
+├── common/           Pokémon data, environments, skins, storage keys
+├── pokedev-assets/   README / portfolio screenshots (not runtime sprites)
+└── test/             Integration + unit suites
 ```
 
 ## Configuration (high-signal)
@@ -172,21 +197,21 @@ Full property list lives in `package.json` `contributes.configuration`.
 
 ## Project status
 
-**Active** (v6.2.0). Recent work: Shopify Dev Actions, Evolution Stones / Bag, Crystal Day/Night palette, Poké Ball cosmetics, Explorer sidebar views, and in-world reactions.
+**Active** (v6.2.0). Recent work includes Shopify Dev Actions, Evolution Stones / Bag, Crystal Day/Night palette, Poké Ball cosmetics, Explorer sidebar views, in-world reactions, and a fresh screenshot set under `src/pokedev-assets/`.
 
-Honest gaps to know about:
+Honest gaps:
 
-- Not published to VS Marketplace / Open VSX yet — install via VSIX or F5
-- GitHub [Releases](https://github.com/UribeJr/pokedev/releases) may not yet include a packaged `.vsix` — prefer building from `main` until a release is cut
+- Not published to VS Marketplace / Open VSX — install via local VSIX or **F5**
+- No GitHub [Releases](https://github.com/UribeJr/pokedev/releases) (and no tags) with a packaged `.vsix` yet — prefer building from `main` / `Development`
 - Pokédex / Shinies counters on the Trainer Card are not fully wired (stay at zero)
-- Several feature screenshots under `docs/screenshots/` are still placeholders; root demo GIFs (`pokedev.gif`, `pokedev-light.gif`) and `usage.png` / `keybindings.png` are live
+- Screenshot filenames keep a couple of typos (`forrest`, `chose-trainer-gen3`) — cosmetic only
 
 ## Credits & legal
 
 Fan project — **not affiliated with, endorsed by, or sponsored by** Nintendo, The Pokémon Company, Game Freak, Shopify, or DEV Community.
 
-Pokémon names, sprites, and game-derived pixel art remain © their respective owners and are **not** covered by the MIT grant. See the [LICENSE](LICENSE) third-party notice and the detailed asset attributions in the repository Credits (sprite packs, trainer portraits, GBC overlays, Poké Ball icons, Crystal tiles, Silkscreen font).
+Pokémon names, sprites, and game-derived pixel art remain © their respective owners and are **not** covered by the MIT grant. See the [LICENSE](LICENSE) third-party notice. Asset attributions (sprite packs, trainer portraits, GBC overlays, Poké Ball icons, Crystal tiles, Silkscreen font) live with the media sources in-repo.
 
 ## License
 
-[MIT](LICENSE) for code. Game content carve-out as noted above.
+[MIT](LICENSE) for code. Game content carve-out as noted above and in [LICENSE](LICENSE).
