@@ -7,11 +7,7 @@
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.73.0-007ACC?logo=visualstudiocode&logoColor=white)](https://code.visualstudio.com/)
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="pokedev.gif">
-    <source media="(prefers-color-scheme: light)" srcset="pokedev-light.gif">
-    <img alt="PokéDev in the editor — partner Pokémon roaming a Game Boy–style overworld" src="pokedev-light.gif" width="720">
-  </picture>
+  <img alt="PokéDev collage — overworld, Trainer Card, PokéGear, party, and daily challenges" src="src/pokedev-assets/banner.png" width="100%">
 </p>
 
 ## Demo
