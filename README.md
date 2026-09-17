@@ -48,6 +48,7 @@ Built and maintained by [UribeJr](https://github.com/UribeJr) as a personal, act
 
 - **Progression tied to real work** — batched saves, coding time, Git commits, and verified task exits (not terminal scraping) feed Trainer XP, Partner XP, Friendship, and Daily Challenges
 - **GitHub Trainer Card** — retro card that pairs public GitHub identity with live in-editor progression; PokéDev or Pokémon Crystal (Day/Night) skins
+- **Optional [DEV Community](https://dev.to) badges** — if you write on [dev.to](https://dev.to) (a free developer blogging platform), drop in your public username and PokéDev shows your earned DEV badges on the Trainer Card / PokéGear — no account required to use the rest of the extension
 - **PokéGear + Explorer surfaces** — Status / Activity / Badges / Party / Bag in one panel, plus compact Trainer, Party, and Daily Challenges views in Explorer
 - **Gen 1–4 evolution depth** — level-up, Friendship, and Evolution Stones (Fire / Water / Thunder / Leaf / Moon / Sun) with nickname, shiny, XP, and Friendship preserved
 - **Shopify-aware Dev Actions** — theme check / push and app build / deploy earn XP only on verified success; Shopify-specific Daily Challenges appear in matching workspaces
@@ -65,7 +66,13 @@ Built and maintained by [UribeJr](https://github.com/UribeJr) as a personal, act
 - Trainer Card with DEV RECORD (repos, stars, followers, specialties) and TRAINER RECORD (partner, badges, coding time)
 - PokéGear five-tab hub (always Crystal-skinned)
 - Daily Challenges regenerated per calendar day from real progression events
-- DEV Community badge grid (username only; cached public data)
+
+### DEV Community badges (optional)
+[DEV Community](https://dev.to) (dev.to) is a free site where developers publish posts and earn **badges** for writing, community participation, and milestones. PokéDev can display those badges on your Trainer Card / PokéGear Badges tab.
+
+- **Have a DEV account?** Set `pokedev.devUsername` to your public username (for example `uribejr`) — PokéDev fetches **public badge data only** (no login, no OAuth, no tokens).
+- **Don’t have one?** Skip it. The extension works fully without DEV; badges stay empty until you add a username.
+- New to DEV? Create a free account at [dev.to](https://dev.to), then paste your username into settings.
 
 ### Progression & evolution
 - Dual XP tracks (Trainer + Partner) with throttles and batching designed for human *and* agent-driven edits
@@ -99,9 +106,10 @@ code --install-extension pokedev-6.2.0.vsix    # or: cursor --install-extension 
 ### First session
 
 1. Command Palette → **`PokéDev: Start pokemon coding session`**
-2. Optionally **`PokéDev: Open Trainer Card`** and connect a GitHub username
-3. **`PokéDev: Open PokéGear`** for Status / Activity / Party / Bag
-4. Search settings for `pokedev` to tune size, position, roaming, progression mode, and more
+2. Optionally **`PokéDev: Open Trainer Card`** and set your GitHub username
+3. Optional: set `pokedev.devUsername` to your [dev.to](https://dev.to) username to show DEV badges (skip if you don’t have an account)
+4. **`PokéDev: Open PokéGear`** for Status / Activity / Badges / Party / Bag
+5. Search settings for `pokedev` to tune size, position, roaming, progression mode, and more
 
 ![Default PokéDev usage view in the editor](usage.png)
 
@@ -180,6 +188,7 @@ src/
 | `pokedev.roamingStyle` | `overworld` | Full 2D roam vs classic floor pets |
 | `pokedev.environment` / `displaySkin` | `none` | Background scene / GBC bezel |
 | `pokedev.githubUsername` | `""` | Public GitHub identity on Trainer Card |
+| `pokedev.devUsername` | `""` | Public [DEV Community](https://dev.to) username for **DEV BADGES** (optional) |
 | `pokedev.trainerCard.style` | `pokedev` | `pokedev` or `crystal` |
 | `pokedev.crystalPalette` | `auto` | Day / Night / follow IDE theme |
 | `pokedev.progression.mode` | `auto` | Coding-time idle clock: auto / manual / agentic |
@@ -190,7 +199,7 @@ Full property list lives in `package.json` `contributes.configuration`.
 
 ## Privacy
 
-- No authentication, OAuth, or tokens — only public GitHub and DEV Community data
+- No authentication, OAuth, or tokens — only public GitHub profile data and, if configured, public [DEV Community](https://dev.to) badge data
 - Usernames are settings; cached profiles stay in local extension storage and are **not** Settings-Synced
 - Webviews have no network access; the extension host makes external requests
 - No telemetry; Dev / Shopify detection uses task exit codes and declared metadata, never terminal scrape or shop credentials
