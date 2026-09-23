@@ -3,6 +3,7 @@ import { getLocalizedPokemonName } from '../common/localize';
 import { POKEMON_DATA } from '../common/pokemon-data';
 import {
   EXTRA_POKEMON_KEY_COLORS,
+  EXTRA_POKEMON_KEY_IDS,
   EXTRA_POKEMON_KEY_NAMES,
   EXTRA_POKEMON_KEY_TYPES,
   PROGRESSION_PARTNER_KEY,
@@ -25,12 +26,20 @@ import { readPokemonProgress } from './progression-storage';
  * the only part that needs a webview, out of that path.
  */
 export interface PartnerIdentity {
-  /** Index into the three parallel collection arrays. Evolution writes here. */
+  /** Index into the parallel collection arrays. Evolution writes here. */
   index: number;
   species: PokemonType;
   /** The instance identity: progression is keyed by this. */
   nickname: string;
   shiny: boolean;
+  /**
+   * Stable per-instance id (see `EXTRA_POKEMON_KEY_IDS`), for consumers -
+   * such as a paired hardware device - that need to name this exact
+   * Pokemon unambiguously, without inheriting the nickname's documented
+   * collision risk. Empty until `migrateCollectionIds` (in `extension.ts`)
+   * has backfilled this entry; progression itself never reads this field.
+   */
+  id: string;
 }
 
 /**
@@ -62,8 +71,10 @@ export function listPartnerCandidates(
     EXTRA_POKEMON_KEY_NAMES,
     [],
   );
+  const rawIds = context.globalState.get<unknown>(EXTRA_POKEMON_KEY_IDS, []);
   const colors = Array.isArray(rawColors) ? rawColors : [];
   const names = Array.isArray(rawNames) ? rawNames : [];
+  const ids = Array.isArray(rawIds) ? rawIds : [];
 
   const result: PartnerIdentity[] = [];
   for (let index = 0; index < types.length; index++) {
@@ -89,6 +100,7 @@ export function listPartnerCandidates(
       // nickname still needs a stable progression key.
       nickname: typeof names[index] === 'string' ? names[index] : key,
       shiny,
+      id: typeof ids[index] === 'string' ? (ids[index] as string) : '',
     });
   }
   return result;

@@ -37,7 +37,13 @@ import { ResolvedCrystalPalette } from '../common/crystal-palette';
 /** Webview panel view type, also used as the serializer key. */
 export const POKEGEAR_VIEW_TYPE = 'pokedevPokeGear';
 
-export type PokeGearTab = 'status' | 'activity' | 'badges' | 'party' | 'bag';
+export type PokeGearTab =
+  | 'status'
+  | 'activity'
+  | 'badges'
+  | 'party'
+  | 'bag'
+  | 'radio';
 
 /** In display order - also the order tab navigation cycles through. */
 export const POKEGEAR_TABS: readonly PokeGearTab[] = [
@@ -46,6 +52,7 @@ export const POKEGEAR_TABS: readonly PokeGearTab[] = [
   'badges',
   'party',
   'bag',
+  'radio',
 ];
 
 /* ------------------------------------------------------------------ *
@@ -202,6 +209,51 @@ export interface PokeGearBagView {
 }
 
 /* ------------------------------------------------------------------ *
+ * RADIO tab
+ * ------------------------------------------------------------------ */
+
+/** One selectable track, resolved for display - a `RadioTrackDefinition`
+ * (`common/radio-tracks.ts`) plus its webview-safe audio source. Built
+ * host-side, exactly like `PokeGearPokeballOption` - the webview never
+ * resolves an asset path itself. */
+export interface PokeGearRadioTrackOption {
+  id: string;
+  title: string;
+  category: string;
+  audioUri: string;
+}
+
+/**
+ * Persisted RADIO preferences, seeded into the webview ONCE on its first
+ * `pokegear/state` message - see `panel/pokegear/main.ts`'s radio player
+ * state. Every later field change (volume drag, shuffle/repeat toggle,
+ * track selection) is client-side first and persisted fire-and-forget via
+ * `pokegear/radioSetPrefs`; the host never needs to push an updated value
+ * back for the webview to already be showing it.
+ *
+ * Deliberately excludes "was playing" / playback position - see
+ * `POKEGEAR_RADIO_VOLUME_KEY`'s doc comment on why V1 always restores
+ * stopped.
+ */
+export interface PokeGearRadioPrefs {
+  /** 0-100. */
+  volume: number;
+  muted: boolean;
+  shuffle: boolean;
+  repeatTrack: boolean;
+  /** Falls back to the catalog's first track when unset/invalid - see
+   * `normalizeRadioTrackId`. */
+  lastTrackId: string;
+}
+
+export interface PokeGearRadioView {
+  stationId: string;
+  stationName: string;
+  tracks: PokeGearRadioTrackOption[];
+  prefs: PokeGearRadioPrefs;
+}
+
+/* ------------------------------------------------------------------ *
  * Whole-panel view model
  * ------------------------------------------------------------------ */
 
@@ -212,6 +264,7 @@ export interface PokeGearLabels {
   tabParty: string;
   tabBadges: string;
   tabBag: string;
+  tabRadio: string;
   trainerLabel: string;
   levelLabel: string;
   xpLabel: string;
@@ -249,6 +302,21 @@ export interface PokeGearLabels {
   changeBallButton: string;
   searchBallsPlaceholder: string;
   noBallsFoundLabel: string;
+  radioNowPlayingLabel: string;
+  radioStoppedLabel: string;
+  radioPlayingStateLabel: string;
+  radioPausedStateLabel: string;
+  radioTracksLabel: string;
+  radioVolumeLabel: string;
+  radioPreviousButton: string;
+  radioPlayButton: string;
+  radioPauseButton: string;
+  radioStopButton: string;
+  radioNextButton: string;
+  radioShuffleButton: string;
+  radioRepeatButton: string;
+  radioMuteButton: string;
+  radioUnmuteButton: string;
 }
 
 export interface PokeGearViewModel {
@@ -267,6 +335,7 @@ export interface PokeGearViewModel {
   badges: PokeGearBadgesView;
   party: PokeGearPartyView;
   bag: PokeGearBagView;
+  radio: PokeGearRadioView;
 }
 
 /* ------------------------------------------------------------------ *
@@ -281,6 +350,7 @@ export type PokeGearHostboundMessage =
   | { command: 'pokegear/selectPartner'; nickname: string }
   | { command: 'pokegear/useItem'; itemId: string; nickname: string }
   | { command: 'pokegear/setPokeballId'; nickname: string; pokeballId: string }
+  | { command: 'pokegear/radioSetPrefs'; prefs: PokeGearRadioPrefs }
   | { command: 'pokegear/close' };
 
 export type PokeGearWebviewboundMessage = {

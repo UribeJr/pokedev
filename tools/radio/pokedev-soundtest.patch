@@ -1,0 +1,28 @@
+diff --git a/home.asm b/home.asm
+index 0e16558..df352f1 100644
+--- a/home.asm
++++ b/home.asm
+@@ -58,4 +58,7 @@ INCLUDE "home/print_bcd.asm"
+ INCLUDE "home/battle.asm"
+ INCLUDE "home/sprite_anims.asm"
+ INCLUDE "home/audio.asm"
++IF DEF(_POKEDEV_SOUNDTEST)
++INCLUDE "home/pokedev_soundtest.asm"
++ENDC
+ INCLUDE "home/mobile.asm"
+diff --git a/home/init.asm b/home/init.asm
+index 5544dfc..b067485 100644
+--- a/home/init.asm
++++ b/home/init.asm
+@@ -165,7 +165,11 @@ Init::
+ 	call InitSound
+ 	xor a
+ 	ld [wMapMusic], a
++IF DEF(_POKEDEV_SOUNDTEST)
++	jp PokedevSoundTest
++ELSE
+ 	jp GameInit
++ENDC
+
+ ClearVRAM::
+ ; Wipe VRAM banks 0 and 1

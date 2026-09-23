@@ -18,6 +18,8 @@ import {
   PokeGearHostboundMessage,
   PokeGearLabels,
   PokeGearPokeballOption,
+  PokeGearRadioPrefs,
+  PokeGearRadioTrackOption,
   PokeGearTab,
   PokeGearViewModel,
   POKEGEAR_TABS,
@@ -26,6 +28,13 @@ import { ExplorerPokemonEntry } from '../../trainer/explorer-types';
 import { hasDistinctNickname } from '../../trainer/pokemon-display-name';
 import { getFriendshipHearts } from '../../progression/friendship-rules';
 import { getItemDefinition } from '../../common/items';
+import {
+  clampVolume,
+  normalizeRadioTrackId,
+  resolveManualNextTrackId,
+  resolvePreviousTrackId,
+  resolveTrackEndTransition,
+} from '../../pokegear/pokegear-radio-player';
 
 /** Falls back to the raw id for an item this build's catalog does not (or
  * no longer) recognizes, rather than throwing on old log entries. */
@@ -94,6 +103,239 @@ let ballSearchQuery = '';
 function resetBallSelector(): void {
   ballSelectorOpen = false;
   ballSearchQuery = '';
+}
+
+/*
+ * RADIO player state.
+ *
+ * Deliberately NOT rebuilt from `lastModel` on every push - unlike every
+ * other tab's state, this owns a real `<audio>` element that must survive
+ * `render()`'s `root.textContent = ''` wipe and keep playing across tab
+ * switches and unrelated `pokedevState.onDidChange` pushes (XP ticks, etc).
+ * So: a module-level `Audio()` instance never attached to `root`'s subtree,
+ * seeded ONCE from the host's persisted prefs (`initRadioFromModel`) on the
+ * first `pokegear/state` message, and never again overwritten by a later
+ * push - exactly the same "client owns it after first paint" rule
+ * `setActiveTab`'s optimistic-merge trick already applies to the active tab.
+ *
+ * See `pokegear-radio-player.ts` for the pure shuffle/repeat/volume logic
+ * this file only calls into.
+ */
+let radioInitialized = false;
+let radioTrackIds: string[] = [];
+let radioCurrentTrackId: string | undefined;
+let radioShuffle = false;
+let radioRepeatTrack = false;
+let radioVolume = 70;
+let radioMuted = false;
+let radioAudio: HTMLAudioElement | undefined;
+let radioPersistTimer: ReturnType<typeof setTimeout> | undefined;
+
+function getRadioAudio(): HTMLAudioElement {
+  if (!radioAudio) {
+    radioAudio = new Audio();
+    radioAudio.addEventListener('ended', handleRadioTrackEnded);
+    radioAudio.addEventListener('play', rerenderIfRadioTabVisible);
+    radioAudio.addEventListener('pause', rerenderIfRadioTabVisible);
+    // Deliberately NOT listening for `timeupdate`/`loadedmetadata` - RADIO
+    // shows only play/paused/stopped state, not a ticking elapsed/duration
+    // clock. `rerender()` rebuilds the WHOLE tab's DOM
+    // (`root.textContent = ''` then re-append), and `timeupdate` fires
+    // several times a second, so wiring it up visibly flickered the tab -
+    // see this milestone's own note on why that display was removed.
+  }
+  return radioAudio;
+}
+
+/** Only the RADIO tab's now-playing display depends on these events - skip
+ * rebuilding the whole panel's DOM while the user is looking at a
+ * different tab. Playback itself is entirely independent of the DOM tree,
+ * so it is unaffected either way. */
+function rerenderIfRadioTabVisible(): void {
+  if (lastModel?.activeTab === 'radio') {
+    rerender();
+  }
+}
+
+/** Seeds local player state from the host's persisted prefs exactly once -
+ * see the state block's own doc comment for why this never re-runs. */
+function initRadioFromModel(model: PokeGearViewModel): void {
+  if (radioInitialized) {
+    return;
+  }
+  radioInitialized = true;
+  radioTrackIds = model.radio.tracks.map((t) => t.id);
+  const prefs = model.radio.prefs;
+  radioVolume = clampVolume(prefs.volume);
+  radioMuted = prefs.muted === true;
+  radioShuffle = prefs.shuffle === true;
+  radioRepeatTrack = prefs.repeatTrack === true;
+  radioCurrentTrackId = normalizeRadioTrackId(prefs.lastTrackId, radioTrackIds);
+
+  const audio = getRadioAudio();
+  audio.volume = radioVolume / 100;
+  audio.muted = radioMuted;
+  // Restore the last-selected track's source so its title/duration can show
+  // immediately - this does NOT play it. Loading a media source is not
+  // playback; only an explicit `.play()` call (always inside a click
+  // handler below) is. See this milestone's own "no autoplay on startup"
+  // requirement.
+  const track = model.radio.tracks.find((t) => t.id === radioCurrentTrackId);
+  if (track) {
+    audio.src = track.audioUri;
+  }
+}
+
+function schedulePersistRadioPrefs(): void {
+  if (radioPersistTimer !== undefined) {
+    clearTimeout(radioPersistTimer);
+  }
+  // Debounced: a dragged volume slider fires many times a second, and none
+  // of these values need to reach `globalState` faster than this - see
+  // `PokeGearRadioPrefs`'s doc comment on why playback state itself is
+  // never part of this payload.
+  radioPersistTimer = setTimeout(() => {
+    radioPersistTimer = undefined;
+    const prefs: PokeGearRadioPrefs = {
+      volume: radioVolume,
+      muted: radioMuted,
+      shuffle: radioShuffle,
+      repeatTrack: radioRepeatTrack,
+      lastTrackId: radioCurrentTrackId ?? radioTrackIds[0] ?? '',
+    };
+    post({ command: 'pokegear/radioSetPrefs', prefs });
+  }, 250);
+}
+
+function findRadioTrack(
+  id: string | undefined,
+): PokeGearRadioTrackOption | undefined {
+  if (!id || !lastModel) {
+    return undefined;
+  }
+  return lastModel.radio.tracks.find((t) => t.id === id);
+}
+
+/** Loads (and optionally plays) a track by id - the one place that touches
+ * `radioAudio.src`, so `radioCurrentTrackId` and the element's actual
+ * source can never drift apart. */
+function setRadioTrack(id: string, options: { autoplay: boolean }): void {
+  const track = findRadioTrack(id);
+  if (!track) {
+    return;
+  }
+  radioCurrentTrackId = id;
+  const audio = getRadioAudio();
+  if (audio.src !== track.audioUri) {
+    audio.src = track.audioUri;
+  } else {
+    audio.currentTime = 0;
+  }
+  if (options.autoplay) {
+    void audio.play().catch(() => {
+      // Ignore rejected play() promises (e.g. a stale gesture) - the user
+      // can just press Play again; nothing to surface as an error here.
+    });
+  } else {
+    audio.pause();
+  }
+  schedulePersistRadioPrefs();
+  rerender();
+}
+
+function handleRadioTrackEnded(): void {
+  const nextId = resolveTrackEndTransition({
+    trackIds: radioTrackIds,
+    currentId: radioCurrentTrackId,
+    shuffle: radioShuffle,
+    repeatTrack: radioRepeatTrack,
+  });
+  if (nextId) {
+    setRadioTrack(nextId, { autoplay: true });
+  }
+}
+
+function handleRadioPlayPause(): void {
+  const audio = getRadioAudio();
+  if (!radioCurrentTrackId) {
+    const first = radioTrackIds[0];
+    if (first) {
+      setRadioTrack(first, { autoplay: true });
+    }
+    return;
+  }
+  if (audio.paused) {
+    // Ignore a rejected play() promise, same as `setRadioTrack` - see its
+    // own comment.
+    void audio.play().catch(() => undefined);
+  } else {
+    audio.pause();
+  }
+  rerender();
+}
+
+function handleRadioStop(): void {
+  const audio = getRadioAudio();
+  audio.pause();
+  audio.currentTime = 0;
+  rerender();
+}
+
+function handleRadioNext(): void {
+  const audio = getRadioAudio();
+  const wasPlaying = !audio.paused;
+  const next = resolveManualNextTrackId(
+    radioTrackIds,
+    radioCurrentTrackId,
+    radioShuffle,
+  );
+  if (next) {
+    setRadioTrack(next, { autoplay: wasPlaying });
+  }
+}
+
+function handleRadioPrevious(): void {
+  const audio = getRadioAudio();
+  const wasPlaying = !audio.paused;
+  const previous = resolvePreviousTrackId(radioTrackIds, radioCurrentTrackId);
+  if (previous) {
+    setRadioTrack(previous, { autoplay: wasPlaying });
+  }
+}
+
+function handleRadioSelectTrack(id: string): void {
+  setRadioTrack(id, { autoplay: true });
+}
+
+function handleRadioShuffleToggle(): void {
+  radioShuffle = !radioShuffle;
+  schedulePersistRadioPrefs();
+  rerender();
+}
+
+function handleRadioRepeatToggle(): void {
+  radioRepeatTrack = !radioRepeatTrack;
+  schedulePersistRadioPrefs();
+  rerender();
+}
+
+function handleRadioVolumeChange(rawValue: number): void {
+  radioVolume = clampVolume(rawValue);
+  if (radioVolume > 0) {
+    radioMuted = false;
+  }
+  const audio = getRadioAudio();
+  audio.volume = radioVolume / 100;
+  audio.muted = radioMuted;
+  schedulePersistRadioPrefs();
+  rerender();
+}
+
+function handleRadioMuteToggle(): void {
+  radioMuted = !radioMuted;
+  getRadioAudio().muted = radioMuted;
+  schedulePersistRadioPrefs();
+  rerender();
 }
 
 function post(message: PokeGearHostboundMessage): void {
@@ -202,6 +444,7 @@ function renderTabs(model: PokeGearViewModel): HTMLElement {
     badges: labels.tabBadges,
     party: labels.tabParty,
     bag: labels.tabBag,
+    radio: labels.tabRadio,
   };
 
   const tabs = el('div', 'pg-tabs');
@@ -985,6 +1228,192 @@ function formatTemplate(template: string, ...values: string[]): string {
   });
 }
 
+/* --------------------------------- RADIO ----------------------------------- */
+
+function renderRadioTransportButton(
+  glyph: string,
+  label: string,
+  onClick: () => void,
+): HTMLElement {
+  const button = el('button', 'pg-radio-transport-btn', glyph);
+  button.type = 'button';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderRadioToggleButton(
+  text: string,
+  active: boolean,
+  onClick: () => void,
+): HTMLElement {
+  const button = el(
+    'button',
+    active
+      ? 'tc-button pg-radio-toggle pg-radio-toggle-active'
+      : 'tc-button pg-radio-toggle',
+    text,
+  );
+  button.type = 'button';
+  button.setAttribute('aria-pressed', String(active));
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderRadioTrackRow(
+  track: PokeGearRadioTrackOption,
+  isCurrent: boolean,
+  isPlaying: boolean,
+): HTMLElement {
+  const row = el(
+    'button',
+    isCurrent
+      ? 'pg-party-row pg-radio-track-row pg-party-row-selected'
+      : 'pg-party-row pg-radio-track-row',
+  );
+  row.type = 'button';
+  row.setAttribute('aria-current', String(isCurrent));
+
+  row.appendChild(el('span', 'pg-party-marker', isCurrent ? '▶' : ''));
+  row.appendChild(
+    el(
+      'span',
+      isCurrent && isPlaying
+        ? 'pg-radio-track-name pg-radio-track-name-playing'
+        : 'pg-radio-track-name',
+      track.title.toUpperCase(),
+    ),
+  );
+
+  row.addEventListener('click', () => handleRadioSelectTrack(track.id));
+  return row;
+}
+
+function renderRadioTab(model: PokeGearViewModel): HTMLElement {
+  const labels = model.labels;
+  const radio = model.radio;
+  // Idempotent after the first call - see the state block's own doc comment.
+  initRadioFromModel(model);
+
+  const audio = getRadioAudio();
+  const currentTrack = findRadioTrack(radioCurrentTrackId);
+  const isPlaying = !audio.paused && Boolean(currentTrack);
+  // Read once per render (play/pause/ended/track-select - never on a
+  // per-second ticker, see `getRadioAudio`'s own comment) only to tell
+  // "paused mid-track" apart from "stopped at the start" below - RADIO
+  // does not display a live elapsed/duration clock.
+  const currentTime = Number.isFinite(audio.currentTime)
+    ? audio.currentTime
+    : 0;
+  const stateLabel = !currentTrack
+    ? labels.radioStoppedLabel
+    : isPlaying
+      ? labels.radioPlayingStateLabel
+      : currentTime > 0
+        ? labels.radioPausedStateLabel
+        : labels.radioStoppedLabel;
+
+  const tab = el('div', 'pg-tab-panel pg-radio');
+
+  const nowPlaying = el('section', 'tc-section pg-status-block');
+  nowPlaying.appendChild(sectionTitle(radio.stationName));
+  nowPlaying.appendChild(
+    el('p', 'pg-radio-now-playing-label', labels.radioNowPlayingLabel),
+  );
+  nowPlaying.appendChild(
+    el(
+      'p',
+      'pg-radio-track-title',
+      currentTrack ? currentTrack.title.toUpperCase() : labels.unknownValue,
+    ),
+  );
+  nowPlaying.appendChild(el('p', 'pg-radio-state', stateLabel));
+
+  const transport = el('div', 'pg-radio-transport');
+  transport.appendChild(
+    renderRadioTransportButton(
+      '◀◀',
+      labels.radioPreviousButton,
+      handleRadioPrevious,
+    ),
+  );
+  transport.appendChild(
+    renderRadioTransportButton(
+      isPlaying ? 'Ⅱ' : '▶',
+      isPlaying ? labels.radioPauseButton : labels.radioPlayButton,
+      handleRadioPlayPause,
+    ),
+  );
+  transport.appendChild(
+    renderRadioTransportButton('■', labels.radioStopButton, handleRadioStop),
+  );
+  transport.appendChild(
+    renderRadioTransportButton('▶▶', labels.radioNextButton, handleRadioNext),
+  );
+  nowPlaying.appendChild(transport);
+
+  const modes = el('div', 'pg-radio-modes');
+  modes.appendChild(
+    renderRadioToggleButton(
+      labels.radioShuffleButton,
+      radioShuffle,
+      handleRadioShuffleToggle,
+    ),
+  );
+  modes.appendChild(
+    renderRadioToggleButton(
+      labels.radioRepeatButton,
+      radioRepeatTrack,
+      handleRadioRepeatToggle,
+    ),
+  );
+  modes.appendChild(
+    renderRadioToggleButton(
+      radioMuted ? labels.radioUnmuteButton : labels.radioMuteButton,
+      radioMuted,
+      handleRadioMuteToggle,
+    ),
+  );
+  nowPlaying.appendChild(modes);
+  tab.appendChild(nowPlaying);
+
+  const volumeSection = el('section', 'tc-section pg-status-block');
+  volumeSection.appendChild(sectionTitle(labels.radioVolumeLabel));
+  volumeSection.appendChild(
+    segmentedBar(radioMuted ? 0 : radioVolume, 100, labels.radioVolumeLabel),
+  );
+  const volumeInput = el('input', 'pg-radio-volume-input') as HTMLInputElement;
+  volumeInput.type = 'range';
+  volumeInput.min = '0';
+  volumeInput.max = '100';
+  volumeInput.step = '1';
+  volumeInput.value = String(radioVolume);
+  volumeInput.setAttribute('aria-label', labels.radioVolumeLabel);
+  volumeInput.addEventListener('input', () =>
+    handleRadioVolumeChange(Number(volumeInput.value)),
+  );
+  volumeSection.appendChild(volumeInput);
+  tab.appendChild(volumeSection);
+
+  const tracksSection = el('section', 'tc-section pg-status-block');
+  tracksSection.appendChild(sectionTitle(labels.radioTracksLabel));
+  const list = el('div', 'pg-party-list pg-radio-track-list');
+  for (const track of radio.tracks) {
+    list.appendChild(
+      renderRadioTrackRow(
+        track,
+        track.id === radioCurrentTrackId,
+        track.id === radioCurrentTrackId && isPlaying,
+      ),
+    );
+  }
+  tracksSection.appendChild(list);
+  tab.appendChild(tracksSection);
+
+  return tab;
+}
+
 /* --------------------------------- wiring --------------------------------- */
 
 function setActiveTab(tab: PokeGearTab): void {
@@ -1026,6 +1455,7 @@ function render(model: PokeGearViewModel): void {
     badges: () => renderBadgesTab(model),
     party: () => renderPartyTab(model),
     bag: () => renderBagTab(model),
+    radio: () => renderRadioTab(model),
   };
 
   const content = panels[model.activeTab]();

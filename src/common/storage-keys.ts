@@ -22,6 +22,20 @@ export const EXTRA_POKEMON_KEY = 'vscode-pokemon.extra-pokemon';
 export const EXTRA_POKEMON_KEY_TYPES = EXTRA_POKEMON_KEY + '.types';
 export const EXTRA_POKEMON_KEY_COLORS = EXTRA_POKEMON_KEY + '.colors';
 export const EXTRA_POKEMON_KEY_NAMES = EXTRA_POKEMON_KEY + '.names';
+/**
+ * A stable per-instance id (`crypto.randomUUID()`), index-aligned with the
+ * three arrays above.
+ *
+ * Nickname is this extension's existing instance identity (see
+ * `PokemonProgress` in `progression-types.ts`) but is user-editable and
+ * documented as collision-prone, so it is unsuitable for an external
+ * consumer - such as a paired hardware device - that needs to name one
+ * specific Pokemon unambiguously forever. This array exists purely to give
+ * such consumers something to key on; nothing internal to progression reads
+ * it. Entries missing an id (every collection that predates this key) are
+ * backfilled once, lazily, by `migrateCollectionIds` in `extension.ts`.
+ */
+export const EXTRA_POKEMON_KEY_IDS = EXTRA_POKEMON_KEY + '.ids';
 
 /**
  * Progression state.
@@ -110,3 +124,22 @@ export const INVENTORY_KEY = 'pokedev.inventory';
  * again - see `src/extension/item-rewards.ts`.
  */
 export const CLAIMED_ITEM_REWARDS_KEY = 'pokedev.claimedItemRewards';
+
+/**
+ * PokéGear RADIO preferences - volume, mute, shuffle, repeat-track, and the
+ * last-selected track id. `globalState`, following `POKEGEAR_LAST_TAB_KEY`'s
+ * exact reasoning (a preference about you, not about a project).
+ *
+ * Deliberately does NOT include play/pause state or playback position -
+ * this milestone's own spec requires RADIO to restore stopped, with the
+ * last track selected but not resumed, after every restart. Storing
+ * "was playing" would invite exactly the auto-resume this is required not
+ * to do, so there is nowhere for it to be read back from.
+ */
+export const POKEGEAR_RADIO_VOLUME_KEY = 'pokedev.pokeGear.radio.volume';
+export const POKEGEAR_RADIO_MUTED_KEY = 'pokedev.pokeGear.radio.muted';
+export const POKEGEAR_RADIO_SHUFFLE_KEY = 'pokedev.pokeGear.radio.shuffle';
+export const POKEGEAR_RADIO_REPEAT_TRACK_KEY =
+  'pokedev.pokeGear.radio.repeatTrack';
+export const POKEGEAR_RADIO_LAST_TRACK_KEY =
+  'pokedev.pokeGear.radio.lastTrackId';

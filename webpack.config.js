@@ -198,6 +198,14 @@ const webExtensionConfig = {
 			// `shopify` in at all. `isNodeRuntime()` there guards every actual
 			// call at runtime; this fallback only keeps the web bundle building.
 			"child_process": false,
+			// The Device Bridge (`deviceBridge/device-bridge-service.ts`) hosts a
+			// WebSocket SERVER over a raw TCP socket - not just unavailable
+			// without a polyfill like the others here, but impossible in
+			// principle inside a browser webworker, which cannot listen for
+			// inbound connections at all. `isNodeRuntime()` (src/common/runtime.ts)
+			// guards every actual call in extension.ts; this fallback only keeps
+			// the web bundle building.
+			"ws": false,
 		},
 	},
 	module: {

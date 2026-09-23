@@ -394,6 +394,146 @@ body {
 	gap: 8px;
 }
 
+/* --------------------------------- RADIO ----------------------------------- */
+
+/*
+ * A compact Gen II PokéGear radio screen: square transport buttons, a
+ * segmented volume/progress meter (reusing `.tc-xp-track`/`.tc-xp-fill`
+ * wholesale, same as the XP bar), and a plain game-menu track list (reusing
+ * `.pg-party-row`/`.pg-party-list`). No rounded media-player chrome, no
+ * album art, no gradients - see this milestone's own visual rules.
+ */
+.pg-radio-now-playing-label {
+	margin: 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 9px;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	color: var(--tc-ink-dim);
+}
+
+.pg-radio-track-title {
+	margin: 2px 0 0;
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 13px;
+	letter-spacing: 0.6px;
+	color: var(--tc-ink);
+}
+
+.pg-radio-state {
+	margin: 2px 0 0;
+	font-size: 10px;
+	color: var(--tc-accent);
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+}
+
+.pg-radio-transport {
+	display: flex;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+/* Square, not round - a Game Boy button, not a modern media-player pill. */
+.pg-radio-transport-btn {
+	flex: 1 1 0;
+	padding: 8px 4px;
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 0;
+	background: var(--tc-surface);
+	color: var(--tc-ink);
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.pg-radio-transport-btn:hover {
+	border-color: var(--tc-accent);
+}
+
+.pg-radio-transport-btn:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+.pg-radio-modes {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.pg-radio-toggle {
+	flex: 1 1 0;
+	font-size: 9px;
+	padding: 5px 4px;
+}
+
+.pg-radio-toggle-active {
+	background: var(--tc-slot);
+	border-color: var(--tc-accent);
+	color: var(--tc-accent);
+}
+
+/* A pixelated range input, not a native OS slider - `appearance: none` plus
+ * a repeating-gradient track fakes the same segmented look
+ * `.tc-xp-track`/`.tc-xp-fill` already give the read-only meter above it. */
+.pg-radio-volume-input {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	height: 14px;
+	margin-top: 6px;
+	background: repeating-linear-gradient(
+		to right,
+		var(--tc-slot) 0,
+		var(--tc-slot) 6px,
+		var(--tc-face-edge) 6px,
+		var(--tc-face-edge) 7px
+	);
+	border: 1px solid var(--tc-face-edge);
+	cursor: pointer;
+}
+
+.pg-radio-volume-input::-webkit-slider-thumb {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 10px;
+	height: 16px;
+	background: var(--tc-accent);
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 0;
+	cursor: pointer;
+}
+
+.pg-radio-volume-input::-moz-range-thumb {
+	width: 10px;
+	height: 16px;
+	background: var(--tc-accent);
+	border: 1px solid var(--tc-face-edge);
+	border-radius: 0;
+	cursor: pointer;
+}
+
+.pg-radio-volume-input:focus-visible {
+	outline: 2px solid var(--tc-accent);
+	outline-offset: 1px;
+}
+
+/*
+ * Reuses `.pg-party-row`/`.pg-party-list`/`.pg-party-marker` wholesale (see
+ * the PARTY section above) - only the track name text is genuinely new.
+ */
+.pg-radio-track-name {
+	font-family: 'silkscreen', var(--vscode-font-family);
+	font-size: 10px;
+	letter-spacing: 0.5px;
+	color: var(--tc-ink);
+}
+
+.pg-radio-track-name-playing {
+	color: var(--tc-accent);
+}
+
 /* ------------------------------ narrow width ------------------------------ */
 
 @media (max-width: 460px) {

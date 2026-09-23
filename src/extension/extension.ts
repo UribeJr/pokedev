@@ -25,9 +25,11 @@ import {
 import { availableColors, normalizeColor } from '../panel/pokemon-collection';
 import {
   EXTRA_POKEMON_KEY_COLORS,
+  EXTRA_POKEMON_KEY_IDS,
   EXTRA_POKEMON_KEY_NAMES,
   EXTRA_POKEMON_KEY_TYPES,
 } from '../common/storage-keys';
+import { randomUuid } from '../common/uuid';
 import {
   isDevRecordVisible,
   promptForDevUsername,
@@ -60,6 +62,9 @@ import {
 import { DailyChallengesService } from './daily-challenges-service';
 import { pokedevState } from './pokedev-state';
 import { pickPartnerPokemon } from './partner-picker';
+import { DeviceBridgeService } from './deviceBridge/device-bridge-service';
+import { registerShowPairingTokenCommand } from './deviceBridge/device-pairing';
+import { isNodeRuntime } from '../common/runtime';
 import { GitActivityTracker } from './git-activity';
 import { reactionHub } from './reaction-service';
 import { toastHub } from './toast-service';
@@ -378,6 +383,11 @@ export class PokemonSpecification {
   name: string;
   generation: string;
   originalSpriteSize: number;
+  /** Stable per-instance id, independent of the user-editable `name`. See
+   * `EXTRA_POKEMON_KEY_IDS`. Always present on a freshly-constructed
+   * instance; only ever undefined for an entry read before the id migration
+   * has backfilled it. */
+  id: string;
 
   constructor(
     color: PokemonColor,
@@ -385,6 +395,7 @@ export class PokemonSpecification {
     size: PokemonSize,
     name?: string,
     generation?: string,
+    id?: string,
   ) {
     this.color = color;
     this.type = type;
@@ -396,6 +407,7 @@ export class PokemonSpecification {
     }
     this.generation = generation || `gen${POKEMON_DATA[type].generation}`;
     this.originalSpriteSize = POKEMON_DATA[type].originalSpriteSize || 32;
+    this.id = id || randomUuid();
   }
 
   static fromConfiguration(): PokemonSpecification {
@@ -433,6 +445,10 @@ export class PokemonSpecification {
       EXTRA_POKEMON_KEY_NAMES,
       [],
     );
+    var contextIds = context.globalState.get<string[]>(
+      EXTRA_POKEMON_KEY_IDS,
+      [],
+    );
     var result: PokemonSpecification[] = [];
     for (let index = 0; index < contextTypes.length; index++) {
       result.push(
@@ -441,11 +457,56 @@ export class PokemonSpecification {
           contextTypes[index],
           size,
           contextNames[index],
+          undefined,
+          contextIds?.[index],
         ),
       );
     }
     return result;
   }
+}
+
+/**
+ * Backfills a stable `id` (see `EXTRA_POKEMON_KEY_IDS`) for every collection
+ * entry that predates it.
+ *
+ * Additive and idempotent: an entry that already has an id is left alone, a
+ * missing id is generated and persisted once, and a collection with nothing
+ * to backfill performs no write at all. Safe to run on every activation and
+ * safe to race with a read of the collection mid-backfill - such a read
+ * simply sees `undefined` for that entry's id until this finishes, the same
+ * tolerance `listPartnerCandidates` already has for the three older arrays
+ * being out of sync with each other.
+ *
+ * Deliberately does not call `globalState.setKeysForSync` - only
+ * `storeCollectionAsMemento` may, since it replaces rather than extends the
+ * sync list (see `storage-keys.ts`). A collection backfilled here simply
+ * does not sync its new ids until it is next written through that function,
+ * which is an acceptable one-time V1 gap, not a correctness issue.
+ */
+export async function migrateCollectionIds(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const types = context.globalState.get<PokemonType[]>(
+    EXTRA_POKEMON_KEY_TYPES,
+    [],
+  );
+  if (types.length === 0) {
+    return;
+  }
+  const ids = context.globalState.get<string[]>(EXTRA_POKEMON_KEY_IDS, []);
+  const backfilled = ids.slice();
+  let changed = false;
+  for (let index = 0; index < types.length; index++) {
+    if (typeof backfilled[index] !== 'string' || backfilled[index] === '') {
+      backfilled[index] = randomUuid();
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return;
+  }
+  await context.globalState.update(EXTRA_POKEMON_KEY_IDS, backfilled);
 }
 
 /**
@@ -466,18 +527,22 @@ export async function storeCollectionAsMemento(
   var contextTypes = new Array(collection.length);
   var contextColors = new Array(collection.length);
   var contextNames = new Array(collection.length);
+  var contextIds = new Array(collection.length);
   for (let index = 0; index < collection.length; index++) {
     contextTypes[index] = collection[index].type;
     contextColors[index] = collection[index].color;
     contextNames[index] = collection[index].name;
+    contextIds[index] = collection[index].id || randomUuid();
   }
   await context.globalState.update(EXTRA_POKEMON_KEY_TYPES, contextTypes);
   await context.globalState.update(EXTRA_POKEMON_KEY_COLORS, contextColors);
   await context.globalState.update(EXTRA_POKEMON_KEY_NAMES, contextNames);
+  await context.globalState.update(EXTRA_POKEMON_KEY_IDS, contextIds);
   context.globalState.setKeysForSync([
     EXTRA_POKEMON_KEY_TYPES,
     EXTRA_POKEMON_KEY_COLORS,
     EXTRA_POKEMON_KEY_NAMES,
+    EXTRA_POKEMON_KEY_IDS,
   ]);
   notifyCollectionChanged();
 }
@@ -553,6 +618,14 @@ function getWebview(): vscode.Webview | undefined {
 export function activate(context: vscode.ExtensionContext) {
   // Reset the Pokemon translations cache at startup to load the correct language
   localize.resetPokemonTranslationsCache();
+
+  // Backfills a stable per-instance `id` for every collection entry that
+  // predates it (see `EXTRA_POKEMON_KEY_IDS`). Not awaited, matching the
+  // reconciliation call below: additive, idempotent, and nothing else in
+  // activation depends on it having finished.
+  void migrateCollectionIds(context).catch((error) => {
+    console.error('PokeDev: collection id migration failed', error);
+  });
 
   // Repairs any persistent Pokemon whose progression already proves an
   // evolution should have happened, but whose persisted species never
@@ -1660,6 +1733,27 @@ export function activate(context: vscode.ExtensionContext) {
   const gitReady = gitTracker.start();
   gitActivityTracker = gitTracker;
   context.subscriptions.push(gitTracker);
+
+  /* ----------------------------- device bridge ----------------------------- */
+
+  // Lets a paired physical device (PokéDev Desk) observe the real partner
+  // over a local WebSocket connection. Adapts existing state; writes
+  // nothing progression-related itself. Desktop-only: a web extension host
+  // (vscode.dev, github.dev) runs inside a browser webworker, which cannot
+  // host a listening socket at all - see isNodeRuntime's own doc comment
+  // and the `ws` fallback in webpack.config.js. Not awaited, matching the
+  // git tracker above: binding a socket can take a moment, and nothing else
+  // in activation depends on it.
+  if (isNodeRuntime()) {
+    const deviceBridge = new DeviceBridgeService(context, progression);
+    void deviceBridge.start().catch((error) => {
+      console.error('PokeDev: device bridge failed to start', error);
+    });
+    context.subscriptions.push(deviceBridge);
+    context.subscriptions.push(
+      registerShowPairingTokenCommand(context, deviceBridge.outputChannel),
+    );
+  }
 
   /* --------------------------- daily challenges --------------------------- */
 

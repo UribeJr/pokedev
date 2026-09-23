@@ -29,14 +29,28 @@ import {
   POKEGEAR_VIEW_TYPE,
   PokeGearHostboundMessage,
   PokeGearLabels,
+  PokeGearRadioPrefs,
   PokeGearTab,
   PokeGearViewModel,
 } from '../pokegear/pokegear-types';
 import { PARTY_SLOTS } from '../trainer/trainer-types';
 import { listPartnerCandidates, setPartnerNickname } from './trainer-partner';
 import { getNonce } from './webview-util';
-import { POKEGEAR_LAST_TAB_KEY } from '../common/storage-keys';
+import {
+  POKEGEAR_LAST_TAB_KEY,
+  POKEGEAR_RADIO_LAST_TRACK_KEY,
+  POKEGEAR_RADIO_MUTED_KEY,
+  POKEGEAR_RADIO_REPEAT_TRACK_KEY,
+  POKEGEAR_RADIO_SHUFFLE_KEY,
+  POKEGEAR_RADIO_VOLUME_KEY,
+} from '../common/storage-keys';
 import { TrainerCardPanel } from './trainer-card-panel';
+import { buildRadioStationCatalog } from './radio-service';
+import {
+  clampVolume,
+  normalizeRadioTrackId,
+} from '../pokegear/pokegear-radio-player';
+import { RADIO_TRACK_DEFINITIONS } from '../common/radio-tracks';
 
 /** Only DEV's own badge image CDN is allowed as an image source - see
  * `trainer-card-panel.ts`'s identical `DEV_BADGE_HOSTS` for why a wildcard
@@ -55,6 +69,58 @@ function readLastTab(context: vscode.ExtensionContext): PokeGearTab {
   return isPokeGearTab(stored) ? stored : 'status';
 }
 
+const RADIO_TRACK_IDS = RADIO_TRACK_DEFINITIONS.map((track) => track.id);
+
+/** Reads persisted RADIO prefs, normalizing every field the same
+ * "trust nothing from storage" way `readLastTab` does - see
+ * `POKEGEAR_RADIO_VOLUME_KEY`'s doc comment for why playback state itself
+ * is never read back here. */
+function readRadioPrefs(context: vscode.ExtensionContext): PokeGearRadioPrefs {
+  const volume = context.globalState.get<number>(POKEGEAR_RADIO_VOLUME_KEY);
+  const muted = context.globalState.get<boolean>(POKEGEAR_RADIO_MUTED_KEY);
+  const shuffle = context.globalState.get<boolean>(POKEGEAR_RADIO_SHUFFLE_KEY);
+  const repeatTrack = context.globalState.get<boolean>(
+    POKEGEAR_RADIO_REPEAT_TRACK_KEY,
+  );
+  const lastTrackId = context.globalState.get<string>(
+    POKEGEAR_RADIO_LAST_TRACK_KEY,
+  );
+  return {
+    volume: clampVolume(typeof volume === 'number' ? volume : 70),
+    muted: muted === true,
+    shuffle: shuffle === true,
+    repeatTrack: repeatTrack === true,
+    lastTrackId:
+      normalizeRadioTrackId(lastTrackId, RADIO_TRACK_IDS) ?? RADIO_TRACK_IDS[0],
+  };
+}
+
+async function writeRadioPrefs(
+  context: vscode.ExtensionContext,
+  prefs: PokeGearRadioPrefs,
+): Promise<void> {
+  await Promise.all([
+    context.globalState.update(
+      POKEGEAR_RADIO_VOLUME_KEY,
+      clampVolume(prefs.volume),
+    ),
+    context.globalState.update(POKEGEAR_RADIO_MUTED_KEY, prefs.muted === true),
+    context.globalState.update(
+      POKEGEAR_RADIO_SHUFFLE_KEY,
+      prefs.shuffle === true,
+    ),
+    context.globalState.update(
+      POKEGEAR_RADIO_REPEAT_TRACK_KEY,
+      prefs.repeatTrack === true,
+    ),
+    context.globalState.update(
+      POKEGEAR_RADIO_LAST_TRACK_KEY,
+      normalizeRadioTrackId(prefs.lastTrackId, RADIO_TRACK_IDS) ??
+        RADIO_TRACK_IDS[0],
+    ),
+  ]);
+}
+
 function buildPokeGearLabels(): PokeGearLabels {
   return {
     panelTitle: vscode.l10n.t('PokéGear'),
@@ -63,6 +129,7 @@ function buildPokeGearLabels(): PokeGearLabels {
     tabParty: vscode.l10n.t('Party'),
     tabBadges: vscode.l10n.t('Badges'),
     tabBag: vscode.l10n.t('Bag'),
+    tabRadio: vscode.l10n.t('Radio'),
     trainerLabel: vscode.l10n.t('Trainer'),
     levelLabel: vscode.l10n.t('Lv.'),
     xpLabel: vscode.l10n.t('Trainer XP'),
@@ -98,6 +165,21 @@ function buildPokeGearLabels(): PokeGearLabels {
     changeBallButton: vscode.l10n.t('Change Ball'),
     searchBallsPlaceholder: vscode.l10n.t('Search balls'),
     noBallsFoundLabel: vscode.l10n.t('No balls match your search.'),
+    radioNowPlayingLabel: vscode.l10n.t('Now Playing'),
+    radioStoppedLabel: vscode.l10n.t('Stopped'),
+    radioPlayingStateLabel: vscode.l10n.t('Playing'),
+    radioPausedStateLabel: vscode.l10n.t('Paused'),
+    radioTracksLabel: vscode.l10n.t('Tracks'),
+    radioVolumeLabel: vscode.l10n.t('Volume'),
+    radioPreviousButton: vscode.l10n.t('Previous'),
+    radioPlayButton: vscode.l10n.t('Play'),
+    radioPauseButton: vscode.l10n.t('Pause'),
+    radioStopButton: vscode.l10n.t('Stop'),
+    radioNextButton: vscode.l10n.t('Next'),
+    radioShuffleButton: vscode.l10n.t('Shuffle'),
+    radioRepeatButton: vscode.l10n.t('Repeat'),
+    radioMuteButton: vscode.l10n.t('Mute'),
+    radioUnmuteButton: vscode.l10n.t('Unmute'),
   };
 }
 
@@ -292,6 +374,19 @@ export class PokeGearPanel {
         return;
       }
 
+      case 'pokegear/radioSetPrefs': {
+        const prefs = message.prefs;
+        if (!prefs || typeof prefs !== 'object') {
+          return;
+        }
+        // Fire-and-forget, exactly like `pokegear/setActiveTab` - a set of
+        // cosmetic/preference values the webview already reflects
+        // optimistically; nothing here needs to round-trip back through a
+        // push for the UI to be correct.
+        void writeRadioPrefs(this._context, prefs);
+        return;
+      }
+
       case 'pokegear/close':
         this._panel.dispose();
         return;
@@ -355,6 +450,10 @@ export class PokeGearPanel {
         pokeballCatalog: buildPokeballCatalog(webview, context.extensionUri),
       },
       bag: pokedevState.buildBagView(context),
+      radio: {
+        ...buildRadioStationCatalog(webview, context.extensionUri),
+        prefs: readRadioPrefs(context),
+      },
     };
   }
 
@@ -386,7 +485,7 @@ export class PokeGearPanel {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} ${DEV_BADGE_HOSTS}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} ${DEV_BADGE_HOSTS}; media-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${resetUri}" rel="stylesheet" nonce="${nonce}">
     <link href="${tokensUri}" rel="stylesheet" nonce="${nonce}">

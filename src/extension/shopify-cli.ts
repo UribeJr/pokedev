@@ -38,22 +38,11 @@
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
 import { ShopifyDevActionType } from '../progression/shopify-dev-action-types';
+import { isNodeRuntime } from '../common/runtime';
 import { detectShopifyCapabilities } from './shopify-project-detection';
 import { SHOPIFY_MANAGED_TASK_TYPE } from './shopify-task-bridge';
 
 const SHOPIFY_CLI_CHECK_TIMEOUT_MS = 5000;
-
-/**
- * Whether this extension host can spawn a real local process at all. True in
- * every desktop install of VS Code/Cursor; false in a web extension host
- * (vscode.dev, github.dev), which has no local shell to run `shopify` in
- * regardless of what this function checks - `process` there is the
- * `process/browser` shim `webpack.config.js` provides, which has no
- * `versions.node`.
- */
-function isNodeRuntime(): boolean {
-  return typeof process !== 'undefined' && !!process.versions?.node;
-}
 
 /**
  * Whether the `shopify` binary is runnable at all, checked via a one-off
