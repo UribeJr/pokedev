@@ -2407,6 +2407,7 @@ class PokemonWebviewContainer implements IPokemonPanel {
                 <div class="pokedev-display" id="pokedevDisplay">
                     <div class="pokedev-screen" id="pokedevScreen">
                         <img class="pokedev-environment" id="pokedevEnvironment" alt="">
+                        <div class="pokedev-weather" id="pokedevWeather" aria-hidden="true"></div>
                         <canvas id="pokemonCanvas"></canvas>
                         <div id="pokemonContainer"></div>
                         <div id="foreground"></div>

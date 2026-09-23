@@ -183,6 +183,66 @@ body {
 	display: none;
 }
 
+/*
+ * Animated weather over an environment scene (e.g. Mt. Silver's snow; see
+ * `weather` in src/common/environments.ts). Directly above the scene (z-
+ * index 1) and below the Pokemon, so it never covers them or their UI.
+ *
+ * Each `.pokedev-snowflake` is a full-height column that falls by
+ * translating its own height - so the travel is always exactly the screen's
+ * height, without animating layout properties - and its ::before is the
+ * visible flake, drifting side to side. Sizes are in GBC pixels: the scene
+ * is 160px wide, so 1 GBC pixel = 100% / 160 of the screen.
+ */
+.pokedev-weather {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	z-index: 1;
+	pointer-events: none;
+	display: none;
+}
+
+.pokedev-snowflake {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	width: calc(100% / 160 * var(--pokedev-flake-size, 2));
+	animation: pokedev-snowfall var(--pokedev-flake-duration, 8s) linear infinite;
+	animation-delay: var(--pokedev-flake-delay, 0s);
+	transform: translateY(-5%);
+}
+
+.pokedev-snowflake::before {
+	content: '';
+	display: block;
+	width: 100%;
+	aspect-ratio: 1;
+	box-sizing: border-box;
+	background: #ffffff;
+	/* A dark rim keeps white flakes readable over a snowy scene. */
+	border: 1px solid rgba(48, 56, 88, 0.75);
+	animation: pokedev-snow-drift var(--pokedev-flake-drift, 3s) ease-in-out infinite alternate;
+}
+
+@keyframes pokedev-snowfall {
+	from {
+		transform: translateY(-5%);
+	}
+	to {
+		transform: translateY(100%);
+	}
+}
+
+@keyframes pokedev-snow-drift {
+	from {
+		transform: translateX(-150%);
+	}
+	to {
+		transform: translateX(150%);
+	}
+}
+
 #pokemonCanvas {
 	position: absolute;
 	bottom: 0;
@@ -497,6 +557,11 @@ img.pokemon {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Frozen flakes read as noise on the scene, so weather is hidden. */
+  .pokedev-weather {
+    display: none !important;
+  }
+
   .pokedev-reaction-symbol {
     animation: none;
     opacity: 1;

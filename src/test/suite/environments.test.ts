@@ -36,22 +36,40 @@ suite('Environments: catalog', () => {
     }
   });
 
-  test('the four V1 scenes are present, and no others', () => {
+  test('the approved scenes are present, and no others', () => {
     const ids = ENVIRONMENTS.map((environment) => environment.id);
-    for (const expected of ['none', 'johto-route', 'ilex-forest', 'cave']) {
+    const expectedIds = [
+      'none',
+      'johto-route',
+      'ilex-forest',
+      'cave',
+      'ecruteak-city',
+      'mt-silver',
+      'pallet-town',
+      'new-bark-town',
+    ];
+    for (const expected of expectedIds) {
       assert.ok(ids.includes(expected), `missing environment: ${expected}`);
     }
-    // Deliberately exactly these four for PokéDev Environment V1 - Ice
-    // Path and Pokémon Center were removed (never fully polished; see the
-    // milestone that dropped them), leaving only the three approved scenes
-    // plus "none".
-    assert.strictEqual(ids.length, 4);
+    // Ice Path and Pokémon Center were removed in Environment V1 (never
+    // fully polished); Ecruteak City, Mt. Silver,
+    // Pallet Town and New Bark Town were added afterwards.
+    assert.strictEqual(ids.length, expectedIds.length);
   });
 
   test('Ice Path and Pokémon Center were removed and are not selectable', () => {
     const ids = ENVIRONMENTS.map((environment) => environment.id);
     assert.ok(!ids.includes('ice-path'));
     assert.ok(!ids.includes('pokemon-center'));
+  });
+});
+
+suite('Environments: weather', () => {
+  test('Mt. Silver snows, and no other scene has weather', () => {
+    for (const environment of ENVIRONMENTS) {
+      const expected = environment.id === 'mt-silver' ? 'snow' : undefined;
+      assert.strictEqual(environment.weather, expected, environment.id);
+    }
   });
 });
 

@@ -499,7 +499,11 @@
                             "none",
                             "johto-route",
                             "ilex-forest",
-                            "cave"
+                            "cave",
+                            "ecruteak-city",
+                            "mt-silver",
+                            "pallet-town",
+                            "new-bark-town"
                         ],
                         "default": "none",
                         "scope": "application",

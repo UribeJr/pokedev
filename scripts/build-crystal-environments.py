@@ -43,9 +43,9 @@ Per-tile coloring is also now driven by the real per-tile palette
 assignment in `gfx/tilesets/*_palette_map.asm` (the `tilepal` macro assigns
 one of 6 symbolic categories - GRAY, BROWN, RED, YELLOW, GREEN, WATER - to
 each of the tileset's first 96 tile ids; the file's second `tilepal 1, ...`
-block is a second VRAM-bank copy of the identical 96 assignments, confirmed
-by inspecting the source tileset PNGs: rows 6-11 of each 16x12 image are a
-pixel-for-pixel duplicate of rows 0-5). A single metatile can legitimately
+block assigns palettes to the VRAM bank-1 tile ids $80.., which draw from
+the source PNG's second half, rows 6-11 - a duplicate of rows 0-5 in some
+tilesets but NOT johto's; see `sheet_index_for_tile`). A single metatile can legitimately
 mix categories tile-by-tile (e.g. green leaves over a brown trunk), so
 recoloring now happens per 8x8 tile using ITS OWN assigned category, not one
 blanket color applied to the whole block as the first version did.
@@ -188,6 +188,38 @@ def load_palette_names(source_dir: str, tileset: str) -> List[str]:
     return names
 
 
+def load_bank1_palette_names(source_dir: str, tileset: str) -> List[str]:
+    """The `tilepal 1, ...` entries - palettes for metatile tile ids
+    $80.. (see `VRAM_BANK1_FIRST_ID`). Empty if the file has none."""
+    path = os.path.join(source_dir, "gfx", "tilesets", f"{tileset}_palette_map.asm")
+    names: List[str] = []
+    with open(path) as f:
+        for line in f:
+            m = _TILEPAL_RE.match(line)
+            if m and int(m.group(1)) == 1:
+                names.extend(part.strip() for part in m.group(2).split(","))
+    return names
+
+
+# Metatile tile ids $80 and up are VRAM bank 1 tiles, not sheet index $80+.
+# `_LoadOverworldAttrmapPals` (engine/tilesets/map_palettes.asm) looks the
+# id up in the palette map (whose `tilepal 1` entries carry the bank bit)
+# and then clears bit 7 of the tilemap byte (`res B_OAM_BANK1 + 4, [hl]`),
+# so id $80+n draws bank-1 tile n - and `LoadTilesetGFX` (home/map.asm)
+# fills bank 1 (`vTiles5`) from the tileset's SECOND $60 tiles. So $80+n is
+# sheet index $60+n. (Some tilesets' second half duplicates the first, so a
+# naive id-as-index lookup can look right; johto's does not - its second
+# half holds e.g. Ecruteak's Burned Tower art.)
+VRAM_BANK1_FIRST_ID = 0x80
+TILES_PER_VRAM_BANK = 0x60
+
+
+def sheet_index_for_tile(tile_id: int) -> int:
+    if tile_id >= VRAM_BANK1_FIRST_ID:
+        return tile_id - VRAM_BANK1_FIRST_ID + TILES_PER_VRAM_BANK
+    return tile_id
+
+
 def palette_for_tile(names: List[str], tile_id: int) -> str:
     if not names:
         return DEFAULT_PALETTE
@@ -277,8 +309,11 @@ def crop_tile(sheet: Image.Image, tile_id: int) -> Image.Image:
     return sheet.crop((x, y, x + TILE_SIZE, y + TILE_SIZE))
 
 
-def recolor_tile(tile: Image.Image, palette_name: str) -> Image.Image:
-    ramp = PALETTE_RAMPS.get(palette_name, PALETTE_RAMPS[DEFAULT_PALETTE])
+def recolor_tile(
+    tile: Image.Image, palette_name: str, ramp: Optional[Dict[int, RGB]] = None
+) -> Image.Image:
+    if ramp is None:
+        ramp = PALETTE_RAMPS.get(palette_name, PALETTE_RAMPS[DEFAULT_PALETTE])
     out = Image.new("RGB", tile.size)
     src = tile.load()
     dst = out.load()
@@ -294,6 +329,11 @@ class TilesetData:
     sheet: Image.Image
     palette_names: List[str]
     metatiles: List[List[int]]
+    # Scene-specific ramps that replace a PALETTE_RAMPS category (see
+    # `apply_roof`).
+    palette_overrides: Dict[str, Dict[int, RGB]] = field(default_factory=dict)
+    # `tilepal 1` palettes for bank-1 tile ids (see `sheet_index_for_tile`).
+    bank1_palette_names: List[str] = field(default_factory=list)
 
     @staticmethod
     def load(source_dir: str, name: str) -> "TilesetData":
@@ -302,7 +342,14 @@ class TilesetData:
             sheet=load_tileset_image(source_dir, name),
             palette_names=load_palette_names(source_dir, name),
             metatiles=load_metatiles(source_dir, name),
+            bank1_palette_names=load_bank1_palette_names(source_dir, name),
         )
+
+    def palette_for(self, tile_id: int) -> str:
+        bank1_index = tile_id - VRAM_BANK1_FIRST_ID
+        if 0 <= bank1_index < len(self.bank1_palette_names):
+            return self.bank1_palette_names[bank1_index]
+        return palette_for_tile(self.palette_names, tile_id)
 
     def render_metatile(self, index: int, darken: float = 1.0) -> Image.Image:
         if index < 0 or index >= len(self.metatiles):
@@ -314,9 +361,9 @@ class TilesetData:
         out = Image.new("RGB", (METATILE_PIXELS, METATILE_PIXELS))
         for pos, tile_id in enumerate(tile_ids):
             row, col = divmod(pos, METATILE_WIDTH)
-            palette_name = palette_for_tile(self.palette_names, tile_id)
+            palette_name = self.palette_for(tile_id)
             try:
-                cropped = crop_tile(self.sheet, tile_id)
+                cropped = crop_tile(self.sheet, sheet_index_for_tile(tile_id))
             except ValueError as exc:
                 # Re-raised with metatile context: which block, not just
                 # which tile id, so a scan across many metatiles (the atlas,
@@ -324,7 +371,9 @@ class TilesetData:
                 raise ValueError(
                     f"{self.name}: metatile {index}, tile position {pos} - {exc}"
                 ) from exc
-            colored = recolor_tile(cropped, palette_name)
+            colored = recolor_tile(
+                cropped, palette_name, self.palette_overrides.get(palette_name)
+            )
             if darken != 1.0:
                 colored = Image.eval(colored, lambda v: max(0, min(255, int(v * darken))))
             out.paste(colored, (col * TILE_SIZE, row * TILE_SIZE))
@@ -338,7 +387,9 @@ class TilesetData:
         authoring should never reference one of these."""
         cols = self.sheet.width // TILE_SIZE
         rows = self.sheet.height // TILE_SIZE
-        return all(0 <= tid < cols * rows for tid in self.metatiles[index])
+        return all(
+            0 <= sheet_index_for_tile(tid) < cols * rows for tid in self.metatiles[index]
+        )
 
 
 INVALID_METATILE_COLOR = (255, 0, 255)  # unmissable magenta, never a real palette output
@@ -389,6 +440,94 @@ def render_atlas(tileset: TilesetData, columns: int = 8) -> Image.Image:
 BlockGrid = List[List[Optional[int]]]
 
 
+def gbc_rgb(r: int, g: int, b: int) -> RGB:
+    """A 5-bit-per-channel GBC `RGB r,g,b` value (as written in pokecrystal's
+    `.pal` files) expanded to 8-bit."""
+    return tuple((v << 3) | (v >> 2) for v in (r, g, b))  # type: ignore[return-value]
+
+
+# Per-town roof swap - `engine/tilesets/mapgroup_roofs.asm`
+# (`LoadMapGroupRoof`): on entering a town, the game copies ROOF_LENGTH (9,
+# `constants/tileset_constants.asm`) tiles from `gfx/tilesets/roofs/<roof>.png`
+# over tile ids $0a..$12 of the loaded tileset (`vTiles2 tile $0a`), chosen by
+# map group via `MapGroupRoofs` in `data/maps/roofs.asm`. Without this swap a
+# town renders with the johto tileset's generic placeholder roof tiles.
+ROOF_FIRST_TILE = 0x0A
+ROOF_LENGTH = 9
+
+
+@dataclass
+class RoofSpec:
+    # Basename in gfx/tilesets/roofs/, e.g. "violet"; None for a map group
+    # whose `MapGroupRoofs` entry is -1 (no tile swap - the roof PALETTE
+    # still applies to every TOWN/ROUTE map, per `engine/gfx/color.asm`).
+    graphic: Optional[str]
+    # The town's ROOF-category ramp. Colors 1 and 2 come from that map
+    # group's `gfx/tilesets/roofs.pal` entry (copied into `PAL_BG_ROOF color
+    # 1` by `engine/gfx/color.asm`); colors 0 and 3 stay the base day "roof"
+    # row of `gfx/tilesets/bg_tiles.pal`.
+    ramp: Dict[int, RGB]
+
+
+def apply_roof(tileset: TilesetData, source_dir: str, roof: RoofSpec) -> None:
+    tileset.palette_overrides["ROOF"] = roof.ramp
+    if roof.graphic is None:
+        return
+    path = os.path.join(source_dir, "gfx", "tilesets", "roofs", f"{roof.graphic}.png")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Roof graphic not found: {path}")
+    roof_sheet = Image.open(path).convert("L")
+    roof_cols = roof_sheet.width // TILE_SIZE
+    if (roof_sheet.width // TILE_SIZE) * (roof_sheet.height // TILE_SIZE) != ROOF_LENGTH:
+        raise ValueError(f"{path}: expected exactly {ROOF_LENGTH} tiles")
+    sheet = tileset.sheet.copy()
+    sheet_cols = sheet.width // TILE_SIZE
+    for i in range(ROOF_LENGTH):
+        sy, sx = divmod(i, roof_cols)
+        tile = roof_sheet.crop(
+            (sx * TILE_SIZE, sy * TILE_SIZE, (sx + 1) * TILE_SIZE, (sy + 1) * TILE_SIZE)
+        )
+        dy, dx = divmod(ROOF_FIRST_TILE + i, sheet_cols)
+        sheet.paste(tile, (dx * TILE_SIZE, dy * TILE_SIZE))
+    tileset.sheet = sheet
+
+
+SPRITE_FRAME_PIXELS = 16  # overworld sprites: 16x16 frames stacked vertically
+
+
+@dataclass
+class SpriteSpec:
+    """One overworld sprite frame from `gfx/sprites/<graphic>.png`, baked
+    into the scene. OBJ color 0 (white in the grayscale source) is
+    transparent on GBC, so only colors 1-3 are drawn, from `ramp` (a row of
+    `gfx/overworld/npc_sprites.pal`)."""
+    graphic: str
+    frame: int
+    x: int  # top-left, in scene pixels
+    y: int
+    ramp: Dict[int, RGB]
+
+
+def render_sprite(canvas: Image.Image, source_dir: str, sprite: SpriteSpec) -> None:
+    path = os.path.join(source_dir, "gfx", "sprites", f"{sprite.graphic}.png")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Sprite not found: {path}")
+    sheet = Image.open(path).convert("L")
+    top = sprite.frame * SPRITE_FRAME_PIXELS
+    if top + SPRITE_FRAME_PIXELS > sheet.height:
+        raise ValueError(f"{path}: no frame {sprite.frame}")
+    src = sheet.load()
+    dst = canvas.load()
+    for yy in range(SPRITE_FRAME_PIXELS):
+        for xx in range(SPRITE_FRAME_PIXELS):
+            level = src[xx, top + yy]
+            if level == 255:
+                continue
+            px, py = sprite.x + xx, sprite.y + yy
+            if 0 <= px < canvas.width and 0 <= py < canvas.height:
+                dst[px, py] = sprite.ramp[level]
+
+
 @dataclass
 class SceneSpec:
     id: str
@@ -396,6 +535,10 @@ class SceneSpec:
     ground_fill: RGB
     blocks: BlockGrid
     darken: float = 1.0  # e.g. Ilex Forest's darker palette (see module doc)
+    roof: Optional[RoofSpec] = None
+    # Scene-specific replacements for PALETTE_RAMPS categories.
+    palette_overrides: Dict[str, Dict[int, RGB]] = field(default_factory=dict)
+    sprites: List[SpriteSpec] = field(default_factory=list)
 
 
 def validate_scene(spec: SceneSpec, tileset: TilesetData) -> None:
@@ -437,6 +580,9 @@ def validate_scene(spec: SceneSpec, tileset: TilesetData) -> None:
 
 def render_scene(spec: SceneSpec, source_dir: str) -> Image.Image:
     tileset = TilesetData.load(source_dir, spec.tileset)
+    if spec.roof is not None:
+        apply_roof(tileset, source_dir, spec.roof)
+    tileset.palette_overrides.update(spec.palette_overrides)
     validate_scene(spec, tileset)
 
     rows = len(spec.blocks)
@@ -451,6 +597,9 @@ def render_scene(spec: SceneSpec, source_dir: str) -> Image.Image:
                 continue
             block = tileset.render_metatile(index, darken=spec.darken)
             canvas.paste(block, (c * METATILE_PIXELS, r * METATILE_PIXELS))
+
+    for sprite in spec.sprites:
+        render_sprite(canvas, source_dir, sprite)
 
     return canvas
 
@@ -588,6 +737,225 @@ def cave(source_dir: str) -> SceneSpec:
     )
 
 
+# `map_const ECRUTEAK_CITY, 20, 18` in constants/map_constants.asm (20*18 =
+# 360 bytes, exactly maps/EcruteakCity.blk's size); `map EcruteakCity,
+# TILESET_JOHTO, ...` in data/maps/maps.asm confirms it uses the same "johto"
+# tileset as `johto_route`.
+ECRUTEAK_CITY_MAP_WIDTH = 20
+ECRUTEAK_CITY_MAP_HEIGHT = 18
+
+# Ecruteak is map group 4: `db ROOF_VIOLET ; 4 (Ecruteak)` in
+# data/maps/roofs.asm, and `; group 4 (Ecruteak)` morn/day in
+# gfx/tilesets/roofs.pal is `RGB 31,19,00, 27,10,05` (its orange-red roofs).
+# Colors 0/3 are the day "roof" row of gfx/tilesets/bg_tiles.pal
+# (`RGB 27,31,27, ..., 07,07,07`).
+ECRUTEAK_ROOF = RoofSpec(
+    graphic="violet",
+    ramp={
+        255: gbc_rgb(27, 31, 27),
+        170: gbc_rgb(31, 19, 0),
+        85: gbc_rgb(27, 10, 5),
+        0: gbc_rgb(7, 7, 7),
+    },
+)
+
+# Ecruteak's identity is its two towers, which sit at opposite ends of the
+# town's north edge (Burned Tower at cols 2-3, the tiered Tin Tower approach
+# at cols 18-19), so no single 5x5 window holds both - a pond/Mart window
+# was tried first and read as a generic town. This scene instead joins two
+# REAL block-aligned crops side by side, each (col, row, cols, rows): the
+# Burned Tower on its rocky rise including the rise's right cliff edge (col
+# 4), which gives a natural visual break before the Tin Tower column. Every
+# cell is still a real map block; only the one vertical seam is composed.
+ECRUTEAK_CITY_CROPS = [(2, 0, 3, 5), (18, 0, 2, 5)]
+
+
+def ecruteak_city(source_dir: str) -> SceneSpec:
+    """Ecruteak City's Burned Tower and Tin Tower from the REAL map (`maps/
+    EcruteakCity.blk`), joined horizontally (see ECRUTEAK_CITY_CROPS), drawn
+    with the town's real Violet-style roof swap and orange-red roof palette
+    (ECRUTEAK_ROOF). Every cell is real map data, so `ground_fill` below is
+    never actually visible."""
+    map_grid = load_map_blocks(
+        source_dir, "EcruteakCity", ECRUTEAK_CITY_MAP_WIDTH, ECRUTEAK_CITY_MAP_HEIGHT
+    )
+    crops = [crop_map_region(map_grid, *crop) for crop in ECRUTEAK_CITY_CROPS]
+    blocks: BlockGrid = [
+        [cell for crop in crops for cell in crop[r]] for r in range(len(crops[0]))
+    ]
+    return SceneSpec(
+        id="ecruteak-city",
+        tileset="johto",
+        ground_fill=PALETTE_RAMPS["GRAY"][255],
+        blocks=blocks,
+        roof=ECRUTEAK_ROOF,
+    )
+
+
+# `map_const SILVER_CAVE_ROOM_3, 10, 18` in constants/map_constants.asm;
+# `map SilverCaveRoom3, TILESET_CAVE, ...` in data/maps/maps.asm. This is
+# Mt. Silver's summit room - where Red waits.
+SILVER_CAVE_ROOM_3_MAP_WIDTH = 10
+SILVER_CAVE_ROOM_3_MAP_HEIGHT = 18
+
+# A 5x5-metatile window (col 2, row 3) framing the summit plateau: the
+# walled ledge Red stands on, the stairs the player climbs up to him, and
+# the cliff walls either side.
+MT_SILVER_CROP = (2, 3, 5, 5)
+
+# Red's real spot: `object_event 9, 10, SPRITE_RED, ...` in
+# maps/SilverCaveRoom3.asm - map coordinates in 16px steps.
+RED_MAP_STEP = (9, 10)
+MAP_STEP_PIXELS = 16
+
+# `PAL_NPC_RED` - the day "red" row of gfx/overworld/npc_sprites.pal
+# (`RGB 27,31,27, 31,19,10, 31,07,01, 00,00,00`). Color 0 is transparent.
+NPC_RED_DAY_RAMP = {
+    170: gbc_rgb(31, 19, 10),
+    85: gbc_rgb(31, 7, 1),
+    0: gbc_rgb(0, 0, 0),
+}
+
+# gfx/sprites/red.png frame 0 is the standing, facing-down pose. In-game Red
+# stands facing away (`SPRITEMOVEDATA_STANDING_UP`) until spoken to; the
+# facing-down frame is used here so he's recognizable as a background figure.
+RED_FACING_DOWN_FRAME = 0
+
+
+# Crystal's summit room is a plain brown cave (PALETTE_DAY); Mt. Silver's
+# snow is from later games. This scene's own cold, snow-dusted take on the
+# cave tileset's BROWN category - like PALETTE_RAMPS, an approximation, not
+# ROM color data - so the rock reads as a frozen peak under the snow overlay.
+MT_SILVER_SNOW_RAMPS: Dict[str, Dict[int, RGB]] = {
+    "BROWN": {255: (240, 244, 255), 170: (184, 196, 220), 85: (104, 112, 144), 0: (32, 32, 56)},
+}
+
+
+def mt_silver(source_dir: str) -> SceneSpec:
+    """A block-aligned 5x5 crop of the REAL Mt. Silver summit (`maps/
+    SilverCaveRoom3.blk`), with Red's real overworld sprite baked in at his
+    real map position. Falling snow is NOT baked in - it is an animated
+    overlay the webview adds for environments with `weather: 'snow'` (see
+    src/common/environments.ts)."""
+    col, row, cols, rows = MT_SILVER_CROP
+    map_grid = load_map_blocks(
+        source_dir,
+        "SilverCaveRoom3",
+        SILVER_CAVE_ROOM_3_MAP_WIDTH,
+        SILVER_CAVE_ROOM_3_MAP_HEIGHT,
+    )
+    blocks: BlockGrid = crop_map_region(map_grid, col, row, cols, rows)
+    red_x = RED_MAP_STEP[0] * MAP_STEP_PIXELS - col * METATILE_PIXELS
+    red_y = RED_MAP_STEP[1] * MAP_STEP_PIXELS - row * METATILE_PIXELS
+    return SceneSpec(
+        id="mt-silver",
+        tileset="cave",
+        ground_fill=PALETTE_RAMPS["GRAY"][85],
+        blocks=blocks,
+        palette_overrides=MT_SILVER_SNOW_RAMPS,
+        sprites=[
+            SpriteSpec(
+                graphic="red",
+                frame=RED_FACING_DOWN_FRAME,
+                x=red_x,
+                y=red_y,
+                ramp=NPC_RED_DAY_RAMP,
+            )
+        ],
+    )
+
+
+# `map_const PALLET_TOWN, 10, 9` in constants/map_constants.asm; `map
+# PalletTown, TILESET_KANTO, TOWN, ...` in data/maps/maps.asm.
+PALLET_TOWN_MAP_WIDTH = 10
+PALLET_TOWN_MAP_HEIGHT = 9
+
+# Pallet Town is map group 13, whose `MapGroupRoofs` entry is -1 (no roof
+# tile swap), but as a TOWN it still gets its roof palette: `; group 13
+# (Pallet)` morn/day in gfx/tilesets/roofs.pal is `RGB 27,28,31, 17,19,22`.
+PALLET_TOWN_ROOF = RoofSpec(
+    graphic=None,
+    ramp={
+        255: gbc_rgb(27, 31, 27),
+        170: gbc_rgb(27, 28, 31),
+        85: gbc_rgb(17, 19, 22),
+        0: gbc_rgb(7, 7, 7),
+    },
+)
+
+# Nearly the whole town, 9x9 metatiles (col 0, row 0) - every column but
+# the east bollard border - for the same reason as NEW_BARK_TOWN_CROP: a
+# 5x5 window (this scene's first version) only fits the three buildings,
+# while the town reads as Pallet with all of it together - Red's and Blue's
+# houses, Oak's Lab, both flower beds, the signs, the pond and the Route 1
+# gap in the north border. Dropping the east column rather than the west
+# keeps the town centered. (col, row, cols, rows).
+PALLET_TOWN_CROP = (0, 0, 9, 9)
+
+
+def pallet_town(source_dir: str) -> SceneSpec:
+    """A block-aligned 9x9 crop of the REAL Pallet Town map (`maps/
+    PalletTown.blk`) - see PALLET_TOWN_CROP - with Pallet's real roof
+    palette."""
+    map_grid = load_map_blocks(
+        source_dir, "PalletTown", PALLET_TOWN_MAP_WIDTH, PALLET_TOWN_MAP_HEIGHT
+    )
+    blocks: BlockGrid = crop_map_region(map_grid, *PALLET_TOWN_CROP)
+    return SceneSpec(
+        id="pallet-town",
+        tileset="kanto",
+        ground_fill=PALETTE_RAMPS["GRAY"][255],
+        blocks=blocks,
+        roof=PALLET_TOWN_ROOF,
+    )
+
+
+# `map_const NEW_BARK_TOWN, 10, 9` in constants/map_constants.asm; `map
+# NewBarkTown, TILESET_JOHTO, TOWN, ...` in data/maps/maps.asm.
+NEW_BARK_TOWN_MAP_WIDTH = 10
+NEW_BARK_TOWN_MAP_HEIGHT = 9
+
+# New Bark is map group 24: `db ROOF_NEW_BARK ; 24 (New Bark)` in
+# data/maps/roofs.asm, and `; group 24 (New Bark)` morn/day in
+# gfx/tilesets/roofs.pal is `RGB 20,31,14, 11,23,05` (its green roofs).
+NEW_BARK_TOWN_ROOF = RoofSpec(
+    graphic="new_bark",
+    ramp={
+        255: gbc_rgb(27, 31, 27),
+        170: gbc_rgb(20, 31, 14),
+        85: gbc_rgb(11, 23, 5),
+        0: gbc_rgb(7, 7, 7),
+    },
+)
+
+# Nearly the whole town, 9x9 metatiles (col 1, row 0) - every column but
+# the west tree border. A 5x5 window (this scene's first version, and every
+# other scene's size) only fits two buildings and read as "two buildings",
+# not New Bark: the town's identity is the WHOLE small town together -
+# Elm's Lab, the player's house, Elm's house, the neighbor's house, the
+# signs, the water on the east edge and the surrounding trees. The scene
+# image is stretched to fill the screen, so tiles draw at 5/9 the size of
+# the 5x5 scenes'. (col, row, cols, rows).
+NEW_BARK_TOWN_CROP = (1, 0, 9, 9)
+
+
+def new_bark_town(source_dir: str) -> SceneSpec:
+    """A block-aligned 9x9 crop of the REAL New Bark Town map (`maps/
+    NewBarkTown.blk`) - see NEW_BARK_TOWN_CROP for why it's wider than the
+    other scenes - with New Bark's real roof tiles and green roof palette."""
+    map_grid = load_map_blocks(
+        source_dir, "NewBarkTown", NEW_BARK_TOWN_MAP_WIDTH, NEW_BARK_TOWN_MAP_HEIGHT
+    )
+    blocks: BlockGrid = crop_map_region(map_grid, *NEW_BARK_TOWN_CROP)
+    return SceneSpec(
+        id="new-bark-town",
+        tileset="johto",
+        ground_fill=PALETTE_RAMPS["GRAY"][255],
+        blocks=blocks,
+        roof=NEW_BARK_TOWN_ROOF,
+    )
+
+
 # Metatile indices, each confirmed by directly rendering that ONE metatile
 # in isolation and viewing it (via `--atlas-only`, then cropping/zooming the
 # specific candidate) - not read off the composite atlas grid, which proved
@@ -603,7 +971,15 @@ FOREST_TREE = 0  # complete bushy tree on grass
 # `POKECENTER_COUNTER`) if reviving either one. `SCENES`/`TILESETS_NEEDED`
 # below are intentionally still plain lists, not hardcoded to "exactly
 # three" - adding a new scene function later is just adding it to both.
-SCENES = [johto_route, ilex_forest, cave]
+SCENES = [
+    johto_route,
+    ilex_forest,
+    cave,
+    ecruteak_city,
+    mt_silver,
+    pallet_town,
+    new_bark_town,
+]
 TILESETS_NEEDED = ["johto", "forest", "cave"]
 
 

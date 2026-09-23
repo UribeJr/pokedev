@@ -53,7 +53,7 @@ Built and maintained by [UribeJr](https://github.com/UribeJr) as a personal, act
 ## Features
 
 ### World & party
-- Overworld or classic roaming; Johto Route / Ilex Forest / Cave environments; optional GBC display borders
+- Overworld or classic roaming; Johto Route / Ilex Forest / Cave / Ecruteak City / Mt. Silver (with falling snow) / Pallet Town / New Bark Town environments; optional GBC display borders
 - Spawn, nickname, shiny odds, import/export party; Pokémon names in EN / FR / DE / JA
 - In-world reactions and toasts for meaningful saves, commits, failed tasks, and level-ups
 - Cosmetic Poké Ball sprites (38 options) that persist through evolution

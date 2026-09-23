@@ -33,6 +33,10 @@ export interface PokedevEnvironmentVariants {
   night?: string;
 }
 
+/** An animated overlay the world webview draws above the background scene
+ * (see `applyEnvironment` in `src/panel/main.ts`). */
+export type PokedevEnvironmentWeather = 'snow';
+
 export interface PokedevEnvironment {
   id: string;
   label: string;
@@ -47,6 +51,7 @@ export interface PokedevEnvironment {
    * read anywhere yet - see the module doc above.
    */
   variants?: PokedevEnvironmentVariants;
+  weather?: PokedevEnvironmentWeather;
 }
 
 export const DEFAULT_ENVIRONMENT_ID = 'none';
@@ -77,6 +82,36 @@ export const ENVIRONMENTS: readonly PokedevEnvironment[] = [
     description: 'A rocky cave interior.',
     imageFile: 'environments/cave.png',
     sourceAttribution: 'pret/pokecrystal cave tileset (see build script)',
+  },
+  {
+    id: 'ecruteak-city',
+    label: 'Ecruteak City',
+    description: 'The historic town of the Burned Tower and Tin Tower.',
+    imageFile: 'environments/ecruteak-city.png',
+    sourceAttribution: 'pret/pokecrystal overworld tileset (see build script)',
+  },
+  {
+    id: 'mt-silver',
+    label: 'Mt. Silver',
+    description: 'The snowy summit where Red waits.',
+    imageFile: 'environments/mt-silver.png',
+    sourceAttribution:
+      'pret/pokecrystal cave tileset and Red sprite (see build script)',
+    weather: 'snow',
+  },
+  {
+    id: 'pallet-town',
+    label: 'Pallet Town',
+    description: "Red's hometown, with Blue's house and Professor Oak's Lab.",
+    imageFile: 'environments/pallet-town.png',
+    sourceAttribution: 'pret/pokecrystal Kanto tileset (see build script)',
+  },
+  {
+    id: 'new-bark-town',
+    label: 'New Bark Town',
+    description: 'The quiet seaside town where your journey begins.',
+    imageFile: 'environments/new-bark-town.png',
+    sourceAttribution: 'pret/pokecrystal overworld tileset (see build script)',
   },
 ];
 

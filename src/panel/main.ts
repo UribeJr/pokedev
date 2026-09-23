@@ -25,7 +25,10 @@ import {
   getDisplaySkinById,
   PokedevDisplaySkin,
 } from '../common/display-skins';
-import { getEnvironmentById } from '../common/environments';
+import {
+  getEnvironmentById,
+  PokedevEnvironmentWeather,
+} from '../common/environments';
 import {
   DEFAULT_ROAMING_STYLE,
   isValidRoamingStyle,
@@ -671,6 +674,54 @@ function applyEnvironment(basePokemonUri: string, environmentId: string): void {
     environmentEl.removeAttribute('src');
     environmentEl.style.display = 'none';
   }
+  applyWeather(environment.weather);
+}
+
+const SNOWFLAKE_COUNT = 56;
+
+/**
+ * Shows the `#pokedevWeather` overlay for an environment's `weather`, or
+ * hides and empties it. Flakes are built once per switch into a snowy
+ * environment, each with its own randomized column, size, speed and phase
+ * (negative delays so the screen is already mid-snowfall, not starting
+ * empty). Animation is pure CSS - see `.pokedev-snowflake` in pokemon.css,
+ * which also hides the overlay under prefers-reduced-motion.
+ */
+function applyWeather(weather: PokedevEnvironmentWeather | undefined): void {
+  const weatherEl = document.getElementById('pokedevWeather');
+  if (!weatherEl) {
+    return;
+  }
+  if (weatherEl.dataset.weather === weather) {
+    return;
+  }
+  weatherEl.replaceChildren();
+  if (weather !== 'snow') {
+    delete weatherEl.dataset.weather;
+    weatherEl.style.display = 'none';
+    return;
+  }
+  for (let i = 0; i < SNOWFLAKE_COUNT; i++) {
+    const flake = document.createElement('div');
+    flake.className = 'pokedev-snowflake';
+    // Mostly small (far) flakes with some larger, faster (near) ones.
+    const size = Math.random() < 0.65 ? 2 : 3;
+    const duration = (size === 2 ? 9 : 6) + Math.random() * 4;
+    flake.style.left = `${Math.random() * 100}%`;
+    flake.style.setProperty('--pokedev-flake-size', String(size));
+    flake.style.setProperty('--pokedev-flake-duration', `${duration}s`);
+    flake.style.setProperty(
+      '--pokedev-flake-delay',
+      `${-Math.random() * duration}s`,
+    );
+    flake.style.setProperty(
+      '--pokedev-flake-drift',
+      `${2 + Math.random() * 2}s`,
+    );
+    weatherEl.appendChild(flake);
+  }
+  weatherEl.dataset.weather = weather;
+  weatherEl.style.display = 'block';
 }
 
 /**
